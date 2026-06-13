@@ -1,0 +1,30 @@
+# Ympäristömuuttujat ja secretit — EI KOSKAAN GITIIN
+.env
+.env.*
+.dev.vars
+
+# Export-tiedostot (henkilökohtainen talousdata)
+*.json
+!package.json
+!package-lock.json
+
+# Historialliset CSV:t
+csv-historia/
+*.csv
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Wrangler
+.wrangler/
+dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
