@@ -1,5 +1,26 @@
 # Oma talous — PWA Backlog
 
+---
+
+## Kehitysjonossa (prioriteettijärjestyksessä)
+
+### Toistuvat kiinteät menot
+Tällä hetkellä esim. 635,90€ asumistransaktio sisältää: hoitovastike + yhtiölainan lyhennys + korko + vesimaksu — kaikki yhdessä rivissä. Tavoite: split-toiminto jolla yhden tapahtuman voi jakaa useampaan kategoriaan manuaalisesti. Esim. 635,90€ → Asuminen 250€ + Luotot—lyhennys 300€ + Luotot—korko 85,90€.
+
+### Palkkatiming — budjettikuukausi salary_day:stä
+Nykyinen fallback (edellinen kk jos ei tuloja) toimii ok, mutta oikea ratkaisu: budjettikuukausi alkaa palkkapäivästä (esim. 27.). Kesäkuun budjetti = touko 27. — kesä 26. Vaatii settings-sivulle salary_day-kentän ja koko kuukausilogiikan uusimisen.
+
+### Kategorian tarkempi drill-down
+"Harkinnanvaraiset"-blokin kategoriat voi jo klikata → tapahtumat suodatettuna. Seuraava askel: sivutettava/swipeable kategorianäkymä jossa vasemmalla/oikealla nuolella selaa eri kategorioita ja näkee niiden tapahtumat suoraan ilman välilehteä.
+
+### Sijoittaminen — mitä hankittu
+Sijoittaminen-kategorian tapahtumat näyttävät vain summat. Lisäys: klikattaessa näkee mitä rahastoa/osaketta on ostettu (payee-kentästä).
+
+### Toistuvat menot — tunnistus ja visualisointi
+Merkitse säännöllisesti toistuvat tapahtumat (vuokra, lainat, tilaukset) ja näytä ne erikseen "kiinteät menot" -osiona. Helpottaa kulutusjouston arviointia — kuinka paljon menosta on oikeasti vaikutettavissa.
+
+---
+
 **Visio:** Yksi mobile-first PWA joka korvaa budjetti-2.html — mobiilissa kuittisyöttö ja kulutuksen seuranta, desktopissa CSV-import ja analytiikka. Kaikki data Cloudflare D1:ssä.
 
 **Stack:** Cloudflare Pages (frontend) + Workers (API) + D1 (SQLite) + R2 (kuittikuvat)

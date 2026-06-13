@@ -314,17 +314,15 @@ tr:hover td{background:var(--surface2)}
 
   <!-- YHTEENVETO -->
   <div class="tab-panel active" id="tab-yhteenveto">
-    <div class="drop-zone desk-only" id="dropZone"
-      ondragover="event.preventDefault();this.classList.add('drag')"
-      ondragleave="this.classList.remove('drag')"
-      ondrop="handleDrop(event)">
-      <h3>📂 Lataa tiliotetiedostot</h3>
-      <p>OP Debit · OP Credit · Finnair Visa — useita CSV:itä kerralla</p>
-      <label class="btn btn-primary" style="margin-top:12px;display:inline-flex;cursor:pointer">
-        Valitse CSV-tiedostot
-        <input type="file" accept=".csv" multiple hidden onchange="handleCSVInput(event)">
-      </label>
-      <p style="font-size:12px;color:var(--dim);margin-top:8px">Duplikaatit poistetaan automaattisesti</p>
+    <div class="desk-only" id="dropZone"
+      style="border:1px dashed var(--border);border-radius:var(--radius-sm);padding:9px 14px;margin-bottom:12px;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);transition:all .15s"
+      ondragover="event.preventDefault();this.style.borderColor='var(--green)';this.style.background='var(--green-light)'"
+      ondragleave="this.style.borderColor='';this.style.background=''"
+      ondrop="handleDrop(event);this.style.borderColor='';this.style.background=''">
+      <span>📂</span>
+      <span>Vedä CSV tähän tai</span>
+      <label style="color:var(--green);font-weight:500;cursor:pointer">valitse tiedostot<input type="file" accept=".csv" multiple hidden onchange="handleCSVInput(event)"></label>
+      <span style="color:var(--dim);font-size:12px">· OP Debit, OP Credit, Finnair Visa · duplikaatit poistetaan</span>
     </div>
     <div id="flagBannerMob" class="flag-banner mob-only" style="display:none">
       <span id="flagBannerMobText"></span>
@@ -596,7 +594,7 @@ const MONTHS_FI = ['Tammikuu','Helmikuu','Maaliskuu','Huhtikuu','Toukokuu','Kes�
 
 // ── STATE ───────────────────────────────────────────────────────────────────
 let txs = [], rules = [], saldot = {}, selMonths = [];
-let curMonth = '', curFilter = 'all', curSearch = '', curTab = 'yhteenveto';
+let curMonth = '', curFilter = 'all', curSearch = '', curTab = 'yhteenveto', curCatFilter = '';
 
 // ── STORAGE ─────────────────────────────────────────────────────────────────
 function saveLocalState() {
@@ -694,6 +692,20 @@ function monthSummary(list) {
     np:income>0?Math.round(needs/income*100):0,
     wp:income>0?Math.round(wants/income*100):0,
     sp:income>0?Math.round(sav/income*100):0};
+}
+
+// Palauttaa tulot budjettilaskentaan: jos kuukaudella ei tuloja, käytetään edellisen kk:n palkkaa
+function budgetIncomeForMonth(month) {
+  const inc = txsForMonth(month).filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+  if (inc > 0) return {income:inc, note:null};
+  const months = allMonths();
+  const idx = months.indexOf(month);
+  if (idx >= 0 && idx+1 < months.length) {
+    const prev = months[idx+1];
+    const prevInc = txsForMonth(prev).filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+    if (prevInc > 0) return {income:prevInc, note:fmtMonthLbl(prev)};
+  }
+  return {income:0, note:null};
 }
 
 // ── CATEGORIZE ──────────────────────────────────────────────────────────────
@@ -903,31 +915,38 @@ function renderTab(tab) {
 function renderYhteenveto() {
   const list = txsForMonth(curMonth);
   const s = monthSummary(list);
+  const bi = budgetIncomeForMonth(curMonth);
+  const bInc = bi.income;
+  const np = bInc>0?Math.round(s.needs/bInc*100):0;
+  const wp = bInc>0?Math.round(s.wants/bInc*100):0;
+  const sp = bInc>0?Math.round(s.sav/bInc*100):0;
+  const budgetNote = bi.note ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">Budjetti: ${bi.note}n palkka</div>` : '';
   const recent = [...list].filter(t=>t.type!=='neutral').sort((a,b)=>b.date.localeCompare(a.date)).slice(0,20);
 
   document.getElementById('sumGrid').innerHTML = `
     <div class="sum-card sum-income">
       <div class="sum-label">Tulot</div>
-      <div class="sum-value">${eur(s.income)}</div>
+      <div class="sum-value">${s.income>0?eur(s.income):eur(bInc)}</div>
+      ${budgetNote}
       <div class="sum-bar"><div class="sum-bar-fill" style="width:100%"></div></div>
     </div>
     <div class="sum-card sum-needs">
       <div class="sum-label">Needs · tavoite 50%</div>
       <div class="sum-value">${eur(s.needs)}</div>
-      <div class="sum-sub">${s.np}% tuloista</div>
-      <div class="sum-bar"><div class="sum-bar-fill" style="width:${Math.min(s.np/50*100,100)}%"></div></div>
+      <div class="sum-sub">${np}% budjetista</div>
+      <div class="sum-bar"><div class="sum-bar-fill" style="width:${Math.min(np/50*100,100)}%;background:${np>50?'var(--red)':'var(--green)'}"></div></div>
     </div>
     <div class="sum-card sum-wants">
       <div class="sum-label">Wants · tavoite 30%</div>
       <div class="sum-value">${eur(s.wants)}</div>
-      <div class="sum-sub">${s.wp}% tuloista</div>
-      <div class="sum-bar"><div class="sum-bar-fill" style="width:${Math.min(s.wp/30*100,100)}%"></div></div>
+      <div class="sum-sub">${wp}% budjetista</div>
+      <div class="sum-bar"><div class="sum-bar-fill" style="width:${Math.min(wp/30*100,100)}%;background:${wp>30?'var(--red)':'var(--gold)'}"></div></div>
     </div>
     <div class="sum-card sum-savings">
       <div class="sum-label">Savings · tavoite 20%</div>
       <div class="sum-value">${eur(s.sav)}</div>
-      <div class="sum-sub">${s.sp}% · säästöaste ${s.rate}%</div>
-      <div class="sum-bar"><div class="sum-bar-fill" style="width:${Math.min(s.sp/20*100,100)}%"></div></div>
+      <div class="sum-sub">${sp}% · säästöaste ${bInc>0?Math.round(s.sav/bInc*100):0}%</div>
+      <div class="sum-bar"><div class="sum-bar-fill" style="width:${Math.min(sp/20*100,100)}%"></div></div>
     </div>
   `;
 
@@ -952,12 +971,22 @@ function renderTapahtumat() {
   const catOpts = CATS.map(c=>`<option value="${c.name}">${c.icon} ${c.name}</option>`).join('');
 
   let list = [...txs].sort((a,b)=>b.date.localeCompare(a.date));
-  if (curFilter==='needs')   list=list.filter(t=>t.type==='needs');
-  else if(curFilter==='wants')   list=list.filter(t=>t.type==='wants');
-  else if(curFilter==='savings') list=list.filter(t=>t.type==='savings');
-  else if(curFilter==='income')  list=list.filter(t=>t.type==='income');
-  else if(curFilter==='flag')    list=list.filter(t=>t.type==='flag');
-  if (curSearch) { const s=curSearch.toLowerCase(); list=list.filter(t=>(t.payee||'').toLowerCase().includes(s)||(t.selitys||'').toLowerCase().includes(s)); }
+  if (curCatFilter) {
+    list = list.filter(t=>t.cat===curCatFilter);
+  } else {
+    if (curFilter==='needs')        list=list.filter(t=>t.type==='needs');
+    else if(curFilter==='wants')    list=list.filter(t=>t.type==='wants');
+    else if(curFilter==='savings')  list=list.filter(t=>t.type==='savings');
+    else if(curFilter==='income')   list=list.filter(t=>t.type==='income');
+    else if(curFilter==='flag')     list=list.filter(t=>t.type==='flag');
+  }
+  if (curSearch) { const s=curSearch.toLowerCase(); list=list.filter(t=>(t.payee||'').toLowerCase().includes(s)||(t.selitys||'').toLowerCase().includes(s)||(t.cat||'').toLowerCase().includes(s)); }
+  const catBanner = curCatFilter ? `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);margin-bottom:8px;font-size:13px">
+    <span>${catObj(curCatFilter).icon}</span>
+    <span style="font-weight:500;color:var(--text)">${esc(curCatFilter)}</span>
+    <span style="color:var(--muted);font-size:12px">${list.length} tapahtumaa · ${eur(list.reduce((s,t)=>s+Math.abs(t.amount),0))}</span>
+    <button onclick="setCurCatFilter('')" style="margin-left:auto;background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:0 4px">✕</button>
+  </div>` : '';
 
   const filterBtns = `
     <div class="${isDesktop?'table-filters':'filters'}">
@@ -971,7 +1000,7 @@ function renderTapahtumat() {
     </div>`;
 
   if (!list.length) {
-    document.getElementById('txContent').innerHTML = filterBtns + `<div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">Ei tapahtumia.</div></div>`;
+    document.getElementById('txContent').innerHTML = catBanner + filterBtns + `<div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">Ei tapahtumia.</div></div>`;
     return;
   }
 
@@ -991,7 +1020,7 @@ function renderTapahtumat() {
         </td>
         <td><button onclick="deleteTx('${esc(tx.id)}')" style="background:none;border:none;color:var(--dim);font-size:16px;cursor:pointer;padding:0 4px;line-height:1" title="Poista">✕</button></td>
       </tr>`).join('');
-    document.getElementById('txContent').innerHTML = filterBtns +
+    document.getElementById('txContent').innerHTML = catBanner + filterBtns +
       `<div class="table-wrap"><table><thead><tr><th>Päivä</th><th>Saaja</th><th>Lähde</th><th>Kategoria</th><th style="text-align:right">Summa</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
     document.getElementById('txContent').querySelectorAll('.inline-sel').forEach((sel,i) => {
       if (list[i]?.cat) sel.value = list[i].cat;
@@ -999,7 +1028,7 @@ function renderTapahtumat() {
   } else {
     const groups = {};
     list.forEach(t => { if(!groups[t.date]) groups[t.date]=[]; groups[t.date].push(t); });
-    let html = filterBtns;
+    let html = catBanner + filterBtns;
     Object.entries(groups).forEach(([date,items]) => {
       html += `<div class="section-lbl">${fmtDateLbl(date)}</div><div class="tx-list">`;
       items.forEach(t => { html += txItemHTML(t); });
@@ -1059,6 +1088,8 @@ function setCatInline(sel) {
 function renderKategoriat() {
   const list = txsForMonth(curMonth).filter(t=>t.type!=='neutral'&&t.type!=='flag');
   const s = monthSummary(txsForMonth(curMonth));
+  const bi = budgetIncomeForMonth(curMonth);
+  const budgetInc = bi.income;
   const map = {};
   list.forEach(tx => {
     if (!map[tx.cat]) map[tx.cat]={cat:tx.cat,type:tx.type,total:0};
@@ -1073,7 +1104,7 @@ function renderKategoriat() {
   // ── Harkinnanvaraiset (wants) highlight ──
   const wantsCats = cats.filter(c=>c.type==='wants');
   const wantsTotal = wantsCats.reduce((sum,c)=>sum+c.total,0);
-  const wantsBudget = s.income * 0.30;
+  const wantsBudget = budgetInc * 0.30;
   const wantsOver = wantsBudget > 0 && wantsTotal > wantsBudget;
   let wantsBlock = '';
   if (wantsCats.length) {
@@ -1085,13 +1116,14 @@ function renderKategoriat() {
       ${wantsCats.map(c=>{
         const co=catObj(c.cat);
         const pct=wantsBudget>0?Math.min(c.total/wantsBudget*100,100):0;
-        return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;cursor:pointer;-webkit-tap-highlight-color:transparent" onclick="setCurCatFilter('${c.cat.replace(/'/g,"\\'")}')">
           <span style="font-size:18px;width:22px;text-align:center;flex-shrink:0">${co.icon}</span>
           <span style="font-size:13px;color:var(--text);flex:1;min-width:0">${esc(c.cat)}</span>
           <span style="font-size:14px;font-weight:500;color:var(--text);flex-shrink:0">${eur(c.total)}</span>
           <div style="width:80px;height:3px;background:var(--surface2);border-radius:2px;flex-shrink:0">
             <div style="height:3px;border-radius:2px;background:${pct>80?'var(--red)':'var(--gold)'};width:${pct}%;transition:width .4s ease"></div>
           </div>
+          <span style="font-size:14px;color:var(--dim);flex-shrink:0">›</span>
         </div>`;
       }).join('')}
       <div style="border-top:.5px solid var(--border);padding-top:10px;margin-top:2px;display:flex;justify-content:space-between;align-items:center">
@@ -1105,11 +1137,11 @@ function renderKategoriat() {
   // ── Category cards ──
   const cards = cats.map(c => {
     const co = catObj(c.cat);
-    const budget = c.type==='wants'?s.income*0.30:c.type==='needs'?s.income*0.50:c.type==='savings'?s.income*0.20:0;
+    const budget = c.type==='wants'?budgetInc*0.30:c.type==='needs'?budgetInc*0.50:c.type==='savings'?budgetInc*0.20:0;
     const pct = budget>0 ? Math.min(Math.round(c.total/budget*100),150) : Math.round(c.total/cats[0].total*100);
     const barColor = budget>0&&pct>100 ? 'var(--red)' : typeColor(c.type);
     const barLabel = budget>0 ? `<div style="font-size:10px;color:var(--dim);margin-top:3px">${pct}% budjetista</div>` : '';
-    return `<div class="cat-card">
+    return `<div class="cat-card" onclick="setCurCatFilter('${c.cat.replace(/'/g,"\\'")}') " style="cursor:pointer">
       <div class="cat-icon">${co.icon}</div>
       <div class="cat-name">${esc(c.cat)}</div>
       <div class="cat-amount">${eur(c.total)}</div>
@@ -1280,8 +1312,15 @@ function renderLisaa() {
     <p style="font-size:12px;color:var(--dim);margin-top:12px">${txs.length} tapahtumaa · ${allMonths().length} kk</p>`;
 }
 
+function setCurCatFilter(cat) {
+  curCatFilter = cat;
+  if (cat) { curFilter = 'all'; curSearch = ''; switchTab('tapahtumat'); }
+  else renderTapahtumat();
+}
+
 // ── NAVIGATION ────────────────────────────────────────────────────────────────
 function switchTab(tab) {
+  if (tab !== 'tapahtumat') curCatFilter = '';
   curTab = tab;
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   const panel = document.getElementById('tab-'+tab);
