@@ -193,17 +193,20 @@ async function handleTxCreate(req, env) {
 }
 
 async function handleTxUpdate(req, env, id) {
+  const decodedId = decodeURIComponent(id);
   const updates = await req.json();
   const fields = ['cat','type','payee','amount','date'].filter(f=>updates[f]!==undefined);
   if (!fields.length) return err('Nothing to update');
   const sets = fields.map(f=>`${f}=?`).join(',');
   const vals = fields.map(f=>updates[f]);
-  await env.DB.prepare(`UPDATE transactions SET ${sets} WHERE id=?`).bind(...vals, id).run();
+  const result = await env.DB.prepare(`UPDATE transactions SET ${sets} WHERE id=?`).bind(...vals, decodedId).run();
+  if (result.meta?.changes === 0) return err('Transaction not found', 404);
   return ok({ ok: true });
 }
 
 async function handleTxDelete(req, env, id) {
-  await env.DB.prepare('DELETE FROM transactions WHERE id=?').bind(id).run();
+  const decodedId = decodeURIComponent(id);
+  await env.DB.prepare('DELETE FROM transactions WHERE id=?').bind(decodedId).run();
   return ok({ ok: true });
 }
 

@@ -1078,8 +1078,8 @@ function setCatInline(sel) {
       body: JSON.stringify({cat:catName, type:c.type})
     }).then(r => {
       if (r.ok) { sel.style.background = 'var(--green-light)'; setTimeout(()=>sel.style.background='',1200); }
-      else showToast('Tallennus epäonnistui — yritä uudelleen', 'err');
-    }).catch(() => showToast('Tallennus epäonnistui — yritä uudelleen', 'err'));
+      else { sel.style.background = 'var(--red-light)'; showToast('Tallennus D1:een epäonnistui', 'err'); }
+    }).catch(() => showToast('Verkkovirhe — tarkista yhteys', 'err'));
     // Tallenna uusi sääntö myös D1:een
     if (isNewRule) {
       fetch(`${API_BASE}/rules`, {
