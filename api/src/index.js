@@ -97,7 +97,7 @@ async function handleReceiptParse(req, env) {
       max_tokens: 1024,
       system: `Olet kuittien parsija. Ryhmittele kuitti kategorioittain.
 Palauta AINOASTAAN tämä JSON-formaatti täsmälleen:
-{"merchant":"kauppiaannimi","date":"YYYY-MM-DD","groups":[{"category":"ruoka","label":"Päivittäistavarat","amount":50.16},{"category":"alkoholi","label":"Alkoholi","amount":7.34}]}
+{"merchant":"kauppiaannimi","date":"YYYY-MM-DD","total":57.50,"groups":[{"category":"ruoka","label":"Päivittäistavarat","amount":50.16},{"category":"alkoholi","label":"Alkoholi","amount":7.34}]}
 
 Kategoriat:
 - ruoka → "Päivittäistavarat" (elintarvikkeet, hygienia, kotitavarat)
