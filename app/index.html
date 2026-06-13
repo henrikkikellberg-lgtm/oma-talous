@@ -560,22 +560,35 @@ let txs = [], rules = [], saldot = {}, selMonths = [];
 let curMonth = '', curFilter = 'all', curSearch = '', curTab = 'yhteenveto';
 
 // ── STORAGE ─────────────────────────────────────────────────────────────────
-function loadState() {
+function saveLocalState() {
   try {
-    const t = localStorage.getItem('ot_tx'), r = localStorage.getItem('ot_rules'), s = localStorage.getItem('ot_sal');
-    txs    = t ? JSON.parse(t) : [];
-    rules  = r ? JSON.parse(r) : [...DEF_RULES];
-    saldot = s ? JSON.parse(s) : {};
-  } catch(e) { rules = [...DEF_RULES]; }
-  const months = allMonths();
-  curMonth = months[0] || fmtMonthKey(new Date());
-}
-function saveState() {
-  try {
-    localStorage.setItem('ot_tx', JSON.stringify(txs));
+    localStorage.setItem('ot_tx',    JSON.stringify(txs));
     localStorage.setItem('ot_rules', JSON.stringify(rules));
-    localStorage.setItem('ot_sal', JSON.stringify(saldot));
+    localStorage.setItem('ot_sal',   JSON.stringify(saldot));
   } catch(e) { showToast('Tallennusvirhe — vie JSON!', 'err'); }
+}
+
+// Lataa ensin cache, sitten synkaa API:sta taustalla
+async function initState() {
+  try {
+    rules  = JSON.parse(localStorage.getItem('ot_rules') || 'null') || [...DEF_RULES];
+    saldot = JSON.parse(localStorage.getItem('ot_sal')   || '{}');
+    txs    = JSON.parse(localStorage.getItem('ot_tx')    || '[]');
+  } catch(e) { rules = [...DEF_RULES]; saldot = {}; txs = []; }
+  curMonth = allMonths()[0] || fmtMonthKey(new Date());
+  renderAll(); // näytä cache heti
+
+  if (API_BASE) {
+    try {
+      const res = await fetch(`${API_BASE}/transactions`, { headers: apiHeaders() });
+      if (res.ok) {
+        txs = await res.json();
+        saveLocalState();
+        curMonth = allMonths()[0] || fmtMonthKey(new Date());
+        renderAll();
+      }
+    } catch(e) { /* offline — cache riittää */ }
+  }
 }
 
 // ── HELPERS ─────────────────────────────────────────────────────────────────
@@ -653,17 +666,37 @@ function loadCSVFiles(files) {
   let totalAdded = 0;
   files.forEach(f => {
     const rd = new FileReader();
-    rd.onload = ev => {
-      const rows = parseCSVFile(ev.target.result, f.name);
-      const ids = new Set(txs.map(t=>t.id));
-      const added = rows.filter(r=>!ids.has(r.id));
-      txs.push(...added);
-      totalAdded += added.length;
-      if (++done === files.length) {
+    rd.onload = async ev => {
+      if (API_BASE) {
+        try {
+          const res = await fetch(`${API_BASE}/import/csv`, {
+            method: 'POST', headers: apiHeaders(),
+            body: JSON.stringify({csv: ev.target.result, filename: f.name})
+          });
+          if (res.ok) {
+            const data = await res.json();
+            totalAdded += data.added || 0;
+          }
+        } catch(e) {}
+      } else {
+        const rows = parseCSVFile(ev.target.result, f.name);
+        const ids = new Set(txs.map(t=>t.id));
+        const added = rows.filter(r=>!ids.has(r.id));
+        txs.push(...added);
+        totalAdded += added.length;
         categorizeAll();
-        const months = allMonths();
-        if (months.length) curMonth = months[0];
-        saveState();
+      }
+      if (++done === files.length) {
+        if (API_BASE) {
+          // Hae päivitetty lista D1:stä
+          try {
+            const res = await fetch(`${API_BASE}/transactions`, { headers: apiHeaders() });
+            if (res.ok) { txs = await res.json(); saveLocalState(); }
+          } catch(e) {}
+        } else {
+          saveLocalState();
+        }
+        curMonth = allMonths()[0] || fmtMonthKey(new Date());
         renderAll();
         showToast(`Tuotu ${totalAdded} uutta tapahtumaa`, 'ok');
       }
@@ -920,7 +953,14 @@ function setCatInline(sel) {
   tx.cat = catName; tx.type = c.type;
   const kw = (tx.payee||'').toLowerCase().substring(0,22).trim();
   if (kw && !rules.find(r=>r.kw===kw)) rules.unshift({kw, cat:catName, type:c.type});
-  saveState(); updateFlagBanner();
+  saveLocalState(); updateFlagBanner();
+
+  if (API_BASE) {
+    fetch(`${API_BASE}/transactions/${encodeURIComponent(id)}`, {
+      method: 'PUT', headers: apiHeaders(),
+      body: JSON.stringify({cat:catName, type:c.type})
+    }).catch(() => {});
+  }
 }
 
 // ── KATEGORIAT ────────────────────────────────────────────────────────────────
@@ -1028,9 +1068,9 @@ function addRule() {
   if(!kw||!cat){showToast('Täytä hakusana ja kategoria','err');return;}
   rules.unshift({kw,cat,type});
   document.getElementById('rKw').value=''; document.getElementById('rCat').value='';
-  categorizeAll(); saveState(); renderSaannot(); updateFlagBanner();
+  categorizeAll(); saveLocalState(); renderSaannot(); updateFlagBanner();
 }
-function deleteRule(i) { rules.splice(i,1); saveState(); renderSaannot(); }
+function deleteRule(i) { rules.splice(i,1); saveLocalState(); renderSaannot(); }
 
 // ── SALDOT ────────────────────────────────────────────────────────────────────
 function renderSaldot() {
@@ -1059,7 +1099,7 @@ function saveSaldo() {
   ['Perus','Saasto','Lipas','OPCredit','Finnair','Muu'].forEach(k=>{
     const el=document.getElementById('sal_'+k); saldot[k]=el?parseFloat(el.value)||0:0;
   });
-  saveState();
+  saveLocalState();
   const netto=calcNetto(); const el=document.getElementById('nettoVal');
   if(el){el.textContent=esigned(netto);el.style.color=netto>=0?'var(--blue)':'var(--red)';}
 }
@@ -1218,11 +1258,18 @@ function saveManual() {
 
 function addTx(tx) {
   const id = `manual_${Date.now()}_${Math.random().toString(36).substr(2,5)}`;
-  txs.push({id, selitys:'', viesti:'', ...tx});
-  const months = allMonths();
-  if (months.includes(tx.date.substring(0,7))) curMonth = tx.date.substring(0,7);
-  else { const ms = allMonths(); curMonth = ms[0] || fmtMonthKey(new Date()); }
-  saveState(); renderAll();
+  const newTx = {id, selitys:'', viesti:'', ...tx};
+  txs.push(newTx);
+  curMonth = tx.date.substring(0,7);
+  saveLocalState();
+  renderAll();
+
+  if (API_BASE) {
+    fetch(`${API_BASE}/transactions`, {
+      method: 'POST', headers: apiHeaders(),
+      body: JSON.stringify(newTx)
+    }).catch(() => {});
+  }
 }
 
 // ── IMPORT / EXPORT ───────────────────────────────────────────────────────────
@@ -1237,15 +1284,35 @@ function exportJSON() {
 function handleJSONInput(event) {
   const f = event.target.files[0]; if (!f) return;
   const rd = new FileReader();
-  rd.onload = ev => {
+  rd.onload = async ev => {
     try {
       const d = JSON.parse(ev.target.result);
-      if (d.txs) txs = d.txs;
       if (d.rules) rules = d.rules;
       if (d.saldot) saldot = d.saldot;
-      const months = allMonths(); curMonth = months[0] || fmtMonthKey(new Date());
-      saveState(); renderAll();
-      showToast(`Tuotu: ${txs.length} tapahtumaa`,'ok');
+      if (d.txs) {
+        if (API_BASE) {
+          // Lähetä tapahtumat D1:een erissä
+          const batch = d.txs;
+          let ok = 0;
+          for (const tx of batch) {
+            try {
+              const res = await fetch(`${API_BASE}/transactions`, {
+                method:'POST', headers: apiHeaders(),
+                body: JSON.stringify(tx)
+              });
+              if (res.ok) ok++;
+            } catch(e) {}
+          }
+          const res = await fetch(`${API_BASE}/transactions`, { headers: apiHeaders() });
+          if (res.ok) txs = await res.json();
+          showToast(`Tuotu: ${ok} tapahtumaa D1:een`, 'ok');
+        } else {
+          txs = d.txs;
+          showToast(`Tuotu: ${txs.length} tapahtumaa`, 'ok');
+        }
+      }
+      curMonth = allMonths()[0] || fmtMonthKey(new Date());
+      saveLocalState(); renderAll();
     } catch(e) { showToast('Virhe tuonnissa','err'); }
   };
   rd.readAsText(f);
@@ -1311,9 +1378,7 @@ function generateIconPNG(size) {
 })();
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
-loadState();
-if (!curMonth) curMonth = fmtMonthKey(new Date());
-renderAll();
+initState();
 </script>
 </body>
 </html>
