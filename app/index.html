@@ -5,8 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#F2F6FA">
+<meta name="theme-color" content="#1B6B3A">
 <title>oma·talous</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" id="appleIcon">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -1274,6 +1277,38 @@ function showToast(msg, type='') {
   t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'), 2800);
 }
+
+// ── ICON GENERATOR ────────────────────────────────────────────────────────────
+function generateIconPNG(size) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  const r = size * 0.22;
+  ctx.fillStyle = '#1B6B3A';
+  ctx.beginPath();
+  ctx.roundRect(0, 0, size, size, r);
+  ctx.fill();
+  ctx.strokeStyle = '#FFFFFF';
+  ctx.lineWidth = size * 0.09;
+  ctx.beginPath();
+  ctx.arc(size * 0.44, size * 0.50, size * 0.20, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = '#B5883E';
+  ctx.beginPath();
+  ctx.arc(size * 0.76, size * 0.60, size * 0.08, 0, Math.PI * 2);
+  ctx.fill();
+  return c.toDataURL('image/png');
+}
+(function() {
+  const png = generateIconPNG(192);
+  document.getElementById('appleIcon').href = png;
+  // Viedään myös manifest-ikonit CF Pagesille kirjoittamalla linkkielementit
+  ['192','512'].forEach(sz => {
+    const link = document.createElement('link');
+    link.rel = 'preload'; link.as = 'image';
+    link.href = generateIconPNG(parseInt(sz));
+  });
+})();
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 loadState();

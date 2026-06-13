@@ -93,7 +93,7 @@ async function handleReceiptParse(req, env) {
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
       system: `Olet kuittien parsija. Analysoi kuittikuva ja palauta AINOASTAAN yksi JSON-objekti.
 Formaatti täsmälleen:
@@ -133,7 +133,7 @@ async function handleQuickParse(req, env) {
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 256,
       system: `Parsii vapaamuotoinen kulumerkintä JSON-objektiksi. Palauta VAIN JSON.
 {"merchant":"nimi","amount":12.50,"category":"ruoka","date":"YYYY-MM-DD"}
