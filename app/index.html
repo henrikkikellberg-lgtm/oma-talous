@@ -1396,6 +1396,30 @@ function generateIconPNG(size) {
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 initState();
+
+// Päivitä data kun app tulee etualalle (iOS PWA jäätyy taustalla)
+let lastFetch = 0;
+async function fetchFresh() {
+  if (!API_BASE) return;
+  const now = Date.now();
+  if (now - lastFetch < 30000) return; // throttle 30s
+  lastFetch = now;
+  try {
+    const res = await fetch(`${API_BASE}/transactions`, { headers: apiHeaders() });
+    if (!res.ok) return;
+    const apiTxs = await res.json();
+    txs = apiTxs;
+    saveLocalState();
+    curMonth = allMonths()[0] || fmtMonthKey(new Date());
+    renderAll();
+  } catch(e) {}
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') fetchFresh();
+});
+window.addEventListener('pageshow', e => {
+  if (e.persisted) fetchFresh();
+});
 </script>
 </body>
 </html>
