@@ -463,6 +463,24 @@ tr:hover td{background:var(--surface2)}
   </div>
 </div>
 
+<!-- ── MODAL: EDIT TX ─────────────────────────────────────── -->
+<div class="modal-overlay" id="txEditModal" onclick="if(event.target===this)closeModal('txEditModal')">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div>
+        <div class="modal-title" style="margin-bottom:2px" id="txEditTitle"></div>
+        <div style="font-size:13px;color:var(--muted)" id="txEditMeta"></div>
+      </div>
+      <div id="txEditAmt" style="font-size:22px;font-weight:300;color:var(--text)"></div>
+    </div>
+    <div class="field-group"><div class="field-label">Kategoria</div><div class="cat-chips" id="txEditChips"></div></div>
+    <button class="btn btn-primary btn-full" onclick="saveTxEdit()">Tallenna</button>
+    <button class="btn btn-full" style="background:var(--red-light);color:var(--red);border:none;height:44px;border-radius:var(--radius);font-size:15px;font-weight:500;margin-top:6px" onclick="deleteTxEdit()">Poista tapahtuma</button>
+    <button class="modal-cancel" onclick="closeModal('txEditModal')">Peruuta</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -841,7 +859,7 @@ function renderTab(tab) {
 function renderYhteenveto() {
   const list = txsForMonth(curMonth);
   const s = monthSummary(list);
-  const recent = [...list].filter(t=>t.type!=='neutral').sort((a,b)=>b.date.localeCompare(a.date)).slice(0,8);
+  const recent = [...list].filter(t=>t.type!=='neutral').sort((a,b)=>b.date.localeCompare(a.date)).slice(0,20);
 
   document.getElementById('sumGrid').innerHTML = `
     <div class="sum-card sum-income">
@@ -927,9 +945,10 @@ function renderTapahtumat() {
         <td class="td-amt" style="color:${tx.amount<0?'var(--text)':'var(--blue)'}">
           ${tx.amount<0?'−':'+'}${eur(tx.amount)}
         </td>
+        <td><button onclick="deleteTx('${esc(tx.id)}')" style="background:none;border:none;color:var(--dim);font-size:16px;cursor:pointer;padding:0 4px;line-height:1" title="Poista">✕</button></td>
       </tr>`).join('');
     document.getElementById('txContent').innerHTML = filterBtns +
-      `<div class="table-wrap"><table><thead><tr><th>Päivä</th><th>Saaja</th><th>Lähde</th><th>Kategoria</th><th style="text-align:right">Summa</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+      `<div class="table-wrap"><table><thead><tr><th>Päivä</th><th>Saaja</th><th>Lähde</th><th>Kategoria</th><th style="text-align:right">Summa</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
     document.getElementById('txContent').querySelectorAll('.inline-sel').forEach((sel,i) => {
       if (list[i]?.cat) sel.value = list[i].cat;
     });
@@ -950,11 +969,11 @@ function txItemHTML(t) {
   const c = catObj(t.cat);
   const amtClass = t.amount>0?'pos':t.type==='flag'?'red':'neg';
   const amtSign = t.amount>0?'+':'−';
-  return `<div class="tx-item">
+  return `<div class="tx-item" onclick="openTxEdit('${esc(t.id)}')">
     <div class="tx-icon">${c.icon}</div>
     <div class="tx-info">
       <div class="tx-merchant">${esc(t.payee)}</div>
-      <div class="tx-meta">${esc(t.cat||'—')} · ${t.date}</div>
+      <div class="tx-meta">${esc(t.cat||'— Kategorisoimatta')} · ${t.date}</div>
     </div>
     <div class="tx-amt ${amtClass}">${amtSign}${eur(t.amount)}</div>
   </div>`;
@@ -1271,6 +1290,50 @@ function saveManual() {
   addTx({payee:merchant, amount:-amount, date:document.getElementById('manDate').value, cat:c.name, type:c.type, source:'manual'});
   closeModal('manualModal');
   showToast('✓ Tallennettu','ok');
+}
+
+let txEditId = null;
+function openTxEdit(id) {
+  const tx = txs.find(t=>t.id===id);
+  if (!tx) return;
+  txEditId = id;
+  document.getElementById('txEditTitle').textContent = tx.payee || '—';
+  document.getElementById('txEditMeta').textContent = tx.date + (tx.source ? ' · ' + tx.source : '');
+  const amtSign = tx.amount>=0?'+':'−';
+  document.getElementById('txEditAmt').textContent = amtSign + eur(tx.amount);
+  renderChips('txEditChips', tx.cat || 'Muut');
+  openModal('txEditModal');
+}
+function saveTxEdit() {
+  const tx = txs.find(t=>t.id===txEditId);
+  if (!tx) return;
+  const catName = getSelectedChip('txEditChips');
+  const c = catObj(catName);
+  tx.cat = c.name; tx.type = c.type;
+  const kw = (tx.payee||'').toLowerCase().substring(0,22).trim();
+  if (kw && !rules.find(r=>r.kw===kw)) rules.unshift({kw, cat:c.name, type:c.type});
+  saveLocalState(); updateFlagBanner(); renderAll();
+  if (API_BASE) {
+    fetch(`${API_BASE}/transactions/${encodeURIComponent(txEditId)}`, {
+      method:'PUT', headers:apiHeaders(), body:JSON.stringify({cat:c.name, type:c.type})
+    }).catch(()=>{});
+  }
+  closeModal('txEditModal');
+  showToast('✓ Kategoria päivitetty','ok');
+}
+function deleteTxEdit() {
+  if (txEditId) { closeModal('txEditModal'); deleteTx(txEditId); }
+}
+async function deleteTx(id) {
+  if (!confirm('Poistetaanko tapahtuma?')) return;
+  txs = txs.filter(t=>t.id!==id);
+  saveLocalState(); renderAll();
+  if (API_BASE) {
+    fetch(`${API_BASE}/transactions/${encodeURIComponent(id)}`, {
+      method:'DELETE', headers:apiHeaders()
+    }).catch(()=>{});
+  }
+  showToast('Tapahtuma poistettu','ok');
 }
 
 function addTx(tx) {
