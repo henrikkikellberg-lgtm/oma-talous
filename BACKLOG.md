@@ -4,6 +4,45 @@
 
 ## Kehitysjonossa (prioriteettijärjestyksessä)
 
+### Luottokortti-kirjanpito: double-counting bugi (KRIITTINEN)
+
+**Ongelma:** Jos seuraat sekä luottokorttiostoksia (Finnair/OP Visa CSV) että luottolaskun maksua käyttötililtä, sama meno kirjataan kahdesti — kerran ostoksena ja kerran laskun maksuna.
+
+**Kirjanpidon oikea logiikka (suoriteperuste):**
+- Ostos korttimaksulla → kirjataan heti oikeaan kategoriaan (meno kohdistuu oikealle kuukaudelle)
+- Luottolaskun maksu käyttötililtä → **tilisiirto** (neutral), ei meno. Velka kuittautuu, raha siirtyy tililtä korttiyhtiölle.
+
+**Nykyinen bugi:** `visa credit suoritus` ja korttiyhtiöiden maksut on kategorisoitu `Luotot — lyhennys` tyypillä `needs`. Tämä on väärin — ne lasketaan kaksoismeno. Niiden pitäisi olla `neutral`/tilisiirto.
+
+**Korjaustoimenpiteet:**
+1. Muuta säännöt: `visa credit suoritus` → tyyppi `neutral`, kategoria `MobilePay & siirrot` (tai uusi "Tilisiirto")
+2. Tuo Finnair Visa ja OP Visa Credit CSV:t — niiden ostodata kuvaa oikean menon
+3. Varmista ettei laskun maksu + ostos molemmat laske samaan kuukauteen menoina
+
+**Vaihtoehto jos et tuo luottokortti-CSV:tä (kassaperuste):**
+- Seuraa vain käyttötiliä
+- Luottolaskun maksu ON meno — kategorisoi se silloin manuaalisesti (se pitää jakaa ostoksiin)
+- Yksinkertaisempi mutta kategorisointi jälkikäteistä
+
+### Rahoitustapahtumat — lainan nosto ja muut tasemuutokset
+
+**Ongelma:** Lainan nosto (+50 000 €) näkyy tulona ja vääristää koko kuukauden budjetti-%-laskentaa (needs/wants/savings %-osuudet menevät pieleen kun pohja on 50k eikä palkka).
+
+**Ratkaisu:** Uusi transaktiotyyppi `financing`:
+- Kirjataan ja näkyy transaktiolistassa (läpinäkyvyys)
+- **Ei laske mukaan income-pohjaan** budjettilaskennassa
+- Ei vaikuta 50/30/20-prosentteihin
+- Kategoriat: "Lainan nosto", "Arvopaperimyynti", "Vakuutuskorvaus" jne.
+
+**Toteutus:**
+- Lisää `financing` CATS-listaan + DEF_RULES-säännöt (esim. `asuntolainaerä`, `lainan nosto`)
+- `budgetIncomeForMonth`-funktio: suodattaa pois `financing`-tyyppiset tapahtumat income-laskennasta
+- `monthSummary`-funktio: `financing` ei laske needs/wants/savings/income-summiin
+
+**Esimerkkisääntöjä:**
+- "lainan nosto" → financing
+- "asuntolaina" → financing (jos kyse nostosta, ei lyhennyksestä)
+
 ### Toistuvat kiinteät menot
 Tällä hetkellä esim. 635,90€ asumistransaktio sisältää: hoitovastike + yhtiölainan lyhennys + korko + vesimaksu — kaikki yhdessä rivissä. Tavoite: split-toiminto jolla yhden tapahtuman voi jakaa useampaan kategoriaan manuaalisesti. Esim. 635,90€ → Asuminen 250€ + Luotot—lyhennys 300€ + Luotot—korko 85,90€.
 
@@ -12,6 +51,15 @@ Nykyinen fallback (edellinen kk jos ei tuloja) toimii ok, mutta oikea ratkaisu: 
 
 ### Kategorian tarkempi drill-down
 "Harkinnanvaraiset"-blokin kategoriat voi jo klikata → tapahtumat suodatettuna. Seuraava askel: sivutettava/swipeable kategorianäkymä jossa vasemmalla/oikealla nuolella selaa eri kategorioita ja näkee niiden tapahtumat suoraan ilman välilehteä.
+
+### Finnair Visa + OP Visa Credit — puuttuva data
+
+Koodissa on Finnair Visa CSV-parseri ja OP Visa Credit -tunnistus, mutta data puuttuu jos näitä CSV:tä ei ole tuotu. Toimenpiteet:
+1. Lataa Finnair Visa -tapahtumat Amex/S-Pankin verkkopalvelusta → CSV → tuo appiin
+2. Lataa OP Visa Credit -tapahtumat OP:n verkkopalvelusta → CSV → tuo appiin
+3. Tarkista double-counting (ks. yllä) ennen importtia — päätä käytetäänkö suoriteperustetta vai kassaperustetta
+
+Huom: OP Visa Credit CSV-formaatti eroaa OP Debit-formaatista — varmista että parseri tunnistaa oikein.
 
 ### Sijoittaminen — mitä hankittu
 Sijoittaminen-kategorian tapahtumat näyttävät vain summat. Lisäys: klikattaessa näkee mitä rahastoa/osaketta on ostettu (payee-kentästä).
