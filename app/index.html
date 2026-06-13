@@ -29,6 +29,8 @@
   --dim:         #9AAAB8;
   --red:         #C0322A;
   --red-light:   #FBECEB;
+  --purple:      #4338CA;
+  --purple-light:#EEF2FF;
   --radius:      10px;
   --radius-sm:   7px;
   --radius-lg:   16px;
@@ -115,7 +117,7 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 .cat-bar{height:3px;background:var(--surface2);border-radius:2px;margin-top:8px;overflow:hidden}
 .cat-bar-fill{height:3px;border-radius:2px}
 .badge{font-size:10px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;padding:2px 6px;border-radius:4px;display:inline-block;margin-top:4px}
-.badge-needs{background:var(--green-light);color:var(--green)}.badge-wants{background:var(--gold-light);color:var(--gold)}.badge-savings,.badge-income{background:var(--blue-light);color:var(--blue)}.badge-neutral{background:var(--surface2);color:var(--muted)}
+.badge-needs{background:var(--green-light);color:var(--green)}.badge-wants{background:var(--gold-light);color:var(--gold)}.badge-savings,.badge-income{background:var(--blue-light);color:var(--blue)}.badge-neutral{background:var(--surface2);color:var(--muted)}.badge-financing{background:var(--purple-light);color:var(--purple)}
 
 /* ── FILTERS ─────────────────────────────────────────── */
 .filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
@@ -125,7 +127,7 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 .filter-btn.fw{border-color:var(--gold);color:var(--gold);background:var(--gold-light)}
 .filter-btn.fs{border-color:var(--blue);color:var(--blue);background:var(--blue-light)}
 .filter-btn.fi{border-color:var(--blue);color:var(--blue);background:var(--blue-light)}
-.filter-btn.ff{border-color:var(--red);color:var(--red);background:var(--red-light)}
+.filter-btn.ff{border-color:var(--red);color:var(--red);background:var(--red-light)}.filter-btn.ffi{border-color:var(--purple);color:var(--purple);background:var(--purple-light)}
 .search-in{background:var(--surface2);border:.5px solid var(--border);border-radius:var(--radius-sm);padding:6px 12px;color:var(--text);font-size:13px;font-family:'Inter',sans-serif;outline:none;margin-left:auto;width:180px}
 .search-in:focus{border-color:var(--green)}
 
@@ -496,6 +498,7 @@ const API_SECRET = '8128f7da46a8a897b418f7f85a517bae788abeb3626d49a48840c232d218
 // ── CONSTANTS ──────────────────────────────────────────────────────────────
 const CATS = [
   {name:'Palkka ja tulot',        type:'income',  icon:'💰'},
+  {name:'Lainan nosto',           type:'financing',icon:'🏦'},
   {name:'Sijoittaminen',          type:'savings', icon:'📈'},
   {name:'Säästöt',                type:'savings', icon:'🏦'},
   {name:'Säästölipas',            type:'savings', icon:'🐷'},
@@ -680,7 +683,7 @@ function fmtMonthLbl(key) {
 }
 function todayISO() { return new Date().toISOString().split('T')[0]; }
 function catObj(name) { return CATS.find(c=>c.name===name)||{name:name||'Muut',type:'wants',icon:'📦'}; }
-function typeColor(t) { return t==='needs'?'var(--green)':t==='wants'?'var(--gold)':t==='savings'||t==='income'?'var(--blue)':'var(--muted)'; }
+function typeColor(t) { return t==='needs'?'var(--green)':t==='wants'?'var(--gold)':t==='savings'||t==='income'?'var(--blue)':t==='financing'?'var(--purple)':'var(--muted)'; }
 function typeBadge(t) { return 'badge-'+(t||'neutral'); }
 function monthSummary(list) {
   const income = list.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
@@ -884,7 +887,7 @@ function updateMonthLabels() {
 }
 
 function updateMobTotal() {
-  const list = txsForMonth(curMonth).filter(t=>t.amount<0&&t.type!=='neutral');
+  const list = txsForMonth(curMonth).filter(t=>t.amount<0&&t.type!=='neutral'&&t.type!=='financing');
   const total = list.reduce((s,t)=>s+Math.abs(t.amount),0);
   const el = document.getElementById('mobTotal');
   if (el) el.textContent = eur(total);
@@ -979,7 +982,8 @@ function renderTapahtumat() {
     else if(curFilter==='wants')    list=list.filter(t=>t.type==='wants');
     else if(curFilter==='savings')  list=list.filter(t=>t.type==='savings');
     else if(curFilter==='income')   list=list.filter(t=>t.type==='income');
-    else if(curFilter==='flag')     list=list.filter(t=>t.type==='flag');
+    else if(curFilter==='flag')       list=list.filter(t=>t.type==='flag');
+  else if(curFilter==='financing')  list=list.filter(t=>t.type==='financing');
   }
   if (curSearch) { const s=curSearch.toLowerCase(); list=list.filter(t=>(t.payee||'').toLowerCase().includes(s)||(t.selitys||'').toLowerCase().includes(s)||(t.cat||'').toLowerCase().includes(s)); }
   const catBanner = curCatFilter ? `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);margin-bottom:8px;font-size:13px">
@@ -997,6 +1001,7 @@ function renderTapahtumat() {
       <button class="filter-btn ${curFilter==='savings'?'fs':''}" onclick="setCurFilter('savings')">Savings</button>
       <button class="filter-btn ${curFilter==='income'?'fi':''}" onclick="setCurFilter('income')">Tulot</button>
       <button class="filter-btn ${curFilter==='flag'?'ff':''}" onclick="setCurFilter('flag')">⚠️ Kategorisoimatta</button>
+      <button class="filter-btn ${curFilter==='financing'?'ffi':''}" onclick="setCurFilter('financing')">🏦 Rahoitus</button>
       <input class="search-in" placeholder="Hae..." value="${curSearch}" oninput="curSearch=this.value;renderTapahtumat()">
     </div>`;
 
@@ -1230,7 +1235,7 @@ function toggleSelMonth(m) {
 
 // ── SÄÄNNÖT ───────────────────────────────────────────────────────────────────
 function renderSaannot() {
-  const typeOpts = ['needs','wants','savings','income','neutral'].map(t=>`<option value="${t}">${t}</option>`).join('');
+  const typeOpts = ['needs','wants','savings','income','neutral','financing'].map(t=>`<option value="${t}">${t}</option>`).join('');
   const rows = rules.map((r,i) => {
     const hits = txs.filter(t=>((t.payee||'')+' '+(t.selitys||'')).toLowerCase().includes(r.kw.toLowerCase())).length;
     return `<div class="rule-row">
