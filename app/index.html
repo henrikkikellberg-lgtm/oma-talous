@@ -570,25 +570,42 @@ function saveLocalState() {
 
 // Lataa ensin cache, sitten synkaa API:sta taustalla
 async function initState() {
+  // 1. Näytä cache heti
   try {
     rules  = JSON.parse(localStorage.getItem('ot_rules') || 'null') || [...DEF_RULES];
     saldot = JSON.parse(localStorage.getItem('ot_sal')   || '{}');
     txs    = JSON.parse(localStorage.getItem('ot_tx')    || '[]');
   } catch(e) { rules = [...DEF_RULES]; saldot = {}; txs = []; }
   curMonth = allMonths()[0] || fmtMonthKey(new Date());
-  renderAll(); // näytä cache heti
+  renderAll();
 
-  if (API_BASE) {
-    try {
-      const res = await fetch(`${API_BASE}/transactions`, { headers: apiHeaders() });
-      if (res.ok) {
-        txs = await res.json();
-        saveLocalState();
-        curMonth = allMonths()[0] || fmtMonthKey(new Date());
-        renderAll();
-      }
-    } catch(e) { /* offline — cache riittää */ }
-  }
+  if (!API_BASE) return;
+
+  try {
+    // 2. Hae D1:stä
+    const res = await fetch(`${API_BASE}/transactions`, { headers: apiHeaders() });
+    if (!res.ok) return;
+    const apiTxs = await res.json();
+    const apiIds = new Set(apiTxs.map(t => t.id));
+
+    // 3. Lähetä D1:stä puuttuvat lokaalit tapahtumat (esim. aiemmin skannatut kuitit)
+    const localOnly = txs.filter(t => !apiIds.has(t.id));
+    if (localOnly.length > 0) {
+      await Promise.all(localOnly.map(tx =>
+        fetch(`${API_BASE}/transactions`, {
+          method: 'POST', headers: apiHeaders(),
+          body: JSON.stringify(tx)
+        }).catch(() => {})
+      ));
+      showToast(`Synkattu ${localOnly.length} tapahtumaa`, 'ok');
+    }
+
+    // 4. D1 + juuri uploadatut = totuuden lähde
+    txs = [...apiTxs, ...localOnly];
+    saveLocalState();
+    curMonth = allMonths()[0] || fmtMonthKey(new Date());
+    renderAll();
+  } catch(e) { /* offline — cache riittää */ }
 }
 
 // ── HELPERS ─────────────────────────────────────────────────────────────────
