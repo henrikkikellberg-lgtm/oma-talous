@@ -95,11 +95,26 @@ async function handleReceiptParse(req, env) {
     body: JSON.stringify({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
-      system: `Olet kuittien parsija. Analysoi kuittikuva ja palauta AINOASTAAN yksi JSON-objekti.
-Formaatti täsmälleen:
-{"merchant":"kauppiaannimi","date":"YYYY-MM-DD","total":12.50,"category":"ravintola","items":[{"name":"tuote","amount":3.50,"category":"ruoka"}]}
-Kategoriat: ruoka, ravintola, liikenne, koti, vaatteet, viihde, terveys, alkoholi, muut
-Päivämäärä tänään jos ei näy kuitissa: ${today}`,
+      system: `Olet kuittien parsija. Ryhmittele kuitti kategorioittain.
+Palauta AINOASTAAN tämä JSON-formaatti täsmälleen:
+{"merchant":"kauppiaannimi","date":"YYYY-MM-DD","groups":[{"category":"ruoka","label":"Päivittäistavarat","amount":50.16},{"category":"alkoholi","label":"Alkoholi","amount":7.34}]}
+
+Kategoriat:
+- ruoka → "Päivittäistavarat" (elintarvikkeet, hygienia, kotitavarat)
+- alkoholi → "Alkoholi" (alkoholi + sen panttipullot)
+- ravintola → "Ravintolat"
+- lounas → "Lounas"
+- liikenne → "Liikkuminen — arki"
+- koti → "Asuminen"
+- muut → "Muut"
+
+Säännöt:
+- Ryhmittele samankategoriset yhteen summaan
+- Panttipullot: lisää alkoholin hintaan jos alkoholijuomalle, muuten ruokaan
+- Alennukset (Lidl Plus, kanta-asiakas jne.) vähennetään oikeasta kategoriasta
+- Ohita terminaali-, maksupääte- ja kuittinumerotiedot
+- Palauta vain ne kategoriat joissa on ostoksia
+- Päivämäärä tänään jos ei näy kuitissa: ${today}`,
       messages: [{
         role: 'user',
         content: [
