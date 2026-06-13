@@ -607,6 +607,29 @@ function saveLocalState() {
   } catch(e) { showToast('Tallennusvirhe — vie JSON!', 'err'); }
 }
 
+// Palauttaa apiTxs mutta säilyttää lokaalit kategorioinnit jos D1 on vielä flag
+async function mergeCats(apiTxs) {
+  const localMap = Object.fromEntries(txs.map(t=>[t.id,t]));
+  const pending = [];
+  const merged = apiTxs.map(apiTx => {
+    const local = localMap[apiTx.id];
+    if (local?.cat && local.type !== 'flag' && (!apiTx.cat || apiTx.type === 'flag' || apiTx.cat.startsWith('—'))) {
+      pending.push({id:apiTx.id, cat:local.cat, type:local.type});
+      return {...apiTx, cat:local.cat, type:local.type};
+    }
+    return apiTx;
+  });
+  if (pending.length) {
+    await Promise.all(pending.map(p =>
+      fetch(`${API_BASE}/transactions/${encodeURIComponent(p.id)}`, {
+        method:'PUT', headers:apiHeaders(), body:JSON.stringify({cat:p.cat, type:p.type})
+      }).catch(()=>{})
+    ));
+    showToast(`Synkattu ${pending.length} kategoriaa D1:een`, 'ok');
+  }
+  return merged;
+}
+
 // Lataa ensin cache, sitten synkaa API:sta taustalla
 async function initState() {
   // 1. Näytä cache heti
@@ -621,26 +644,24 @@ async function initState() {
   if (!API_BASE) return;
 
   try {
-    // 2. Hae D1:stä
     const res = await fetch(`${API_BASE}/transactions`, { headers: apiHeaders() });
     if (!res.ok) return;
     const apiTxs = await res.json();
     const apiIds = new Set(apiTxs.map(t => t.id));
 
-    // 3. Lähetä D1:stä puuttuvat lokaalit tapahtumat (esim. aiemmin skannatut kuitit)
+    // Tapahtumat jotka ovat vain localissa (esim. skannatut ennen synkiä)
     const localOnly = txs.filter(t => !apiIds.has(t.id));
     if (localOnly.length > 0) {
       await Promise.all(localOnly.map(tx =>
         fetch(`${API_BASE}/transactions`, {
-          method: 'POST', headers: apiHeaders(),
-          body: JSON.stringify(tx)
+          method: 'POST', headers: apiHeaders(), body: JSON.stringify(tx)
         }).catch(() => {})
       ));
       showToast(`Synkattu ${localOnly.length} tapahtumaa`, 'ok');
     }
 
-    // 4. D1 + juuri uploadatut = totuuden lähde
-    txs = [...apiTxs, ...localOnly];
+    // Yhdistä: säilytä lokaalit kategorioinnit joita D1 ei vielä tiedä
+    txs = [...(await mergeCats(apiTxs)), ...localOnly];
     saveLocalState();
     curMonth = allMonths()[0] || fmtMonthKey(new Date());
     renderAll();
@@ -1011,14 +1032,26 @@ function setCatInline(sel) {
   if (!tx) return;
   tx.cat = catName; tx.type = c.type;
   const kw = (tx.payee||'').toLowerCase().substring(0,22).trim();
-  if (kw && !rules.find(r=>r.kw===kw)) rules.unshift({kw, cat:catName, type:c.type});
+  const isNewRule = kw && !rules.find(r=>r.kw===kw);
+  if (isNewRule) rules.unshift({kw, cat:catName, type:c.type});
   saveLocalState(); updateFlagBanner();
 
   if (API_BASE) {
+    // Tallenna kategoria D1:een
     fetch(`${API_BASE}/transactions/${encodeURIComponent(id)}`, {
       method: 'PUT', headers: apiHeaders(),
       body: JSON.stringify({cat:catName, type:c.type})
-    }).catch(() => {});
+    }).then(r => {
+      if (r.ok) { sel.style.background = 'var(--green-light)'; setTimeout(()=>sel.style.background='',1200); }
+      else showToast('Tallennus epäonnistui — yritä uudelleen', 'err');
+    }).catch(() => showToast('Tallennus epäonnistui — yritä uudelleen', 'err'));
+    // Tallenna uusi sääntö myös D1:een
+    if (isNewRule) {
+      fetch(`${API_BASE}/rules`, {
+        method: 'POST', headers: apiHeaders(),
+        body: JSON.stringify({kw, cat:catName, type:c.type, priority:0})
+      }).catch(() => {});
+    }
   }
 }
 
@@ -1431,15 +1464,23 @@ function saveTxEdit() {
   const c = catObj(catName);
   tx.cat = c.name; tx.type = c.type;
   const kw = (tx.payee||'').toLowerCase().substring(0,22).trim();
-  if (kw && !rules.find(r=>r.kw===kw)) rules.unshift({kw, cat:c.name, type:c.type});
+  const isNewRule = kw && !rules.find(r=>r.kw===kw);
+  if (isNewRule) rules.unshift({kw, cat:c.name, type:c.type});
   saveLocalState(); updateFlagBanner(); renderAll();
   if (API_BASE) {
     fetch(`${API_BASE}/transactions/${encodeURIComponent(txEditId)}`, {
       method:'PUT', headers:apiHeaders(), body:JSON.stringify({cat:c.name, type:c.type})
-    }).catch(()=>{});
+    }).then(r => {
+      if (!r.ok) showToast('Tallennus epäonnistui — yritä uudelleen', 'err');
+    }).catch(()=> showToast('Tallennus epäonnistui — yritä uudelleen', 'err'));
+    if (isNewRule) {
+      fetch(`${API_BASE}/rules`, {
+        method:'POST', headers:apiHeaders(), body:JSON.stringify({kw, cat:c.name, type:c.type, priority:0})
+      }).catch(()=>{});
+    }
   }
   closeModal('txEditModal');
-  showToast('✓ Kategoria päivitetty','ok');
+  showToast('✓ Kategoria tallennettu', 'ok');
 }
 function deleteTxEdit() {
   if (txEditId) { closeModal('txEditModal'); deleteTx(txEditId); }
@@ -1591,7 +1632,7 @@ async function fetchFresh() {
     const res = await fetch(`${API_BASE}/transactions`, { headers: apiHeaders() });
     if (!res.ok) return;
     const apiTxs = await res.json();
-    txs = apiTxs;
+    txs = await mergeCats(apiTxs); // säilytä lokaalit kategorioinnit
     saveLocalState();
     curMonth = allMonths()[0] || fmtMonthKey(new Date());
     renderAll();
