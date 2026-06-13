@@ -299,11 +299,17 @@ tr:hover td{background:var(--surface2)}
 <main class="content">
 
   <!-- Desktop month selector row -->
-  <div class="desk-only" style="display:flex;align-items:center;gap:12px;margin-bottom:16px" id="deskMonthRow">
+  <div class="desk-only" style="display:flex;align-items:center;gap:10px;margin-bottom:16px" id="deskMonthRow">
     <button class="btn btn-secondary" style="height:30px;padding:0 10px" onclick="changeMonth(-1)">‹</button>
     <span style="font-size:15px;font-weight:500" id="deskMonthLbl">—</span>
     <button class="btn btn-secondary" style="height:30px;padding:0 10px" onclick="changeMonth(1)">›</button>
-    <span id="flagBannerDesk" style="display:none;margin-left:12px;font-size:12px;color:var(--red);cursor:pointer" onclick="switchTab('tapahtumat');setCurFilter('flag')"></span>
+    <span id="flagBannerDesk" style="display:none;margin-left:4px;font-size:12px;color:var(--red);cursor:pointer" onclick="switchTab('tapahtumat');setCurFilter('flag')"></span>
+    <div style="margin-left:auto;display:flex;align-items:baseline;gap:5px">
+      <span style="font-size:22px;font-weight:300;color:var(--text)" id="deskTotal">—</span>
+      <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">käytetty</span>
+    </div>
+    <button class="btn btn-secondary" style="height:32px;padding:0 12px;font-size:13px" onclick="openCameraModal()">📷 Kuitti</button>
+    <button class="btn btn-secondary" style="height:32px;padding:0 12px;font-size:13px" onclick="openManualModal()">+ Lisää</button>
   </div>
 
   <!-- YHTEENVETO -->
@@ -848,6 +854,8 @@ function updateMobTotal() {
   const total = list.reduce((s,t)=>s+Math.abs(t.amount),0);
   const el = document.getElementById('mobTotal');
   if (el) el.textContent = eur(total);
+  const del = document.getElementById('deskTotal');
+  if (del) del.textContent = eur(total);
 }
 
 function updateFlagBanner() {
@@ -1017,6 +1025,7 @@ function setCatInline(sel) {
 // ── KATEGORIAT ────────────────────────────────────────────────────────────────
 function renderKategoriat() {
   const list = txsForMonth(curMonth).filter(t=>t.type!=='neutral'&&t.type!=='flag');
+  const s = monthSummary(txsForMonth(curMonth));
   const map = {};
   list.forEach(tx => {
     if (!map[tx.cat]) map[tx.cat]={cat:tx.cat,type:tx.type,total:0};
@@ -1027,18 +1036,57 @@ function renderKategoriat() {
     document.getElementById('catGrid').innerHTML = `<div class="empty" style="grid-column:1/-1"><div class="empty-icon">📊</div><div class="empty-text">Ei dataa tälle kuulle.</div></div>`;
     return;
   }
-  const maxTotal = cats[0].total;
-  document.getElementById('catGrid').innerHTML = cats.map(c => {
+
+  // ── Harkinnanvaraiset (wants) highlight ──
+  const wantsCats = cats.filter(c=>c.type==='wants');
+  const wantsTotal = wantsCats.reduce((sum,c)=>sum+c.total,0);
+  const wantsBudget = s.income * 0.30;
+  const wantsOver = wantsBudget > 0 && wantsTotal > wantsBudget;
+  let wantsBlock = '';
+  if (wantsCats.length) {
+    wantsBlock = `<div style="grid-column:1/-1;background:var(--surface);border:.5px solid var(--border);border-top:2.5px solid var(--gold);border-radius:var(--radius);padding:16px 18px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px">
+        <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.07em;color:var(--dim)">Harkinnanvaraiset menot</div>
+        ${wantsBudget>0?`<div style="font-size:12px;color:var(--muted)">tavoite 30% = ${eur(wantsBudget)}</div>`:''}
+      </div>
+      ${wantsCats.map(c=>{
+        const co=catObj(c.cat);
+        const pct=wantsBudget>0?Math.min(c.total/wantsBudget*100,100):0;
+        return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <span style="font-size:18px;width:22px;text-align:center;flex-shrink:0">${co.icon}</span>
+          <span style="font-size:13px;color:var(--text);flex:1;min-width:0">${esc(c.cat)}</span>
+          <span style="font-size:14px;font-weight:500;color:var(--text);flex-shrink:0">${eur(c.total)}</span>
+          <div style="width:80px;height:3px;background:var(--surface2);border-radius:2px;flex-shrink:0">
+            <div style="height:3px;border-radius:2px;background:${pct>80?'var(--red)':'var(--gold)'};width:${pct}%;transition:width .4s ease"></div>
+          </div>
+        </div>`;
+      }).join('')}
+      <div style="border-top:.5px solid var(--border);padding-top:10px;margin-top:2px;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.07em;color:var(--dim)">Yhteensä</span>
+        <span style="font-size:18px;font-weight:300;color:${wantsOver?'var(--red)':'var(--text)'}">${eur(wantsTotal)}</span>
+      </div>
+      ${wantsBudget>0?`<div style="height:3px;background:var(--surface2);border-radius:2px;margin-top:8px"><div style="height:3px;border-radius:2px;background:${wantsOver?'var(--red)':'var(--gold)'};width:${Math.min(wantsTotal/wantsBudget*100,100)}%;transition:width .4s ease"></div></div>`:''}
+    </div>`;
+  }
+
+  // ── Category cards ──
+  const cards = cats.map(c => {
     const co = catObj(c.cat);
-    const pct = Math.round(c.total/maxTotal*100);
+    const budget = c.type==='wants'?s.income*0.30:c.type==='needs'?s.income*0.50:c.type==='savings'?s.income*0.20:0;
+    const pct = budget>0 ? Math.min(Math.round(c.total/budget*100),150) : Math.round(c.total/cats[0].total*100);
+    const barColor = budget>0&&pct>100 ? 'var(--red)' : typeColor(c.type);
+    const barLabel = budget>0 ? `<div style="font-size:10px;color:var(--dim);margin-top:3px">${pct}% budjetista</div>` : '';
     return `<div class="cat-card">
       <div class="cat-icon">${co.icon}</div>
       <div class="cat-name">${esc(c.cat)}</div>
       <div class="cat-amount">${eur(c.total)}</div>
       <span class="badge ${typeBadge(c.type)}">${c.type}</span>
-      <div class="cat-bar" style="margin-top:10px"><div class="cat-bar-fill" style="width:${pct}%;background:${typeColor(c.type)}"></div></div>
+      <div class="cat-bar" style="margin-top:10px"><div class="cat-bar-fill" style="width:${Math.min(pct,100)}%;background:${barColor}"></div></div>
+      ${barLabel}
     </div>`;
   }).join('');
+
+  document.getElementById('catGrid').innerHTML = wantsBlock + cards;
 }
 
 // ── VERTAILU ──────────────────────────────────────────────────────────────────
@@ -1047,38 +1095,65 @@ function renderVertailu() {
   const pills = months.map(m => `
     <div class="month-pill${selMonths.includes(m)?' sel':''}" onclick="toggleSelMonth('${m}')">
       <div class="month-pill-name">${fmtMonthLbl(m)}</div>
-      <div class="month-pill-sum">${eur(txsForMonth(m).filter(t=>t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0))}</div>
+      <div class="month-pill-sum">${eur(txsForMonth(m).filter(t=>t.amount<0&&t.type!=='neutral').reduce((s,t)=>s+Math.abs(t.amount),0))}</div>
     </div>`).join('');
 
   let compareHTML = '<p style="font-size:13px;color:var(--muted)">Valitse kuukaudet ylhäältä.</p>';
-  if (selMonths.length) {
-    const allCats = new Set();
-    selMonths.forEach(m => txsForMonth(m).forEach(t=>{ if(t.type!=='neutral'&&t.cat&&!t.cat.startsWith('—')) allCats.add(t.cat); }));
-    const catRows = [...allCats].map(cat => ({
-      cat,
-      amounts: selMonths.map(m => txsForMonth(m).filter(t=>t.cat===cat).reduce((s,t)=>s+Math.abs(t.amount),0))
-    })).sort((a,b)=>Math.max(...b.amounts)-Math.max(...a.amounts));
+  let legend = '';
 
-    const hdr = `<div class="compare-row"><div class="compare-cell lbl hdr">Kategoria</div>${selMonths.map(m=>`<div class="compare-cell hdr">${fmtMonthLbl(m)}</div>`).join('')}</div>`;
-    const rowsHTML = catRows.map(r => {
-      const pos = r.amounts.filter(a=>a>0);
-      const min = pos.length>1?Math.min(...pos):null, max=pos.length>1?Math.max(...pos):null;
-      const cells = r.amounts.map(a=>{
-        const cls = a===min&&min!==null?'better':a===max&&max!==null?'worse':'';
-        return `<div class="compare-cell ${cls}">${a>0?eur(a):'—'}</div>`;
-      }).join('');
+  if (selMonths.length) {
+    const sorted = [...selMonths].sort(); // vanhin ensin = vertailupohja
+    const is2 = sorted.length === 2;
+    if (is2) legend = `<div style="font-size:12px;color:var(--muted);margin-bottom:10px">🟢 laski · 🔴 nousi (tulot päinvastoin) · vasemmanpuoleinen = vertailupohja</div>`;
+
+    const allCats = new Set();
+    sorted.forEach(m => txsForMonth(m).forEach(t=>{
+      if (t.type!=='neutral' && t.cat && !t.cat.startsWith('—')) allCats.add(t.cat);
+    }));
+
+    const makeCell = (a, ref, isIncome) => {
+      if (!is2 || ref === undefined) return `<div class="compare-cell">${a>0?eur(a):'—'}</div>`;
+      if (ref === 0 || a === 0) return `<div class="compare-cell">${a>0?eur(a):'—'}</div>`;
+      const chg = (a-ref)/ref*100;
+      if (Math.abs(chg) < 3) return `<div class="compare-cell">${eur(a)}</div>`;
+      const up = chg > 0;
+      const cls = isIncome ? (up?'better':'worse') : (up?'worse':'better');
+      return `<div class="compare-cell ${cls}">${eur(a)}<span style="font-size:10px;margin-left:4px">${up?'↑':'↓'}${Math.abs(Math.round(chg))}%</span></div>`;
+    };
+
+    const catRows = [...allCats].map(cat => {
+      const type = txs.find(t=>t.cat===cat)?.type || 'wants';
+      const amounts = sorted.map(m=>txsForMonth(m).filter(t=>t.cat===cat).reduce((s,t)=>s+Math.abs(t.amount),0));
+      return {cat, type, amounts};
+    }).sort((a,b)=>Math.max(...b.amounts)-Math.max(...a.amounts));
+
+    const incAmts = sorted.map(m=>txsForMonth(m).filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0));
+    const incRow = `<div class="compare-row" style="background:var(--blue-light)">
+      <div class="compare-cell lbl" style="color:var(--blue)">💰 Palkka ja tulot</div>
+      ${incAmts.map((a,i)=>makeCell(a,i>0?incAmts[i-1]:undefined,true)).join('')}
+    </div>`;
+
+    const hdr = `<div class="compare-row"><div class="compare-cell lbl hdr">Kategoria</div>${sorted.map(m=>`<div class="compare-cell hdr">${fmtMonthLbl(m)}</div>`).join('')}</div>`;
+
+    const rowsHTML = catRows.filter(r=>r.cat!=='Palkka ja tulot').map(r => {
+      const cells = r.amounts.map((a,i)=>makeCell(a,i>0?r.amounts[i-1]:undefined,false)).join('');
       return `<div class="compare-row"><div class="compare-cell lbl">${esc(r.cat)}</div>${cells}</div>`;
     }).join('');
-    const totals = selMonths.map(m=>txsForMonth(m).filter(t=>t.amount<0&&t.type!=='neutral').reduce((s,t)=>s+Math.abs(t.amount),0));
-    const totRow = `<div class="compare-row" style="background:var(--surface2)"><div class="compare-cell lbl" style="font-weight:500;color:var(--text)">YHTEENSÄ</div>${totals.map(t=>`<div class="compare-cell" style="font-weight:500">${eur(t)}</div>`).join('')}</div>`;
-    compareHTML = `<div class="compare-wrap">${hdr}${rowsHTML}${totRow}</div>`;
+
+    const totals = sorted.map(m=>txsForMonth(m).filter(t=>t.amount<0&&t.type!=='neutral').reduce((s,t)=>s+Math.abs(t.amount),0));
+    const totRow = `<div class="compare-row" style="background:var(--surface2)">
+      <div class="compare-cell lbl" style="font-weight:500;color:var(--text)">Menot yhteensä</div>
+      ${totals.map((a,i)=>makeCell(a,i>0?totals[i-1]:undefined,false).replace('compare-cell','compare-cell').replace('>',` style="font-weight:500">`)).join('')}
+    </div>`;
+
+    compareHTML = `<div class="compare-wrap">${hdr}${incRow}${rowsHTML}${totRow}</div>`;
   }
 
   document.getElementById('vertailuContent').innerHTML = `
     <div class="section-lbl">Valitse kuukaudet (max 4)</div>
     <div class="month-grid">${pills}</div>
-    <div class="section-lbl">Vertailu kategorioittain</div>
-    ${compareHTML}`;
+    <div class="section-lbl" style="margin-top:20px">Menot kategorioittain</div>
+    ${legend}${compareHTML}`;
 }
 
 function toggleSelMonth(m) {

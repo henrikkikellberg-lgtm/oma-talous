@@ -114,7 +114,8 @@ Säännöt:
 - Alennukset (Lidl Plus, kanta-asiakas jne.) vähennetään oikeasta kategoriasta
 - Ohita terminaali-, maksupääte- ja kuittinumerotiedot
 - Palauta vain ne kategoriat joissa on ostoksia
-- Päivämäärä tänään jos ei näy kuitissa: ${today}`,
+- Päivämäärä: eurooppalainen järjestys DD.MM.YYYY tai DD/MM/YYYY (päivä ensin, ei kuukausi). Esim. "08/05/2026" = 8. toukokuuta = 2026-05-08. Muunna aina ISO YYYY-MM-DD.
+- Tänään jos ei näy: ${today}`,
       messages: [{
         role: 'user',
         content: [
