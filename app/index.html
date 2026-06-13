@@ -4,1081 +4,1281 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Budjetti</title>
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#F2F6FA">
+<title>oma·talous</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+:root {
+  --bg:          #F2F6FA;
+  --surface:     #FFFFFF;
+  --surface2:    #EAF0F6;
+  --border:      #D8E4EE;
+  --green:       #1B6B3A;
+  --green-mid:   #2D8A52;
+  --green-light: #E5F2EB;
+  --gold:        #B5883E;
+  --gold-light:  #FAF3E6;
+  --blue:        #1A5BAB;
+  --blue-light:  #E8F0FA;
+  --text:        #0E1C2D;
+  --muted:       #5A6E82;
+  --dim:         #9AAAB8;
+  --red:         #C0322A;
+  --red-light:   #FBECEB;
+  --radius:      10px;
+  --radius-sm:   7px;
+  --radius-lg:   16px;
+}
 
-  :root {
-    --bg: #0f0f0f;
-    --surface: #1a1a1a;
-    --surface2: #242424;
-    --border: #2e2e2e;
-    --text: #f0f0f0;
-    --text-muted: #888;
-    --text-dim: #555;
-    --accent: #c8a96e;
-    --accent-dim: rgba(200, 169, 110, 0.15);
-    --green: #4caf7d;
-    --green-dim: rgba(76, 175, 125, 0.15);
-    --red: #e05a5a;
-    --red-dim: rgba(224, 90, 90, 0.12);
-    --radius: 16px;
-    --radius-sm: 10px;
-  }
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 
-  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:15px}
 
-  body {
-    font-family: 'Inter', -apple-system, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-    max-width: 430px;
-    margin: 0 auto;
-    padding-bottom: 80px;
-  }
+/* ── DESKTOP HEADER ──────────────────────────────────── */
+.desk-header{display:none;padding:0 24px;height:56px;background:var(--surface);border-bottom:.5px solid var(--border);align-items:center;position:sticky;top:0;z-index:50}
+.logo{font-size:14px;font-weight:500;color:var(--text);white-space:nowrap;flex-shrink:0}
+.logo .dot{color:var(--gold)}
+.desk-nav{display:flex;flex:1;margin-left:20px}
+.dnav-btn{padding:0 14px;height:56px;border:none;background:none;color:var(--muted);font-size:13px;font-weight:500;font-family:'Inter',sans-serif;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+.dnav-btn:hover{color:var(--text)}
+.dnav-btn.active{color:var(--green);border-bottom-color:var(--green)}
+.desk-actions{display:flex;gap:8px;align-items:center;margin-left:16px}
 
-  /* TOP BAR */
-  .topbar {
-    padding: 56px 20px 16px;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-  }
-  .topbar-title { font-size: 13px; color: var(--text-muted); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 500; }
-  .topbar-month { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
-  .topbar-sum { text-align: right; }
-  .topbar-sum-label { font-size: 11px; color: var(--text-muted); }
-  .topbar-sum-value { font-size: 24px; font-weight: 300; letter-spacing: -0.03em; }
-  .topbar-sum-value span { font-size: 14px; color: var(--text-muted); }
+/* ── MOBILE TOPBAR ───────────────────────────────────── */
+.mob-topbar{padding:50px 16px 12px;display:flex;justify-content:space-between;align-items:flex-end;background:var(--surface);border-bottom:.5px solid var(--border)}
+.mob-topbar .logo{font-size:13px}
+.mob-total-label{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;font-weight:500}
+.mob-total-value{font-size:22px;font-weight:300}
 
-  /* NAV TABS */
-  .tabs {
-    display: flex;
-    padding: 0 20px;
-    gap: 4px;
-    margin-bottom: 20px;
-  }
-  .tab {
-    flex: 1;
-    padding: 8px 0;
-    text-align: center;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-muted);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: all 0.15s;
-    border: none;
-    background: none;
-  }
-  .tab.active {
-    background: var(--surface2);
-    color: var(--text);
-  }
+/* ── MONTH BAR ───────────────────────────────────────── */
+.month-bar{display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:var(--surface);border-bottom:.5px solid var(--border)}
+.month-nav{width:32px;height:32px;border:none;background:var(--surface2);border-radius:var(--radius-sm);color:var(--muted);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.month-nav:hover{background:var(--border)}
+.month-lbl{font-size:15px;font-weight:500}
 
-  /* VIEWS */
-  .view { display: none; padding: 0 20px; }
-  .view.active { display: block; }
+/* ── CONTENT ─────────────────────────────────────────── */
+.content{padding:16px 16px 110px;max-width:430px;margin:0 auto}
+.tab-panel{display:none}.tab-panel.active{display:block}
 
-  /* CATEGORY PILLS */
-  .cat-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin-bottom: 24px;
-  }
-  .cat-card {
-    background: var(--surface);
-    border-radius: var(--radius);
-    padding: 14px;
-    cursor: pointer;
-    transition: all 0.15s;
-    border: 1px solid var(--border);
-  }
-  .cat-card:active { transform: scale(0.97); }
-  .cat-icon { font-size: 22px; margin-bottom: 6px; }
-  .cat-name { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
-  .cat-amount { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
-  .cat-bar-bg { height: 3px; background: var(--border); border-radius: 2px; margin-top: 8px; }
-  .cat-bar-fill { height: 3px; border-radius: 2px; background: var(--accent); transition: width 0.4s; }
-  .cat-bar-fill.over { background: var(--red); }
+/* ── BUTTONS ─────────────────────────────────────────── */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:0 16px;height:36px;border-radius:var(--radius);font-size:13px;font-weight:500;font-family:'Inter',sans-serif;cursor:pointer;border:none;transition:all .15s;white-space:nowrap}
+.btn-primary{background:var(--green);color:#fff}
+.btn-primary:hover{background:var(--green-mid)}
+.btn-primary:active{transform:scale(.97)}
+.btn-secondary{background:var(--surface);color:var(--text);border:.5px solid var(--border)}
+.btn-secondary:hover{background:var(--surface2)}
+.btn-full{width:100%;height:48px;justify-content:center;font-size:15px;margin-top:4px}
 
-  /* TRANSACTIONS */
-  .section-label {
-    font-size: 11px;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-bottom: 10px;
-    font-weight: 500;
-  }
-  .tx-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 24px; }
-  .tx-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 14px;
-    background: var(--surface);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: background 0.1s;
-  }
-  .tx-item:first-child { border-radius: var(--radius) var(--radius) var(--radius-sm) var(--radius-sm); }
-  .tx-item:last-child { border-radius: var(--radius-sm) var(--radius-sm) var(--radius) var(--radius); }
-  .tx-item:only-child { border-radius: var(--radius); }
-  .tx-item:active { background: var(--surface2); }
-  .tx-icon {
-    width: 36px; height: 36px;
-    background: var(--surface2);
-    border-radius: 10px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 16px; flex-shrink: 0;
-  }
-  .tx-info { flex: 1; min-width: 0; }
-  .tx-merchant { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .tx-meta { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
-  .tx-amount { font-size: 15px; font-weight: 600; letter-spacing: -0.02em; }
-  .tx-source { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-  .tx-source.photo { background: var(--accent); }
-  .tx-source.manual { background: var(--green); }
-  .tx-source.csv { background: var(--text-dim); }
+/* ── FORM ────────────────────────────────────────────── */
+.field-label{font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--dim);margin-bottom:6px}
+.field-input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;color:var(--text);font-size:15px;font-family:'Inter',sans-serif;outline:none;transition:border-color .15s}
+.field-input:focus{border-color:var(--green)}
+.field-select{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;outline:none;cursor:pointer;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%239AAAB8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px}
+.field-select:focus{border-color:var(--green)}
+.field-group{margin-bottom:14px}
 
-  /* EMPTY STATE */
-  .empty {
-    text-align: center;
-    padding: 48px 20px;
-    color: var(--text-muted);
-  }
-  .empty-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.4; }
-  .empty-text { font-size: 14px; line-height: 1.5; }
+/* ── SUMMARY CARDS ───────────────────────────────────── */
+.sum-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.sum-card{background:var(--surface);border:.5px solid var(--border);border-radius:var(--radius);padding:14px;position:relative;overflow:hidden}
+.sum-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2.5px}
+.sum-needs::before{background:var(--green)}.sum-wants::before{background:var(--gold)}.sum-savings::before{background:var(--blue)}.sum-income::before{background:var(--blue)}.sum-neutral::before{background:var(--dim)}
+.sum-label{font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--dim);margin-bottom:4px}
+.sum-value{font-size:22px;font-weight:300;line-height:1.2}
+.sum-needs .sum-value{color:var(--green)}.sum-wants .sum-value{color:var(--gold)}.sum-savings .sum-value{color:var(--blue)}.sum-income .sum-value{color:var(--blue)}
+.sum-sub{font-size:12px;color:var(--muted);margin-top:3px}
+.sum-bar{height:3px;background:var(--surface2);border-radius:2px;margin-top:8px;overflow:hidden}
+.sum-bar-fill{height:3px;border-radius:2px;transition:width .4s ease}
+.sum-needs .sum-bar-fill{background:var(--green)}.sum-wants .sum-bar-fill{background:var(--gold)}.sum-savings .sum-bar-fill{background:var(--blue)}
 
-  /* FAB */
-  .fab-area {
-    position: fixed;
-    bottom: 24px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    gap: 12px;
-    z-index: 100;
-    width: calc(100% - 40px);
-    max-width: 390px;
-  }
-  .fab-secondary {
-    flex: 1;
-    height: 52px;
-    border-radius: 14px;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text);
-    font-size: 14px;
-    font-weight: 500;
-    font-family: 'Inter', sans-serif;
-    cursor: pointer;
-    display: flex; align-items: center; justify-content: center; gap: 6px;
-    transition: all 0.15s;
-  }
-  .fab-secondary:active { transform: scale(0.97); background: var(--surface2); }
-  .fab-primary {
-    flex: 2;
-    height: 52px;
-    border-radius: 14px;
-    border: none;
-    background: var(--accent);
-    color: #1a1208;
-    font-size: 15px;
-    font-weight: 600;
-    font-family: 'Inter', sans-serif;
-    cursor: pointer;
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-    transition: all 0.15s;
-  }
-  .fab-primary:active { transform: scale(0.97); opacity: 0.9; }
+/* ── TRANSACTION LIST ────────────────────────────────── */
+.section-lbl{font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--dim);margin:16px 0 8px}
+.tx-list{display:flex;flex-direction:column;gap:2px;margin-bottom:16px}
+.tx-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border:.5px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;transition:background .1s}
+.tx-item:active{background:var(--surface2)}
+.tx-icon{width:34px;height:34px;background:var(--surface2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.tx-info{flex:1;min-width:0}
+.tx-merchant{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tx-meta{font-size:12px;color:var(--muted);margin-top:1px}
+.tx-amt{font-size:14px;font-weight:500;white-space:nowrap;flex-shrink:0}
+.tx-amt.pos{color:var(--blue)}.tx-amt.neg{color:var(--text)}.tx-amt.red{color:var(--red)}
 
-  /* MODAL OVERLAY */
-  .modal-overlay {
-    display: none;
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,0.7);
-    z-index: 200;
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-  }
-  .modal-overlay.open { display: flex; align-items: flex-end; }
+/* ── CATEGORY GRID ───────────────────────────────────── */
+.cat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cat-card{background:var(--surface);border:.5px solid var(--border);border-radius:var(--radius);padding:14px}
+.cat-icon{font-size:20px;margin-bottom:6px}
+.cat-name{font-size:12px;color:var(--muted);margin-bottom:4px}
+.cat-amount{font-size:18px;font-weight:300}
+.cat-bar{height:3px;background:var(--surface2);border-radius:2px;margin-top:8px;overflow:hidden}
+.cat-bar-fill{height:3px;border-radius:2px}
+.badge{font-size:10px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;padding:2px 6px;border-radius:4px;display:inline-block;margin-top:4px}
+.badge-needs{background:var(--green-light);color:var(--green)}.badge-wants{background:var(--gold-light);color:var(--gold)}.badge-savings,.badge-income{background:var(--blue-light);color:var(--blue)}.badge-neutral{background:var(--surface2);color:var(--muted)}
 
-  .modal-sheet {
-    width: 100%;
-    max-width: 430px;
-    margin: 0 auto;
-    background: var(--surface);
-    border-radius: 24px 24px 0 0;
-    padding: 12px 20px 40px;
-    max-height: 92vh;
-    overflow-y: auto;
-  }
+/* ── FILTERS ─────────────────────────────────────────── */
+.filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+.filter-btn{padding:5px 12px;border-radius:20px;border:.5px solid var(--border);background:none;color:var(--muted);font-size:12px;font-weight:500;font-family:'Inter',sans-serif;cursor:pointer;transition:all .15s}
+.filter-btn.fa{border-color:var(--text);color:var(--text);background:var(--surface2)}
+.filter-btn.fn{border-color:var(--green);color:var(--green);background:var(--green-light)}
+.filter-btn.fw{border-color:var(--gold);color:var(--gold);background:var(--gold-light)}
+.filter-btn.fs{border-color:var(--blue);color:var(--blue);background:var(--blue-light)}
+.filter-btn.fi{border-color:var(--blue);color:var(--blue);background:var(--blue-light)}
+.filter-btn.ff{border-color:var(--red);color:var(--red);background:var(--red-light)}
+.search-in{background:var(--surface2);border:.5px solid var(--border);border-radius:var(--radius-sm);padding:6px 12px;color:var(--text);font-size:13px;font-family:'Inter',sans-serif;outline:none;margin-left:auto;width:180px}
+.search-in:focus{border-color:var(--green)}
 
-  .modal-handle {
-    width: 36px; height: 4px;
-    background: var(--border);
-    border-radius: 2px;
-    margin: 0 auto 20px;
-  }
+/* ── DESKTOP TABLE ───────────────────────────────────── */
+.table-wrap{background:var(--surface);border:.5px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:16px}
+.table-filters{padding:10px 14px;display:flex;gap:6px;flex-wrap:wrap;border-bottom:.5px solid var(--border);align-items:center}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:8px 12px;font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--dim);border-bottom:.5px solid var(--border);background:var(--bg)}
+td{padding:8px 12px;border-bottom:.5px solid var(--border)}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--surface2)}
+.td-amt{font-weight:500;text-align:right;white-space:nowrap}
+.inline-sel{background:var(--surface2);border:.5px solid var(--border);border-radius:var(--radius-sm);padding:4px 8px;color:var(--text);font-size:12px;font-family:'Inter',sans-serif;outline:none;cursor:pointer;max-width:190px}
+.inline-sel:focus{border-color:var(--green)}
 
-  .modal-title { font-size: 18px; font-weight: 600; margin-bottom: 20px; letter-spacing: -0.02em; }
+/* ── DROP ZONE ───────────────────────────────────────── */
+.drop-zone{border:1.5px dashed var(--border);border-radius:var(--radius);padding:24px;text-align:center;cursor:pointer;background:var(--surface);margin-bottom:16px;transition:all .15s}
+.drop-zone:hover,.drop-zone.drag{border-color:var(--green);background:var(--green-light)}
+.drop-zone h3{font-size:15px;font-weight:500;margin-bottom:4px}
+.drop-zone p{font-size:13px;color:var(--muted)}
 
-  /* CAMERA AREA */
-  .camera-area {
-    aspect-ratio: 4/3;
-    background: var(--surface2);
-    border-radius: var(--radius);
-    border: 1.5px dashed var(--border);
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    gap: 10px;
-    cursor: pointer;
-    transition: all 0.15s;
-    overflow: hidden;
-    position: relative;
-  }
-  .camera-area:active { border-color: var(--accent); }
-  .camera-area.has-image { border-style: solid; border-color: var(--accent); }
-  .camera-area img { width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0; }
-  .camera-icon { font-size: 32px; opacity: 0.4; }
-  .camera-text { font-size: 13px; color: var(--text-muted); }
-  .camera-subtext { font-size: 11px; color: var(--text-dim); }
-  #fileInput { display: none; }
+/* ── RULES ───────────────────────────────────────────── */
+.rule-row{display:flex;align-items:center;gap:6px;padding:10px 12px;background:var(--surface);border:.5px solid var(--border);border-radius:var(--radius-sm);margin-bottom:4px;font-size:13px}
+.rule-kw{flex:1;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rule-cat{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px}
+.rule-del{width:24px;height:24px;border:none;background:var(--red-light);color:var(--red);border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.rule-add-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+.rule-input{background:var(--surface2);border:.5px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;color:var(--text);font-size:13px;font-family:'Inter',sans-serif;outline:none}
+.rule-input:focus{border-color:var(--green)}
 
-  /* AI LOADING */
-  .ai-loading {
-    display: none;
-    flex-direction: column;
-    align-items: center;
-    gap: 12px;
-    padding: 24px 0;
-  }
-  .ai-loading.active { display: flex; }
-  .spinner {
-    width: 32px; height: 32px;
-    border: 2px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.7s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .ai-loading-text { font-size: 13px; color: var(--text-muted); }
+/* ── SALDOT ──────────────────────────────────────────── */
+.saldo-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.saldo-card{background:var(--surface);border:.5px solid var(--border);border-radius:var(--radius);padding:14px}
+.saldo-lbl{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;font-weight:500;margin-bottom:8px}
+.saldo-in{width:100%;background:var(--surface2);border:.5px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;color:var(--text);font-size:15px;font-weight:300;font-family:'Inter',sans-serif;outline:none}
+.saldo-in:focus{border-color:var(--green)}
+.netto-card{background:var(--surface);border:.5px solid var(--border);border-radius:var(--radius);padding:20px;display:flex;justify-content:space-between;align-items:center}
+.netto-lbl{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;font-weight:500;margin-bottom:6px}
+.netto-val{font-size:28px;font-weight:300}
 
-  /* PARSED RESULT */
-  .parsed-result { display: none; }
-  .parsed-result.active { display: block; }
+/* ── MONTH COMPARISON ────────────────────────────────── */
+.month-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px;margin-bottom:16px}
+.month-pill{background:var(--surface);border:.5px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;cursor:pointer;transition:all .15s}
+.month-pill:hover,.month-pill.sel{border-color:var(--green);background:var(--green-light)}
+.month-pill-name{font-size:13px;font-weight:500}
+.month-pill-sum{font-size:12px;color:var(--muted);margin-top:2px}
+.compare-wrap{background:var(--surface);border:.5px solid var(--border);border-radius:var(--radius);overflow:auto;margin-bottom:16px}
+.compare-row{display:flex;border-bottom:.5px solid var(--border)}
+.compare-row:last-child{border-bottom:none}
+.compare-cell{padding:8px 12px;font-size:13px;font-weight:300;flex:1;min-width:90px}
+.compare-cell.lbl{color:var(--muted);font-size:13px;font-weight:500;flex:1.5}
+.compare-cell.hdr{font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--dim);background:var(--bg)}
+.compare-cell.better{color:var(--green)}.compare-cell.worse{color:var(--red)}
 
-  .parse-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
-  }
-  .parse-merchant { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
-  .parse-total { font-size: 22px; font-weight: 300; letter-spacing: -0.03em; }
-  .parse-total span { font-size: 14px; color: var(--text-muted); }
+/* ── BOTTOM NAV ──────────────────────────────────────── */
+.mob-nav{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:.5px solid var(--border);display:flex;align-items:stretch;height:60px;padding-bottom:env(safe-area-inset-bottom,0);z-index:100}
+.mob-nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:none;background:none;color:var(--dim);font-size:10px;font-weight:500;font-family:'Inter',sans-serif;cursor:pointer;padding:6px 0;transition:color .15s}
+.mob-nav-btn.active{color:var(--green)}
+.mob-nav-btn svg{width:22px;height:22px}
+.mob-nav-fab{flex:1;display:flex;justify-content:center;align-items:center}
+.fab-center{width:48px;height:48px;background:var(--green);border:none;border-radius:14px;color:#fff;font-size:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(27,107,58,.3);transition:all .15s}
+.fab-center:active{transform:scale(.95)}
 
-  .items-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 16px; }
-  .item-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
-    background: var(--surface2);
-    border-radius: 8px;
-  }
-  .item-row:first-child { border-radius: 12px 12px 8px 8px; }
-  .item-row:last-child { border-radius: 8px 8px 12px 12px; }
-  .item-name { flex: 1; font-size: 13px; }
-  .item-amount { font-size: 13px; font-weight: 500; color: var(--text-muted); white-space: nowrap; }
-  .item-cat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+/* ── MODALS ──────────────────────────────────────────── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:flex-end;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal-sheet{width:100%;max-width:430px;background:var(--surface);border-radius:24px 24px 0 0;padding:12px 20px calc(40px + env(safe-area-inset-bottom,0px));max-height:92vh;overflow-y:auto}
+.modal-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 20px}
+.modal-title{font-size:18px;font-weight:500;margin-bottom:20px}
+.modal-cancel{width:100%;padding:14px;border:none;background:none;color:var(--muted);font-size:14px;font-family:'Inter',sans-serif;cursor:pointer;margin-top:8px}
 
-  /* CATEGORY SELECTOR */
-  .cat-select-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 14px;
-    background: var(--surface2);
-    border-radius: var(--radius-sm);
-    margin-bottom: 10px;
-    cursor: pointer;
-  }
-  .cat-select-label { font-size: 13px; color: var(--text-muted); }
-  .cat-select-value { font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+/* ── CAMERA ──────────────────────────────────────────── */
+.camera-area{aspect-ratio:4/3;background:var(--surface2);border-radius:var(--radius);border:1.5px dashed var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;overflow:hidden;position:relative;margin-bottom:12px}
+.camera-area.has-img{border-style:solid;border-color:var(--green)}
+.camera-area img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
+.cam-icon{font-size:32px;opacity:.4}
+.cam-text{font-size:13px;color:var(--muted)}
+.cam-btns{display:flex;gap:8px;margin-bottom:14px}
+.spinner{width:28px;height:28px;border:2px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ai-load{display:none;flex-direction:column;align-items:center;gap:10px;padding:20px 0}
+.ai-load.active{display:flex}
+.ai-load-text{font-size:13px;color:var(--muted)}
+.parsed{display:none}.parsed.active{display:block}
+.ai-badge{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;background:var(--green-light);color:var(--green);border-radius:5px;padding:2px 6px}
 
-  /* FORM FIELDS */
-  .field-group { margin-bottom: 14px; }
-  .field-label { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; }
-  .field-input {
-    width: 100%;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    padding: 12px 14px;
-    color: var(--text);
-    font-size: 15px;
-    font-family: 'Inter', sans-serif;
-    outline: none;
-    transition: border-color 0.15s;
-  }
-  .field-input:focus { border-color: var(--accent); }
+/* ── CAT CHIPS ───────────────────────────────────────── */
+.cat-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+.cat-chip{padding:6px 12px;border-radius:20px;font-size:13px;font-weight:500;font-family:'Inter',sans-serif;cursor:pointer;border:.5px solid var(--border);background:none;color:var(--muted);transition:all .15s}
+.cat-chip.selected{border-color:var(--green);background:var(--green-light);color:var(--green)}
 
-  /* QUICK ENTRY */
-  .quick-input-wrap {
-    position: relative;
-    margin-bottom: 16px;
-  }
-  .quick-input {
-    width: 100%;
-    background: var(--surface2);
-    border: 1.5px solid var(--border);
-    border-radius: var(--radius);
-    padding: 14px 50px 14px 16px;
-    color: var(--text);
-    font-size: 15px;
-    font-family: 'Inter', sans-serif;
-    outline: none;
-    transition: border-color 0.15s;
-  }
-  .quick-input:focus { border-color: var(--accent); }
-  .quick-input::placeholder { color: var(--text-dim); }
-  .quick-send {
-    position: absolute;
-    right: 10px; top: 50%; transform: translateY(-50%);
-    width: 34px; height: 34px;
-    background: var(--accent);
-    border: none;
-    border-radius: 10px;
-    color: #1a1208;
-    font-size: 16px;
-    cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .quick-hint {
-    font-size: 12px;
-    color: var(--text-dim);
-    text-align: center;
-    margin-bottom: 20px;
-  }
+/* ── QUICK INPUT ─────────────────────────────────────── */
+.quick-wrap{position:relative;margin-bottom:14px}
+.quick-in{width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px 52px 14px 16px;color:var(--text);font-size:15px;font-family:'Inter',sans-serif;outline:none;transition:border-color .15s}
+.quick-in:focus{border-color:var(--green)}
+.quick-in::placeholder{color:var(--dim)}
+.quick-send{position:absolute;right:10px;top:50%;transform:translateY(-50%);width:36px;height:36px;background:var(--green);border:none;border-radius:10px;color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.quick-hint{font-size:12px;color:var(--dim);text-align:center;margin-bottom:16px}
 
-  /* CAT CHIPS */
-  .cat-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 20px;
-  }
-  .cat-chip {
-    padding: 7px 12px;
-    border-radius: 20px;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    border: 1.5px solid var(--border);
-    background: none;
-    color: var(--text-muted);
-    font-family: 'Inter', sans-serif;
-    transition: all 0.15s;
-    display: flex; align-items: center; gap: 5px;
-  }
-  .cat-chip.selected {
-    border-color: var(--accent);
-    background: var(--accent-dim);
-    color: var(--accent);
-  }
+/* ── ADD OPTIONS ─────────────────────────────────────── */
+.add-option{display:flex;width:100%;padding:16px;align-items:center;gap:14px;border:none;background:var(--surface2);border-radius:var(--radius);font-size:15px;font-weight:500;font-family:'Inter',sans-serif;color:var(--text);cursor:pointer;margin-bottom:8px;transition:all .15s}
+.add-option:active{transform:scale(.98)}
 
-  /* CONFIRM BUTTON */
-  .btn-confirm {
-    width: 100%;
-    height: 52px;
-    border-radius: var(--radius);
-    border: none;
-    background: var(--accent);
-    color: #1a1208;
-    font-size: 15px;
-    font-weight: 600;
-    font-family: 'Inter', sans-serif;
-    cursor: pointer;
-    margin-top: 8px;
-    transition: all 0.15s;
-  }
-  .btn-confirm:active { transform: scale(0.98); }
-  .btn-confirm:disabled { opacity: 0.4; cursor: not-allowed; }
+/* ── EMPTY ───────────────────────────────────────────── */
+.empty{text-align:center;padding:48px 24px;color:var(--muted)}
+.empty-icon{font-size:36px;margin-bottom:12px;opacity:.5}
+.empty-text{font-size:14px;line-height:1.6}
 
-  /* TOAST */
-  .toast {
-    position: fixed;
-    top: 60px; left: 50%;
-    transform: translateX(-50%) translateY(-20px);
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 10px 18px;
-    font-size: 13px;
-    font-weight: 500;
-    z-index: 999;
-    opacity: 0;
-    transition: all 0.25s;
-    white-space: nowrap;
-  }
-  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-  .toast.success { border-color: var(--green); color: var(--green); }
-  .toast.error { border-color: var(--red); color: var(--red); }
+/* ── FLAG BANNER ─────────────────────────────────────── */
+.flag-banner{background:var(--red-light);border:.5px solid rgba(192,50,42,.2);border-radius:var(--radius);padding:12px 16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--red)}
 
-  /* BUDGET VIEW */
-  .budget-month-total {
-    background: var(--surface);
-    border-radius: var(--radius);
-    padding: 20px;
-    margin-bottom: 16px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  .bmt-label { font-size: 13px; color: var(--text-muted); margin-bottom: 4px; }
-  .bmt-value { font-size: 28px; font-weight: 300; letter-spacing: -0.03em; }
-  .bmt-value span { font-size: 14px; color: var(--text-muted); }
+/* ── TOAST ───────────────────────────────────────────── */
+.toast{position:fixed;top:70px;left:50%;transform:translateX(-50%) translateY(-20px);background:var(--surface);border:.5px solid var(--border);border-radius:20px;padding:10px 18px;font-size:13px;font-weight:500;z-index:999;opacity:0;transition:all .25s;white-space:nowrap;box-shadow:0 2px 12px rgba(0,0,0,.1)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.ok{border-color:var(--green);color:var(--green)}
+.toast.err{border-color:var(--red);color:var(--red)}
 
-  .budget-row {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 14px 16px;
-    background: var(--surface);
-    border-radius: var(--radius-sm);
-    margin-bottom: 2px;
-  }
-  .budget-row:first-child { border-radius: var(--radius) var(--radius) var(--radius-sm) var(--radius-sm); }
-  .budget-row:last-child { border-radius: var(--radius-sm) var(--radius-sm) var(--radius) var(--radius); }
-  .budget-row-icon { font-size: 20px; width: 32px; text-align: center; }
-  .budget-row-info { flex: 1; }
-  .budget-row-name { font-size: 14px; font-weight: 500; margin-bottom: 5px; }
-  .budget-row-bar-bg { height: 4px; background: var(--border); border-radius: 2px; }
-  .budget-row-bar-fill { height: 4px; border-radius: 2px; background: var(--accent); max-width: 100%; transition: width 0.5s; }
-  .budget-row-bar-fill.over { background: var(--red); }
-  .budget-row-amounts { text-align: right; }
-  .budget-row-spent { font-size: 15px; font-weight: 600; }
-  .budget-row-limit { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
-
-  /* AI BADGE */
-  .ai-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 10px;
-    background: var(--accent-dim);
-    color: var(--accent);
-    border-radius: 6px;
-    padding: 2px 7px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-  }
+/* ── DESKTOP ─────────────────────────────────────────── */
+@media(min-width:768px){
+  .mob-only{display:none!important}
+  .mob-topbar{display:none!important}
+  .month-bar{display:none!important}
+  .desk-header{display:flex!important}
+  .content{max-width:960px;padding:24px 24px 40px}
+  .sum-grid{grid-template-columns:repeat(4,1fr)}
+  .cat-grid{grid-template-columns:repeat(3,1fr)}
+  .saldo-grid{grid-template-columns:repeat(3,1fr)}
+}
+@media(max-width:767px){
+  .desk-only{display:none!important}
+}
 </style>
 </head>
 <body>
 
-<div class="topbar">
-  <div>
-    <div class="topbar-title">Budjetti</div>
-    <div class="topbar-month" id="currentMonth">Kesäkuu 2026</div>
+<!-- ── DESKTOP HEADER ──────────────────────────────────── -->
+<header class="desk-header">
+  <div class="logo">oma<span class="dot">·</span>talous</div>
+  <nav class="desk-nav">
+    <button class="dnav-btn active" data-tab="yhteenveto" onclick="switchTab('yhteenveto')">Yhteenveto</button>
+    <button class="dnav-btn" data-tab="tapahtumat" onclick="switchTab('tapahtumat')">Tapahtumat</button>
+    <button class="dnav-btn" data-tab="kategoriat" onclick="switchTab('kategoriat')">Kategoriat</button>
+    <button class="dnav-btn" data-tab="vertailu" onclick="switchTab('vertailu')">Vertailu</button>
+    <button class="dnav-btn" data-tab="saannot" onclick="switchTab('saannot')">Säännöt</button>
+    <button class="dnav-btn" data-tab="saldot" onclick="switchTab('saldot')">Saldot</button>
+  </nav>
+  <div class="desk-actions">
+    <label class="btn btn-secondary" style="cursor:pointer">↑ CSV<input type="file" accept=".csv" multiple hidden onchange="handleCSVInput(event)"></label>
+    <button class="btn btn-secondary" onclick="exportJSON()">💾 Vie</button>
+    <label class="btn btn-secondary" style="cursor:pointer">📂 Tuo<input type="file" accept=".json" hidden onchange="handleJSONInput(event)"></label>
   </div>
-  <div class="topbar-sum">
-    <div class="topbar-sum-label">Käytetty</div>
-    <div class="topbar-sum-value" id="totalSpent">0 <span>€</span></div>
+</header>
+
+<!-- ── MOBILE TOPBAR ───────────────────────────────────── -->
+<div class="mob-topbar mob-only">
+  <div class="logo">oma<span class="dot">·</span>talous</div>
+  <div style="text-align:right">
+    <div class="mob-total-label">Käytetty</div>
+    <div class="mob-total-value" id="mobTotal">0 €</div>
   </div>
 </div>
 
-<div class="tabs">
-  <button class="tab active" onclick="switchTab('kuitit')">Kuitit</button>
-  <button class="tab" onclick="switchTab('kategoriat')">Kategoriat</button>
-  <button class="tab" onclick="switchTab('budjetti')">Budjetti</button>
+<!-- ── MONTH BAR (mobile) ──────────────────────────────── -->
+<div class="month-bar mob-only">
+  <button class="month-nav" onclick="changeMonth(-1)">‹</button>
+  <span class="month-lbl" id="monthLbl">—</span>
+  <button class="month-nav" onclick="changeMonth(1)">›</button>
 </div>
 
-<!-- KUITIT VIEW -->
-<div class="view active" id="view-kuitit">
-  <div id="tx-container">
-    <div class="empty">
-      <div class="empty-icon">🧾</div>
-      <div class="empty-text">Ei vielä kuitteja.<br>Ota kuva kuitista tai syötä pikana.</div>
+<!-- ── CONTENT ─────────────────────────────────────────── -->
+<main class="content">
+
+  <!-- Desktop month selector row -->
+  <div class="desk-only" style="display:flex;align-items:center;gap:12px;margin-bottom:16px" id="deskMonthRow">
+    <button class="btn btn-secondary" style="height:30px;padding:0 10px" onclick="changeMonth(-1)">‹</button>
+    <span style="font-size:15px;font-weight:500" id="deskMonthLbl">—</span>
+    <button class="btn btn-secondary" style="height:30px;padding:0 10px" onclick="changeMonth(1)">›</button>
+    <span id="flagBannerDesk" style="display:none;margin-left:12px;font-size:12px;color:var(--red);cursor:pointer" onclick="switchTab('tapahtumat');setCurFilter('flag')"></span>
+  </div>
+
+  <!-- YHTEENVETO -->
+  <div class="tab-panel active" id="tab-yhteenveto">
+    <div class="drop-zone desk-only" id="dropZone"
+      ondragover="event.preventDefault();this.classList.add('drag')"
+      ondragleave="this.classList.remove('drag')"
+      ondrop="handleDrop(event)">
+      <h3>📂 Lataa tiliotetiedostot</h3>
+      <p>OP Debit · OP Credit · Finnair Visa — useita CSV:itä kerralla</p>
+      <label class="btn btn-primary" style="margin-top:12px;display:inline-flex;cursor:pointer">
+        Valitse CSV-tiedostot
+        <input type="file" accept=".csv" multiple hidden onchange="handleCSVInput(event)">
+      </label>
+      <p style="font-size:12px;color:var(--dim);margin-top:8px">Duplikaatit poistetaan automaattisesti</p>
     </div>
+    <div id="flagBannerMob" class="flag-banner mob-only" style="display:none">
+      <span id="flagBannerMobText"></span>
+      <button class="btn btn-secondary" style="height:28px;padding:0 10px;font-size:12px" onclick="switchTab('tapahtumat');setCurFilter('flag')">Kategorisoi →</button>
+    </div>
+    <div class="sum-grid" id="sumGrid"></div>
+    <div id="recentTxs"></div>
+  </div>
+
+  <!-- TAPAHTUMAT -->
+  <div class="tab-panel" id="tab-tapahtumat">
+    <div id="txContent"></div>
+  </div>
+
+  <!-- KATEGORIAT -->
+  <div class="tab-panel" id="tab-kategoriat">
+    <div class="cat-grid" id="catGrid"></div>
+  </div>
+
+  <!-- VERTAILU -->
+  <div class="tab-panel" id="tab-vertailu">
+    <div id="vertailuContent"></div>
+  </div>
+
+  <!-- SÄÄNNÖT -->
+  <div class="tab-panel" id="tab-saannot">
+    <div id="saannotContent"></div>
+  </div>
+
+  <!-- SALDOT -->
+  <div class="tab-panel" id="tab-saldot">
+    <div id="saldotContent"></div>
+  </div>
+
+  <!-- LISÄÄ (mobile) -->
+  <div class="tab-panel mob-only" id="tab-lisaa">
+    <div id="lisaaContent"></div>
+  </div>
+
+</main>
+
+<!-- ── MOBILE BOTTOM NAV ────────────────────────────────── -->
+<nav class="mob-nav mob-only">
+  <button class="mob-nav-btn active" data-tab="yhteenveto" onclick="switchTab('yhteenveto')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path d="M9 22V12h6v10"/></svg>
+    <span>Koti</span>
+  </button>
+  <button class="mob-nav-btn" data-tab="tapahtumat" onclick="switchTab('tapahtumat')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 12h6M9 16h4"/></svg>
+    <span>Tapahtumat</span>
+  </button>
+  <div class="mob-nav-fab">
+    <button class="fab-center" onclick="openAddModal()">+</button>
+  </div>
+  <button class="mob-nav-btn" data-tab="kategoriat" onclick="switchTab('kategoriat')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    <span>Kategoriat</span>
+  </button>
+  <button class="mob-nav-btn" data-tab="lisaa" onclick="switchTab('lisaa')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="19" cy="12" r="1.5" fill="currentColor"/></svg>
+    <span>Lisää</span>
+  </button>
+</nav>
+
+<!-- ── MODAL: ADD ────────────────────────────────────────── -->
+<div class="modal-overlay" id="addModal" onclick="if(event.target===this)closeModal('addModal')">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Lisää tapahtuma</div>
+    <button class="add-option" onclick="closeModal('addModal');openCameraModal()">📷 <span>Kuittikuva</span></button>
+    <button class="add-option" onclick="closeModal('addModal');openQuickModal()">⚡ <span>Pikasyöttö</span></button>
+    <button class="add-option" onclick="closeModal('addModal');openManualModal()">✏️ <span>Manuaalinen syöttö</span></button>
+    <button class="modal-cancel" onclick="closeModal('addModal')">Peruuta</button>
   </div>
 </div>
 
-<!-- KATEGORIAT VIEW -->
-<div class="view" id="view-kategoriat">
-  <div class="cat-grid" id="cat-grid"></div>
-</div>
-
-<!-- BUDJETTI VIEW -->
-<div class="view" id="view-budjetti">
-  <div class="budget-month-total">
-    <div>
-      <div class="bmt-label">Kuukausibudjetti</div>
-      <div class="bmt-value" id="budgetTotal">2 000 <span>€</span></div>
-    </div>
-    <div style="text-align:right">
-      <div class="bmt-label">Jäljellä</div>
-      <div class="bmt-value" id="budgetLeft" style="color: var(--green)">2 000 <span>€</span></div>
-    </div>
-  </div>
-  <div id="budget-rows"></div>
-</div>
-
-<!-- FAB -->
-<div class="fab-area">
-  <button class="fab-secondary" onclick="openQuick()">⚡ Pika</button>
-  <button class="fab-primary" onclick="openCamera()">📷 Kuittikuva</button>
-</div>
-
-<!-- CAMERA MODAL -->
-<div class="modal-overlay" id="cameraModal">
+<!-- ── MODAL: CAMERA ─────────────────────────────────────── -->
+<div class="modal-overlay" id="cameraModal" onclick="if(event.target===this)closeModal('cameraModal')">
   <div class="modal-sheet">
     <div class="modal-handle"></div>
     <div class="modal-title">Lisää kuitti</div>
-
-    <div class="camera-area" id="cameraArea" onclick="triggerCamera()">
-      <div class="camera-icon">📷</div>
-      <div class="camera-text">Ota kuva tai valitse galleriasta</div>
-      <div class="camera-subtext">Tukee S-market, K-market, Lidl, ravintolakuitit...</div>
+    <div class="camera-area" id="cameraArea">
+      <div class="cam-icon">📷</div>
+      <div class="cam-text">Valitse kuva kuitista</div>
     </div>
-    <input type="file" id="fileInput" accept="image/*" capture="environment" onchange="handleImage(event)">
-
-    <div class="ai-loading" id="aiLoading">
-      <div class="spinner"></div>
-      <div class="ai-loading-text">AI lukee kuittia...</div>
+    <div class="cam-btns">
+      <label class="btn btn-secondary" style="flex:1;justify-content:center;cursor:pointer">📷 Kamera<input type="file" accept="image/*" capture="environment" hidden onchange="handleReceiptImg(event)"></label>
+      <label class="btn btn-secondary" style="flex:1;justify-content:center;cursor:pointer">🖼️ Galleria<input type="file" accept="image/*" hidden onchange="handleReceiptImg(event)"></label>
     </div>
-
-    <div class="parsed-result" id="parsedResult">
-      <div style="margin: 16px 0 12px;">
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom: 16px;">
-          <span class="ai-badge">✦ AI</span>
-          <span style="font-size:12px; color:var(--text-muted)">Tarkista ja muokkaa tarvittaessa</span>
-        </div>
-
-        <div class="parse-header">
-          <div>
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:2px">Kauppias</div>
-            <input class="field-input" id="parsedMerchant" style="font-size:16px;font-weight:600;padding:8px 12px;" placeholder="Kauppias">
-          </div>
-          <div style="text-align:right">
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:2px">Yhteensä</div>
-            <input class="field-input" id="parsedTotal" style="font-size:20px;font-weight:300;text-align:right;padding:8px 12px;width:110px;" placeholder="0.00">
-          </div>
-        </div>
+    <div class="ai-load" id="camLoading"><div class="spinner"></div><div class="ai-load-text">AI lukee kuittia...</div></div>
+    <div class="parsed" id="camResult">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px"><span class="ai-badge">✦ AI</span><span style="font-size:12px;color:var(--muted)">Tarkista tiedot</span></div>
+      <div style="display:flex;gap:10px">
+        <div class="field-group" style="flex:2"><div class="field-label">Kauppias</div><input class="field-input" id="camMerchant" placeholder="Kauppias"></div>
+        <div class="field-group" style="flex:1"><div class="field-label">Summa €</div><input class="field-input" id="camAmount" type="number" step="0.01" placeholder="0.00"></div>
       </div>
-
-      <div class="section-label">Rivierittely</div>
-      <div class="items-list" id="itemsList"></div>
-
-      <button class="btn-confirm" id="confirmBtn" onclick="saveReceipt()">Tallenna kuitti</button>
+      <div class="field-group"><div class="field-label">Päivämäärä</div><input class="field-input" id="camDate" type="date"></div>
+      <div class="field-group"><div class="field-label">Kategoria</div><div class="cat-chips" id="camChips"></div></div>
+      <button class="btn btn-primary btn-full" onclick="saveCameraReceipt()">Tallenna</button>
     </div>
-
-    <div style="margin-top:16px;">
-      <button onclick="closeModal('cameraModal')" style="width:100%;padding:14px;background:none;border:none;color:var(--text-muted);font-size:14px;font-family:'Inter',sans-serif;cursor:pointer;">Peruuta</button>
-    </div>
+    <button class="modal-cancel" onclick="closeModal('cameraModal')">Peruuta</button>
   </div>
 </div>
 
-<!-- QUICK MODAL -->
-<div class="modal-overlay" id="quickModal">
+<!-- ── MODAL: QUICK ──────────────────────────────────────── -->
+<div class="modal-overlay" id="quickModal" onclick="if(event.target===this)closeModal('quickModal')">
   <div class="modal-sheet">
     <div class="modal-handle"></div>
     <div class="modal-title">Pikasyöttö</div>
-
-    <div class="quick-input-wrap">
-      <input class="quick-input" id="quickInput"
-        placeholder='esim. "sushit, ravintola, 19€"'
-        onkeydown="if(event.key==='Enter') sendQuick()">
+    <div class="quick-wrap">
+      <input class="quick-in" id="quickIn" placeholder='esim. "lounas 12€" tai "S-market 43.20"' onkeydown="if(event.key==='Enter')sendQuick()">
       <button class="quick-send" onclick="sendQuick()">→</button>
     </div>
-    <div class="quick-hint">Kirjoita vapaamuotoisesti — AI tunnistaa kauppiaanimen, kategorian ja summan</div>
-
-    <div class="ai-loading" id="quickLoading">
-      <div class="spinner"></div>
-      <div class="ai-loading-text">AI parsii...</div>
-    </div>
-
-    <div class="parsed-result" id="quickResult">
-      <div class="field-group">
-        <div class="field-label">Kauppias / kuvaus</div>
-        <input class="field-input" id="quickMerchant" placeholder="Kauppias">
+    <div class="quick-hint">Kirjoita vapaamuotoisesti — AI tunnistaa kauppiaanimen, summan ja kategorian</div>
+    <div class="ai-load" id="quickLoading"><div class="spinner"></div><div class="ai-load-text">AI parsii...</div></div>
+    <div class="parsed" id="quickResult">
+      <div class="field-group"><div class="field-label">Kauppias / kuvaus</div><input class="field-input" id="quickMerchant" placeholder="Kauppias"></div>
+      <div style="display:flex;gap:10px">
+        <div class="field-group" style="flex:1"><div class="field-label">Summa €</div><input class="field-input" id="quickAmount" type="number" step="0.01" placeholder="0.00"></div>
+        <div class="field-group" style="flex:1"><div class="field-label">Päivämäärä</div><input class="field-input" id="quickDate" type="date"></div>
       </div>
-      <div style="display:flex;gap:10px;">
-        <div class="field-group" style="flex:1">
-          <div class="field-label">Summa €</div>
-          <input class="field-input" id="quickAmount" type="number" step="0.01" placeholder="0.00">
-        </div>
-        <div class="field-group" style="flex:1">
-          <div class="field-label">Päivämäärä</div>
-          <input class="field-input" id="quickDate" type="date">
-        </div>
-      </div>
-      <div class="field-group">
-        <div class="field-label">Kategoria</div>
-        <div class="cat-chips" id="quickCatChips"></div>
-      </div>
-      <button class="btn-confirm" onclick="saveQuick()">Tallenna</button>
+      <div class="field-group"><div class="field-label">Kategoria</div><div class="cat-chips" id="quickChips"></div></div>
+      <button class="btn btn-primary btn-full" onclick="saveQuick()">Tallenna</button>
     </div>
+    <button class="modal-cancel" onclick="closeModal('quickModal')">Peruuta</button>
+  </div>
+</div>
 
-    <div style="margin-top:12px;">
-      <button onclick="closeModal('quickModal')" style="width:100%;padding:14px;background:none;border:none;color:var(--text-muted);font-size:14px;font-family:'Inter',sans-serif;cursor:pointer;">Peruuta</button>
+<!-- ── MODAL: MANUAL ─────────────────────────────────────── -->
+<div class="modal-overlay" id="manualModal" onclick="if(event.target===this)closeModal('manualModal')">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Manuaalinen syöttö</div>
+    <div class="field-group"><div class="field-label">Kauppias / kuvaus</div><input class="field-input" id="manMerchant" placeholder="Kauppias"></div>
+    <div style="display:flex;gap:10px">
+      <div class="field-group" style="flex:1"><div class="field-label">Summa €</div><input class="field-input" id="manAmount" type="number" step="0.01" placeholder="0.00"></div>
+      <div class="field-group" style="flex:1"><div class="field-label">Päivämäärä</div><input class="field-input" id="manDate" type="date"></div>
     </div>
+    <div class="field-group"><div class="field-label">Kategoria</div><div class="cat-chips" id="manChips"></div></div>
+    <button class="btn btn-primary btn-full" onclick="saveManual()">Tallenna</button>
+    <button class="modal-cancel" onclick="closeModal('manualModal')">Peruuta</button>
   </div>
 </div>
 
 <div class="toast" id="toast"></div>
 
 <script>
-// ─── DATA ───────────────────────────────────────────────────────────────────
-const CATEGORIES = [
-  { id: 'ruoka',      name: 'Ruoka',      icon: '🛒', color: '#4caf7d', budget: 400 },
-  { id: 'ravintola',  name: 'Ravintolat', icon: '🍽️', color: '#e0965a', budget: 250 },
-  { id: 'liikenne',   name: 'Liikenne',   icon: '🚗', color: '#5a9ee0', budget: 150 },
-  { id: 'koti',       name: 'Koti',       icon: '🏠', color: '#a07be0', budget: 200 },
-  { id: 'vaatteet',   name: 'Vaatteet',   icon: '👕', color: '#e05a8a', budget: 100 },
-  { id: 'viihde',     name: 'Viihde',     icon: '🎮', color: '#5ae0d4', budget: 80  },
-  { id: 'terveys',    name: 'Terveys',    icon: '💊', color: '#e0d45a', budget: 100 },
-  { id: 'alkoholi',   name: 'Alkoholi',   icon: '🍺', color: '#e0845a', budget: 80  },
-  { id: 'muut',       name: 'Muut',       icon: '📦', color: '#888',    budget: 200 },
+// ── CONFIG ─────────────────────────────────────────────────────────────────
+const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
+const API_SECRET = '8128f7da46a8a897b418f7f85a517bae788abeb3626d49a48840c232d2186248';
+
+// ── CONSTANTS ──────────────────────────────────────────────────────────────
+const CATS = [
+  {name:'Palkka ja tulot',        type:'income',  icon:'💰'},
+  {name:'Sijoittaminen',          type:'savings', icon:'📈'},
+  {name:'Säästöt',                type:'savings', icon:'🏦'},
+  {name:'Säästölipas',            type:'savings', icon:'🐷'},
+  {name:'Luotot — lyhennys',      type:'needs',   icon:'🏠'},
+  {name:'Luotot — korko',         type:'needs',   icon:'💳'},
+  {name:'Asuminen',               type:'needs',   icon:'🏡'},
+  {name:'Päivittäistavarat',      type:'needs',   icon:'🛒'},
+  {name:'Suoratoisto & liittymät',type:'needs',   icon:'📱'},
+  {name:'Liikkuminen — arki',     type:'needs',   icon:'🚗'},
+  {name:'Ostokset',               type:'wants',   icon:'🛍️'},
+  {name:'Ravintolat',             type:'wants',   icon:'🍽️'},
+  {name:'Baarit',                 type:'wants',   icon:'🍺'},
+  {name:'Kahvilat',               type:'wants',   icon:'☕'},
+  {name:'Matkailu — harrastus',   type:'wants',   icon:'✈️'},
+  {name:'MobilePay & siirrot',    type:'neutral', icon:'📲'},
+  {name:'Muut',                   type:'wants',   icon:'📦'},
 ];
 
-const MONTH_BUDGET = 2000;
+const DEF_RULES = [
+  {kw:'ykkös-ja onnikodit',cat:'Palkka ja tulot',type:'income'},
+  {kw:'palkka',cat:'Palkka ja tulot',type:'income'},
+  {kw:'säästötavoitteeseen',cat:'Säästölipas',type:'savings'},
+  {kw:'nordnet',cat:'Sijoittaminen',type:'savings'},
+  {kw:'säänn.sääst',cat:'Sijoittaminen',type:'savings'},
+  {kw:'op-kiina',cat:'Sijoittaminen',type:'savings'},
+  {kw:'op-maailma',cat:'Sijoittaminen',type:'savings'},
+  {kw:'op-amerikka',cat:'Sijoittaminen',type:'savings'},
+  {kw:'op-eurooppa',cat:'Sijoittaminen',type:'savings'},
+  {kw:'rollover fee',cat:'Luotot — korko',type:'needs'},
+  {kw:'within limit interest',cat:'Luotot — korko',type:'needs'},
+  {kw:'overdue interest',cat:'Luotot — korko',type:'needs'},
+  {kw:'visa credit korko',cat:'Luotot — korko',type:'needs'},
+  {kw:'visa credit suoritus',cat:'Luotot — lyhennys',type:'needs'},
+  {kw:'aktia bank',cat:'Luotot — lyhennys',type:'needs'},
+  {kw:'op yrityspankki',cat:'Luotot — lyhennys',type:'needs'},
+  {kw:'op vähittäis',cat:'Luotot — lyhennys',type:'needs'},
+  {kw:'kaarlo henri',cat:'Luotot — lyhennys',type:'needs'},
+  {kw:'kellberg hen',cat:'Luotot — lyhennys',type:'needs'},
+  {kw:'vastike',cat:'Asuminen',type:'needs'},
+  {kw:'vuokra',cat:'Asuminen',type:'needs'},
+  {kw:'sähkö',cat:'Asuminen',type:'needs'},
+  {kw:'k-market',cat:'Päivittäistavarat',type:'needs'},
+  {kw:'alepa',cat:'Päivittäistavarat',type:'needs'},
+  {kw:'lidl',cat:'Päivittäistavarat',type:'needs'},
+  {kw:'s-market',cat:'Päivittäistavarat',type:'needs'},
+  {kw:'prisma',cat:'Päivittäistavarat',type:'needs'},
+  {kw:'rimi',cat:'Päivittäistavarat',type:'needs'},
+  {kw:'pingo doce',cat:'Päivittäistavarat',type:'needs'},
+  {kw:'elisa',cat:'Suoratoisto & liittymät',type:'needs'},
+  {kw:'telia',cat:'Suoratoisto & liittymät',type:'needs'},
+  {kw:'spotify',cat:'Suoratoisto & liittymät',type:'needs'},
+  {kw:'apple.com',cat:'Suoratoisto & liittymät',type:'needs'},
+  {kw:'netflix',cat:'Suoratoisto & liittymät',type:'needs'},
+  {kw:'mob.pay*helsingin s',cat:'Liikkuminen — arki',type:'needs'},
+  {kw:'mob.pay*vr',cat:'Liikkuminen — arki',type:'needs'},
+  {kw:'neste',cat:'Liikkuminen — arki',type:'needs'},
+  {kw:'bolt',cat:'Liikkuminen — arki',type:'needs'},
+  {kw:'espresso house',cat:'Kahvilat',type:'wants'},
+  {kw:'cafes buondi',cat:'Kahvilat',type:'wants'},
+  {kw:'ravintola',cat:'Ravintolat',type:'wants'},
+  {kw:'onnes',cat:'Ravintolat',type:'wants'},
+  {kw:'restoran',cat:'Ravintolat',type:'wants'},
+  {kw:'restaurante',cat:'Ravintolat',type:'wants'},
+  {kw:'friends & brgrs',cat:'Ravintolat',type:'wants'},
+  {kw:'hesburger',cat:'Ravintolat',type:'wants'},
+  {kw:'wolt',cat:'Ravintolat',type:'wants'},
+  {kw:'augello',cat:'Baarit',type:'wants'},
+  {kw:'vintagebar',cat:'Baarit',type:'wants'},
+  {kw:'alko',cat:'Baarit',type:'wants'},
+  {kw:'fairytale',cat:'Baarit',type:'wants'},
+  {kw:'manns',cat:'Baarit',type:'wants'},
+  {kw:'mob.pay*veikkaus',cat:'Baarit',type:'wants'},
+  {kw:'aurinkomatkat',cat:'Matkailu — harrastus',type:'wants'},
+  {kw:'finnair',cat:'Matkailu — harrastus',type:'wants'},
+  {kw:'mob.pay*ari',cat:'MobilePay & siirrot',type:'neutral'},
+  {kw:'mob.pay*henri',cat:'MobilePay & siirrot',type:'neutral'},
+  {kw:'kellberg henrikki',cat:'MobilePay & siirrot',type:'neutral'},
+  {kw:'kellberg leena',cat:'MobilePay & siirrot',type:'neutral'},
+];
 
-let receipts = JSON.parse(localStorage.getItem('budjetti_receipts') || '[]');
-let pendingReceipt = null;
-let pendingImageBase64 = null;
+const MONTHS_FI = ['Tammikuu','Helmikuu','Maaliskuu','Huhtikuu','Toukokuu','Kesäkuu','Heinäkuu','Elokuu','Syyskuu','Lokakuu','Marraskuu','Joulukuu'];
 
-function saveData() {
-  localStorage.setItem('budjetti_receipts', JSON.stringify(receipts));
+// ── STATE ───────────────────────────────────────────────────────────────────
+let txs = [], rules = [], saldot = {}, selMonths = [];
+let curMonth = '', curFilter = 'all', curSearch = '', curTab = 'yhteenveto';
+
+// ── STORAGE ─────────────────────────────────────────────────────────────────
+function loadState() {
+  try {
+    const t = localStorage.getItem('ot_tx'), r = localStorage.getItem('ot_rules'), s = localStorage.getItem('ot_sal');
+    txs    = t ? JSON.parse(t) : [];
+    rules  = r ? JSON.parse(r) : [...DEF_RULES];
+    saldot = s ? JSON.parse(s) : {};
+  } catch(e) { rules = [...DEF_RULES]; }
+  const months = allMonths();
+  curMonth = months[0] || fmtMonthKey(new Date());
+}
+function saveState() {
+  try {
+    localStorage.setItem('ot_tx', JSON.stringify(txs));
+    localStorage.setItem('ot_rules', JSON.stringify(rules));
+    localStorage.setItem('ot_sal', JSON.stringify(saldot));
+  } catch(e) { showToast('Tallennusvirhe — vie JSON!', 'err'); }
 }
 
-function getCatById(id) {
-  return CATEGORIES.find(c => c.id === id) || CATEGORIES.find(c => c.id === 'muut');
+// ── HELPERS ─────────────────────────────────────────────────────────────────
+function fmtMonthKey(d) { return d.toISOString().substring(0,7); }
+function allMonths() { return [...new Set(txs.map(t=>t.date.substring(0,7)))].sort().reverse(); }
+function txsForMonth(m) { return txs.filter(t=>t.date.startsWith(m)); }
+function eur(n) { return Math.abs(n).toLocaleString('fi-FI',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'; }
+function esigned(n) { return (n>=0?'+':'−')+eur(n); }
+function fmtMonthLbl(key) {
+  if (!key) return '—';
+  const [y,m] = key.split('-');
+  return MONTHS_FI[parseInt(m)-1] + ' ' + y;
+}
+function todayISO() { return new Date().toISOString().split('T')[0]; }
+function catObj(name) { return CATS.find(c=>c.name===name)||{name:name||'Muut',type:'wants',icon:'📦'}; }
+function typeColor(t) { return t==='needs'?'var(--green)':t==='wants'?'var(--gold)':t==='savings'||t==='income'?'var(--blue)':'var(--muted)'; }
+function typeBadge(t) { return 'badge-'+(t||'neutral'); }
+function monthSummary(list) {
+  const income = list.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+  const needs  = list.filter(t=>t.type==='needs'&&t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0);
+  const wants  = list.filter(t=>t.type==='wants'&&t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0);
+  const sav    = list.filter(t=>t.type==='savings').reduce((s,t)=>s+Math.abs(t.amount),0);
+  const surplus= income-needs-wants-sav;
+  const rate   = income>0?Math.round(sav/income*100):0;
+  return {income,needs,wants,sav,surplus,rate,
+    np:income>0?Math.round(needs/income*100):0,
+    wp:income>0?Math.round(wants/income*100):0,
+    sp:income>0?Math.round(sav/income*100):0};
 }
 
-function totalSpent() {
-  return receipts.reduce((s, r) => s + parseFloat(r.total || 0), 0);
+// ── CATEGORIZE ──────────────────────────────────────────────────────────────
+function categorizeTx(tx) {
+  const txt = ((tx.payee||'')+' '+(tx.selitys||'')+' '+(tx.viesti||'')).toLowerCase();
+  for (const r of rules) if (txt.includes(r.kw.toLowerCase())) return {cat:r.cat, type:r.type};
+  if (tx.amount > 0) return {cat:'Palkka ja tulot', type:'income'};
+  return {cat:'— Kategorisoimatta', type:'flag'};
 }
+function categorizeAll() { txs = txs.map(tx => ({...tx, ...categorizeTx(tx)})); }
 
-function spentByCategory() {
-  const map = {};
-  CATEGORIES.forEach(c => map[c.id] = 0);
-  receipts.forEach(r => {
-    if (r.items && r.items.length > 0) {
-      r.items.forEach(item => {
-        const cid = item.category || r.category || 'muut';
-        map[cid] = (map[cid] || 0) + parseFloat(item.amount || 0);
-      });
-    } else {
-      const cid = r.category || 'muut';
-      map[cid] = (map[cid] || 0) + parseFloat(r.total || 0);
-    }
-  });
-  return map;
-}
-
-// ─── RENDER ─────────────────────────────────────────────────────────────────
-function render() {
-  renderTopbar();
-  renderTransactions();
-  renderCategories();
-  renderBudget();
-}
-
-function renderTopbar() {
-  document.getElementById('totalSpent').innerHTML = formatAmt(totalSpent()) + ' <span>€</span>';
-}
-
-function renderTransactions() {
-  const container = document.getElementById('tx-container');
-  if (receipts.length === 0) {
-    container.innerHTML = `<div class="empty"><div class="empty-icon">🧾</div><div class="empty-text">Ei vielä kuitteja.<br>Ota kuva kuitista tai syötä pikana.</div></div>`;
-    return;
+// ── CSV PARSING ─────────────────────────────────────────────────────────────
+function splitCSV(line, sep) {
+  const res=[]; let cur='', inQ=false;
+  for (const ch of line) {
+    if (ch==='"') { inQ=!inQ; } else if (ch===sep&&!inQ) { res.push(cur); cur=''; } else cur+=ch;
   }
-
-  // Group by date
-  const groups = {};
-  [...receipts].reverse().forEach(r => {
-    const d = r.date || 'Tuntematon';
-    if (!groups[d]) groups[d] = [];
-    groups[d].push(r);
-  });
-
-  let html = '';
-  Object.entries(groups).forEach(([date, items]) => {
-    html += `<div class="section-label">${formatDate(date)}</div><div class="tx-list">`;
-    items.forEach(r => {
-      const cat = getCatById(r.category || 'muut');
-      html += `
-        <div class="tx-item">
-          <div class="tx-icon">${cat.icon}</div>
-          <div class="tx-info">
-            <div class="tx-merchant">${r.merchant || 'Tuntematon'}</div>
-            <div class="tx-meta">${cat.name}${r.source === 'photo' ? ' · <span class="ai-badge" style="font-size:9px">AI</span>' : ''}</div>
-          </div>
-          <div class="tx-amount">${formatAmt(r.total)} €</div>
-          <div class="tx-source ${r.source || 'manual'}"></div>
-        </div>`;
-    });
-    html += '</div>';
-  });
-  container.innerHTML = html;
+  res.push(cur); return res;
 }
 
-function renderCategories() {
-  const spent = spentByCategory();
-  const maxSpent = Math.max(...Object.values(spent), 1);
-  let html = '';
-  CATEGORIES.forEach(cat => {
-    const s = spent[cat.id] || 0;
-    const pct = Math.min((s / cat.budget) * 100, 100);
-    const over = s > cat.budget;
-    html += `
-      <div class="cat-card">
-        <div class="cat-icon">${cat.icon}</div>
-        <div class="cat-name">${cat.name}</div>
-        <div class="cat-amount">${formatAmt(s)} €</div>
-        <div class="cat-bar-bg">
-          <div class="cat-bar-fill ${over ? 'over' : ''}" style="width:${pct}%;background:${over ? '' : cat.color}"></div>
-        </div>
-      </div>`;
-  });
-  document.getElementById('cat-grid').innerHTML = html;
+function parseCSVFile(text, fname) {
+  const lines = text.split('\n').filter(l=>l.trim());
+  if (!lines.length) return [];
+  const isFinnair = lines[0].includes('Maksupäivä');
+  const rows = [];
+  for (let i=1; i<lines.length; i++) {
+    if (isFinnair) {
+      const c = splitCSV(lines[i], ',');
+      if (c.length < 9) continue;
+      const amt = parseFloat(c[8]);
+      if (isNaN(amt)) continue;
+      const payee = c[1].replace(/"/g,'').trim();
+      rows.push({id:`FI_${c[0]}_${payee}_${amt}`, date:c[0].trim(), payee, selitys:'Finnair Visa', viesti:'', amount:amt, source:fname||'Finnair Visa', cat:null, type:null});
+    } else {
+      const c = lines[i].split(';').map(x=>x.replace(/^"|"$/g,'').trim());
+      if (c.length<6) continue;
+      const amt = parseFloat((c[2]||'').replace(',','.'));
+      if (isNaN(amt)) continue;
+      rows.push({id:c[10]||`OP_${c[0]}_${c[5]}_${amt}`, date:c[0], payee:c[5]||'', selitys:c[4]||'', viesti:c[9]||'', amount:amt, source:fname||'OP', cat:null, type:null});
+    }
+  }
+  return rows;
 }
 
-function renderBudget() {
-  const spent = spentByCategory();
-  const total = totalSpent();
-  const left = MONTH_BUDGET - total;
-
-  document.getElementById('budgetTotal').innerHTML = formatAmt(MONTH_BUDGET) + ' <span>€</span>';
-  document.getElementById('budgetLeft').innerHTML = formatAmt(Math.abs(left)) + ' <span>€</span>';
-  document.getElementById('budgetLeft').style.color = left < 0 ? 'var(--red)' : 'var(--green)';
-
-  let html = '';
-  CATEGORIES.forEach(cat => {
-    const s = spent[cat.id] || 0;
-    const pct = Math.min((s / cat.budget) * 100, 100);
-    const over = s > cat.budget;
-    html += `
-      <div class="budget-row">
-        <div class="budget-row-icon">${cat.icon}</div>
-        <div class="budget-row-info">
-          <div class="budget-row-name">${cat.name}</div>
-          <div class="budget-row-bar-bg">
-            <div class="budget-row-bar-fill ${over ? 'over' : ''}" style="width:${pct}%;background:${over ? '' : cat.color}"></div>
-          </div>
-        </div>
-        <div class="budget-row-amounts">
-          <div class="budget-row-spent" style="color:${over ? 'var(--red)' : 'var(--text)'}">${formatAmt(s)} €</div>
-          <div class="budget-row-limit">/ ${cat.budget} €</div>
-        </div>
-      </div>`;
+function loadCSVFiles(files) {
+  let done = 0;
+  let totalAdded = 0;
+  files.forEach(f => {
+    const rd = new FileReader();
+    rd.onload = ev => {
+      const rows = parseCSVFile(ev.target.result, f.name);
+      const ids = new Set(txs.map(t=>t.id));
+      const added = rows.filter(r=>!ids.has(r.id));
+      txs.push(...added);
+      totalAdded += added.length;
+      if (++done === files.length) {
+        categorizeAll();
+        const months = allMonths();
+        if (months.length) curMonth = months[0];
+        saveState();
+        renderAll();
+        showToast(`Tuotu ${totalAdded} uutta tapahtumaa`, 'ok');
+      }
+    };
+    rd.readAsText(f, 'UTF-8');
   });
-  document.getElementById('budget-rows').innerHTML = html;
 }
 
-// ─── QUICK CHIPS ────────────────────────────────────────────────────────────
-function renderCatChips(containerId, selectedId) {
-  let html = '';
-  CATEGORIES.forEach(c => {
-    html += `<button class="cat-chip ${c.id === selectedId ? 'selected' : ''}" onclick="selectChip('${containerId}','${c.id}')">${c.icon} ${c.name}</button>`;
+// ── IMAGE RESIZE ─────────────────────────────────────────────────────────────
+function resizeImage(file, maxW=1024, quality=0.85) {
+  return new Promise(resolve => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = img.width > maxW ? maxW/img.width : 1;
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width*scale);
+      canvas.height = Math.round(img.height*scale);
+      canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+      canvas.toBlob(blob => {
+        const reader = new FileReader();
+        reader.onload = e => resolve({base64:e.target.result.split(',')[1], mime:'image/jpeg'});
+        reader.readAsDataURL(blob);
+      }, 'image/jpeg', quality);
+    };
+    img.src = url;
   });
-  document.getElementById(containerId).innerHTML = html;
 }
-function selectChip(containerId, catId) {
-  document.querySelectorAll(`#${containerId} .cat-chip`).forEach(b => b.classList.remove('selected'));
-  document.querySelector(`#${containerId} .cat-chip[onclick*="'${catId}'"]`).classList.add('selected');
+
+// ── AI ───────────────────────────────────────────────────────────────────────
+function extractJSON(text) {
+  try { return JSON.parse(text); } catch(_) {}
+  const stripped = text.replace(/```(?:json)?/gi,'').trim();
+  try { return JSON.parse(stripped); } catch(_) {}
+  const m = stripped.match(/\{[\s\S]*\}/);
+  if (m) try { return JSON.parse(m[0]); } catch(_) {}
+  throw new Error('Invalid JSON');
+}
+
+function apiHeaders() {
+  return {'Content-Type':'application/json','Authorization':`Bearer ${API_SECRET}`};
+}
+
+async function parseReceiptAI(base64, mime) {
+  if (!API_BASE) return null;
+  const res = await fetch(`${API_BASE}/receipts/parse`, {
+    method:'POST', headers:apiHeaders(),
+    body: JSON.stringify({image:base64, media_type:mime})
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function parseQuickAI(text) {
+  if (!API_BASE) return null;
+  const res = await fetch(`${API_BASE}/quick/parse`, {
+    method:'POST', headers:apiHeaders(),
+    body: JSON.stringify({text})
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// ── CHIP HELPERS ─────────────────────────────────────────────────────────────
+function renderChips(containerId, selectedCat) {
+  document.getElementById(containerId).innerHTML = CATS.map(c =>
+    `<button class="cat-chip${c.name===selectedCat?' selected':''}" onclick="selectChip('${containerId}','${c.name.replace(/'/g,"\\'")}',this)">${c.icon} ${c.name}</button>`
+  ).join('');
+}
+function selectChip(containerId, catName, btn) {
+  document.querySelectorAll(`#${containerId} .cat-chip`).forEach(b=>b.classList.remove('selected'));
+  btn.classList.add('selected');
 }
 function getSelectedChip(containerId) {
   const el = document.querySelector(`#${containerId} .cat-chip.selected`);
-  return el ? el.getAttribute('onclick').match(/'([^']+)'\)$/)[1] : 'muut';
+  if (!el) return 'Muut';
+  return el.textContent.replace(/^.\s/,'').trim();
 }
 
-// ─── CAMERA FLOW ────────────────────────────────────────────────────────────
-function openCamera() {
-  document.getElementById('cameraModal').classList.add('open');
-  resetCameraModal();
+// ── RENDER ───────────────────────────────────────────────────────────────────
+function renderAll() {
+  updateMonthLabels();
+  renderTab(curTab);
+  updateFlagBanner();
+  updateMobTotal();
 }
 
-function resetCameraModal() {
-  document.getElementById('cameraArea').innerHTML = `
-    <div class="camera-icon">📷</div>
-    <div class="camera-text">Ota kuva tai valitse galleriasta</div>
-    <div class="camera-subtext">Tukee S-market, K-market, Lidl, ravintolakuitit...</div>`;
-  document.getElementById('cameraArea').classList.remove('has-image');
-  document.getElementById('aiLoading').classList.remove('active');
-  document.getElementById('parsedResult').classList.remove('active');
-  document.getElementById('fileInput').value = '';
-  pendingImageBase64 = null;
+function updateMonthLabels() {
+  const lbl = fmtMonthLbl(curMonth);
+  const el1 = document.getElementById('monthLbl');
+  const el2 = document.getElementById('deskMonthLbl');
+  if (el1) el1.textContent = lbl;
+  if (el2) el2.textContent = lbl;
 }
 
-function triggerCamera() {
-  document.getElementById('fileInput').click();
+function updateMobTotal() {
+  const list = txsForMonth(curMonth).filter(t=>t.amount<0&&t.type!=='neutral');
+  const total = list.reduce((s,t)=>s+Math.abs(t.amount),0);
+  const el = document.getElementById('mobTotal');
+  if (el) el.textContent = eur(total);
 }
 
-async function handleImage(event) {
+function updateFlagBanner() {
+  const n = txs.filter(t=>t.type==='flag').length;
+  const bd = document.getElementById('flagBannerDesk');
+  const bm = document.getElementById('flagBannerMob');
+  const bt = document.getElementById('flagBannerMobText');
+  if (bd) { bd.style.display=n>0?'inline':'none'; bd.textContent=`⚠️ ${n} kategorisoimatta`; }
+  if (bm) bm.style.display = n>0?'flex':'none';
+  if (bt) bt.textContent = `⚠️ ${n} tapahtumaa ilman kategoriaa`;
+}
+
+function renderTab(tab) {
+  if (tab==='yhteenveto') renderYhteenveto();
+  else if (tab==='tapahtumat') renderTapahtumat();
+  else if (tab==='kategoriat') renderKategoriat();
+  else if (tab==='vertailu') renderVertailu();
+  else if (tab==='saannot') renderSaannot();
+  else if (tab==='saldot') renderSaldot();
+  else if (tab==='lisaa') renderLisaa();
+}
+
+// ── YHTEENVETO ────────────────────────────────────────────────────────────────
+function renderYhteenveto() {
+  const list = txsForMonth(curMonth);
+  const s = monthSummary(list);
+  const recent = [...list].filter(t=>t.type!=='neutral').sort((a,b)=>b.date.localeCompare(a.date)).slice(0,8);
+
+  document.getElementById('sumGrid').innerHTML = `
+    <div class="sum-card sum-income">
+      <div class="sum-label">Tulot</div>
+      <div class="sum-value">${eur(s.income)}</div>
+      <div class="sum-bar"><div class="sum-bar-fill" style="width:100%"></div></div>
+    </div>
+    <div class="sum-card sum-needs">
+      <div class="sum-label">Needs · tavoite 50%</div>
+      <div class="sum-value">${eur(s.needs)}</div>
+      <div class="sum-sub">${s.np}% tuloista</div>
+      <div class="sum-bar"><div class="sum-bar-fill" style="width:${Math.min(s.np/50*100,100)}%"></div></div>
+    </div>
+    <div class="sum-card sum-wants">
+      <div class="sum-label">Wants · tavoite 30%</div>
+      <div class="sum-value">${eur(s.wants)}</div>
+      <div class="sum-sub">${s.wp}% tuloista</div>
+      <div class="sum-bar"><div class="sum-bar-fill" style="width:${Math.min(s.wp/30*100,100)}%"></div></div>
+    </div>
+    <div class="sum-card sum-savings">
+      <div class="sum-label">Savings · tavoite 20%</div>
+      <div class="sum-value">${eur(s.sav)}</div>
+      <div class="sum-sub">${s.sp}% · säästöaste ${s.rate}%</div>
+      <div class="sum-bar"><div class="sum-bar-fill" style="width:${Math.min(s.sp/20*100,100)}%"></div></div>
+    </div>
+  `;
+
+  if (!recent.length) {
+    document.getElementById('recentTxs').innerHTML = `<div class="empty"><div class="empty-icon">📊</div><div class="empty-text">Ei tapahtumia tällä kuulla.<br>Tuo CSV tai lisää manuaalisesti.</div></div>`;
+    return;
+  }
+  const groups = {};
+  recent.forEach(t => { if(!groups[t.date]) groups[t.date]=[]; groups[t.date].push(t); });
+  let html = '';
+  Object.entries(groups).forEach(([date,items]) => {
+    html += `<div class="section-lbl">${fmtDateLbl(date)}</div><div class="tx-list">`;
+    items.forEach(t => { html += txItemHTML(t); });
+    html += '</div>';
+  });
+  document.getElementById('recentTxs').innerHTML = html;
+}
+
+// ── TAPAHTUMAT ────────────────────────────────────────────────────────────────
+function renderTapahtumat() {
+  const isDesktop = window.innerWidth >= 768;
+  const catOpts = CATS.map(c=>`<option value="${c.name}">${c.icon} ${c.name}</option>`).join('');
+
+  let list = [...txs].sort((a,b)=>b.date.localeCompare(a.date));
+  if (curFilter==='needs')   list=list.filter(t=>t.type==='needs');
+  else if(curFilter==='wants')   list=list.filter(t=>t.type==='wants');
+  else if(curFilter==='savings') list=list.filter(t=>t.type==='savings');
+  else if(curFilter==='income')  list=list.filter(t=>t.type==='income');
+  else if(curFilter==='flag')    list=list.filter(t=>t.type==='flag');
+  if (curSearch) { const s=curSearch.toLowerCase(); list=list.filter(t=>(t.payee||'').toLowerCase().includes(s)||(t.selitys||'').toLowerCase().includes(s)); }
+
+  const filterBtns = `
+    <div class="${isDesktop?'table-filters':'filters'}">
+      <button class="filter-btn ${curFilter==='all'?'fa':''}" onclick="setCurFilter('all')">Kaikki <span style="color:var(--dim);font-size:11px">${txs.length}</span></button>
+      <button class="filter-btn ${curFilter==='needs'?'fn':''}" onclick="setCurFilter('needs')">Needs</button>
+      <button class="filter-btn ${curFilter==='wants'?'fw':''}" onclick="setCurFilter('wants')">Wants</button>
+      <button class="filter-btn ${curFilter==='savings'?'fs':''}" onclick="setCurFilter('savings')">Savings</button>
+      <button class="filter-btn ${curFilter==='income'?'fi':''}" onclick="setCurFilter('income')">Tulot</button>
+      <button class="filter-btn ${curFilter==='flag'?'ff':''}" onclick="setCurFilter('flag')">⚠️ Kategorisoimatta</button>
+      <input class="search-in" placeholder="Hae..." value="${curSearch}" oninput="curSearch=this.value;renderTapahtumat()">
+    </div>`;
+
+  if (!list.length) {
+    document.getElementById('txContent').innerHTML = filterBtns + `<div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">Ei tapahtumia.</div></div>`;
+    return;
+  }
+
+  if (isDesktop) {
+    const rows = list.map(tx => `
+      <tr>
+        <td style="color:var(--muted);white-space:nowrap;font-size:12px">${tx.date}</td>
+        <td>${tx.type==='flag'?'<span style="color:var(--gold)">⚠ </span>':''}${esc(tx.payee.substring(0,36))}</td>
+        <td style="color:var(--muted);font-size:12px">${esc((tx.source||'').substring(0,14))}</td>
+        <td>
+          <select class="inline-sel" data-id="${esc(tx.id)}" onchange="setCatInline(this)">
+            <option value="">— Valitse —</option>${catOpts}
+          </select>
+        </td>
+        <td class="td-amt" style="color:${tx.amount<0?'var(--text)':'var(--blue)'}">
+          ${tx.amount<0?'−':'+'}${eur(tx.amount)}
+        </td>
+      </tr>`).join('');
+    document.getElementById('txContent').innerHTML = filterBtns +
+      `<div class="table-wrap"><table><thead><tr><th>Päivä</th><th>Saaja</th><th>Lähde</th><th>Kategoria</th><th style="text-align:right">Summa</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    document.getElementById('txContent').querySelectorAll('.inline-sel').forEach((sel,i) => {
+      if (list[i]?.cat) sel.value = list[i].cat;
+    });
+  } else {
+    const groups = {};
+    list.forEach(t => { if(!groups[t.date]) groups[t.date]=[]; groups[t.date].push(t); });
+    let html = filterBtns;
+    Object.entries(groups).forEach(([date,items]) => {
+      html += `<div class="section-lbl">${fmtDateLbl(date)}</div><div class="tx-list">`;
+      items.forEach(t => { html += txItemHTML(t); });
+      html += '</div>';
+    });
+    document.getElementById('txContent').innerHTML = html;
+  }
+}
+
+function txItemHTML(t) {
+  const c = catObj(t.cat);
+  const amtClass = t.amount>0?'pos':t.type==='flag'?'red':'neg';
+  const amtSign = t.amount>0?'+':'−';
+  return `<div class="tx-item">
+    <div class="tx-icon">${c.icon}</div>
+    <div class="tx-info">
+      <div class="tx-merchant">${esc(t.payee)}</div>
+      <div class="tx-meta">${esc(t.cat||'—')} · ${t.date}</div>
+    </div>
+    <div class="tx-amt ${amtClass}">${amtSign}${eur(t.amount)}</div>
+  </div>`;
+}
+
+function setCatInline(sel) {
+  const id = sel.dataset.id;
+  const catName = sel.value;
+  const c = CATS.find(x=>x.name===catName);
+  if (!c) return;
+  const tx = txs.find(t=>t.id===id);
+  if (!tx) return;
+  tx.cat = catName; tx.type = c.type;
+  const kw = (tx.payee||'').toLowerCase().substring(0,22).trim();
+  if (kw && !rules.find(r=>r.kw===kw)) rules.unshift({kw, cat:catName, type:c.type});
+  saveState(); updateFlagBanner();
+}
+
+// ── KATEGORIAT ────────────────────────────────────────────────────────────────
+function renderKategoriat() {
+  const list = txsForMonth(curMonth).filter(t=>t.type!=='neutral'&&t.type!=='flag');
+  const map = {};
+  list.forEach(tx => {
+    if (!map[tx.cat]) map[tx.cat]={cat:tx.cat,type:tx.type,total:0};
+    map[tx.cat].total += Math.abs(tx.amount);
+  });
+  const cats = Object.values(map).sort((a,b)=>b.total-a.total);
+  if (!cats.length) {
+    document.getElementById('catGrid').innerHTML = `<div class="empty" style="grid-column:1/-1"><div class="empty-icon">📊</div><div class="empty-text">Ei dataa tälle kuulle.</div></div>`;
+    return;
+  }
+  const maxTotal = cats[0].total;
+  document.getElementById('catGrid').innerHTML = cats.map(c => {
+    const co = catObj(c.cat);
+    const pct = Math.round(c.total/maxTotal*100);
+    return `<div class="cat-card">
+      <div class="cat-icon">${co.icon}</div>
+      <div class="cat-name">${esc(c.cat)}</div>
+      <div class="cat-amount">${eur(c.total)}</div>
+      <span class="badge ${typeBadge(c.type)}">${c.type}</span>
+      <div class="cat-bar" style="margin-top:10px"><div class="cat-bar-fill" style="width:${pct}%;background:${typeColor(c.type)}"></div></div>
+    </div>`;
+  }).join('');
+}
+
+// ── VERTAILU ──────────────────────────────────────────────────────────────────
+function renderVertailu() {
+  const months = allMonths();
+  const pills = months.map(m => `
+    <div class="month-pill${selMonths.includes(m)?' sel':''}" onclick="toggleSelMonth('${m}')">
+      <div class="month-pill-name">${fmtMonthLbl(m)}</div>
+      <div class="month-pill-sum">${eur(txsForMonth(m).filter(t=>t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0))}</div>
+    </div>`).join('');
+
+  let compareHTML = '<p style="font-size:13px;color:var(--muted)">Valitse kuukaudet ylhäältä.</p>';
+  if (selMonths.length) {
+    const allCats = new Set();
+    selMonths.forEach(m => txsForMonth(m).forEach(t=>{ if(t.type!=='neutral'&&t.cat&&!t.cat.startsWith('—')) allCats.add(t.cat); }));
+    const catRows = [...allCats].map(cat => ({
+      cat,
+      amounts: selMonths.map(m => txsForMonth(m).filter(t=>t.cat===cat).reduce((s,t)=>s+Math.abs(t.amount),0))
+    })).sort((a,b)=>Math.max(...b.amounts)-Math.max(...a.amounts));
+
+    const hdr = `<div class="compare-row"><div class="compare-cell lbl hdr">Kategoria</div>${selMonths.map(m=>`<div class="compare-cell hdr">${fmtMonthLbl(m)}</div>`).join('')}</div>`;
+    const rowsHTML = catRows.map(r => {
+      const pos = r.amounts.filter(a=>a>0);
+      const min = pos.length>1?Math.min(...pos):null, max=pos.length>1?Math.max(...pos):null;
+      const cells = r.amounts.map(a=>{
+        const cls = a===min&&min!==null?'better':a===max&&max!==null?'worse':'';
+        return `<div class="compare-cell ${cls}">${a>0?eur(a):'—'}</div>`;
+      }).join('');
+      return `<div class="compare-row"><div class="compare-cell lbl">${esc(r.cat)}</div>${cells}</div>`;
+    }).join('');
+    const totals = selMonths.map(m=>txsForMonth(m).filter(t=>t.amount<0&&t.type!=='neutral').reduce((s,t)=>s+Math.abs(t.amount),0));
+    const totRow = `<div class="compare-row" style="background:var(--surface2)"><div class="compare-cell lbl" style="font-weight:500;color:var(--text)">YHTEENSÄ</div>${totals.map(t=>`<div class="compare-cell" style="font-weight:500">${eur(t)}</div>`).join('')}</div>`;
+    compareHTML = `<div class="compare-wrap">${hdr}${rowsHTML}${totRow}</div>`;
+  }
+
+  document.getElementById('vertailuContent').innerHTML = `
+    <div class="section-lbl">Valitse kuukaudet (max 4)</div>
+    <div class="month-grid">${pills}</div>
+    <div class="section-lbl">Vertailu kategorioittain</div>
+    ${compareHTML}`;
+}
+
+function toggleSelMonth(m) {
+  selMonths = selMonths.includes(m) ? selMonths.filter(x=>x!==m) : (selMonths.length<4?[...selMonths,m]:selMonths);
+  renderVertailu();
+}
+
+// ── SÄÄNNÖT ───────────────────────────────────────────────────────────────────
+function renderSaannot() {
+  const typeOpts = ['needs','wants','savings','income','neutral'].map(t=>`<option value="${t}">${t}</option>`).join('');
+  const rows = rules.map((r,i) => {
+    const hits = txs.filter(t=>((t.payee||'')+' '+(t.selitys||'')).toLowerCase().includes(r.kw.toLowerCase())).length;
+    return `<div class="rule-row">
+      <span class="rule-kw">${esc(r.kw)}</span>
+      <span class="rule-cat">${esc(r.cat)}</span>
+      <span class="badge ${typeBadge(r.type)}" style="flex-shrink:0">${r.type}</span>
+      ${hits>0?`<span style="font-size:11px;color:var(--dim);flex-shrink:0">${hits}</span>`:''}
+      <button class="rule-del" onclick="deleteRule(${i})">✕</button>
+    </div>`;
+  }).join('');
+
+  document.getElementById('saannotContent').innerHTML = `
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px">Hakusana etsitään saajan nimestä. Ensimmäinen osuma voittaa. Kategorisoidessa sääntö lisätään automaattisesti.</p>
+    <div>${rows||'<p style="color:var(--dim);font-size:13px">Ei sääntöjä.</p>'}</div>
+    <div class="rule-add-row">
+      <input class="rule-input" id="rKw" placeholder="Hakusana" style="width:160px">
+      <input class="rule-input" id="rCat" placeholder="Kategoria" style="width:180px">
+      <select class="rule-input" id="rType" style="cursor:pointer">${typeOpts}</select>
+      <button class="btn btn-primary" onclick="addRule()">+ Lisää</button>
+    </div>
+    <p style="font-size:12px;color:var(--dim);margin-top:12px">Säännöt tallentuvat selaimen muistiin. Vie JSON varmuuskopioksi.</p>`;
+}
+
+function addRule() {
+  const kw=document.getElementById('rKw').value.trim();
+  const cat=document.getElementById('rCat').value.trim();
+  const type=document.getElementById('rType').value;
+  if(!kw||!cat){showToast('Täytä hakusana ja kategoria','err');return;}
+  rules.unshift({kw,cat,type});
+  document.getElementById('rKw').value=''; document.getElementById('rCat').value='';
+  categorizeAll(); saveState(); renderSaannot(); updateFlagBanner();
+}
+function deleteRule(i) { rules.splice(i,1); saveState(); renderSaannot(); }
+
+// ── SALDOT ────────────────────────────────────────────────────────────────────
+function renderSaldot() {
+  const accounts = [
+    {key:'Perus',   label:'OP Perustili'},
+    {key:'Saasto',  label:'OP Säästötili'},
+    {key:'Lipas',   label:'Säästölipas'},
+    {key:'OPCredit',label:'OP Visa Credit (velka −)'},
+    {key:'Finnair', label:'Finnair Visa (velka −)'},
+    {key:'Muu',     label:'Muu velka (−)'},
+  ];
+  const grid = accounts.map(a=>`
+    <div class="saldo-card">
+      <div class="saldo-lbl">${a.label}</div>
+      <input class="saldo-in" id="sal_${a.key}" type="number" placeholder="0.00" value="${saldot[a.key]||''}" oninput="saveSaldo()">
+    </div>`).join('');
+  const netto = calcNetto();
+  document.getElementById('saldotContent').innerHTML = `
+    <div class="saldo-grid">${grid}</div>
+    <div class="netto-card">
+      <div><div class="netto-lbl">Nettovarallisuus yhteensä</div><div class="netto-val" id="nettoVal" style="color:${netto>=0?'var(--blue)':'var(--red)'}">${esigned(netto)}</div></div>
+      <div style="font-size:13px;color:var(--muted)">Varat − velat</div>
+    </div>`;
+}
+function saveSaldo() {
+  ['Perus','Saasto','Lipas','OPCredit','Finnair','Muu'].forEach(k=>{
+    const el=document.getElementById('sal_'+k); saldot[k]=el?parseFloat(el.value)||0:0;
+  });
+  saveState();
+  const netto=calcNetto(); const el=document.getElementById('nettoVal');
+  if(el){el.textContent=esigned(netto);el.style.color=netto>=0?'var(--blue)':'var(--red)';}
+}
+function calcNetto() { return ['Perus','Saasto','Lipas','OPCredit','Finnair','Muu'].reduce((s,k)=>s+(saldot[k]||0),0); }
+
+// ── LISÄÄ (mobile "more") ─────────────────────────────────────────────────────
+function renderLisaa() {
+  document.getElementById('lisaaContent').innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <label class="add-option" style="cursor:pointer">📂 Tuo CSV<input type="file" accept=".csv" multiple hidden onchange="handleCSVInput(event)"></label>
+      <button class="add-option" onclick="switchTab('vertailu')">📅 Kuukausivertailu</button>
+      <button class="add-option" onclick="switchTab('saannot')">⚙️ Kategorisointisäännöt</button>
+      <button class="add-option" onclick="switchTab('saldot')">🏦 Saldot &amp; nettovarallisuus</button>
+    </div>
+    <div style="margin-top:24px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-secondary" onclick="exportJSON()">💾 Vie JSON</button>
+      <label class="btn btn-secondary" style="cursor:pointer">📂 Tuo JSON<input type="file" accept=".json" hidden onchange="handleJSONInput(event)"></label>
+    </div>
+    <p style="font-size:12px;color:var(--dim);margin-top:12px">${txs.length} tapahtumaa · ${allMonths().length} kk</p>`;
+}
+
+// ── NAVIGATION ────────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  curTab = tab;
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  const panel = document.getElementById('tab-'+tab);
+  if (panel) panel.classList.add('active');
+  document.querySelectorAll('.dnav-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+  document.querySelectorAll('.mob-nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+  renderTab(tab);
+}
+
+function changeMonth(dir) {
+  const months = allMonths();
+  if (!months.length) return;
+  let idx = months.indexOf(curMonth) + dir;
+  idx = Math.max(0, Math.min(months.length-1, idx));
+  curMonth = months[idx];
+  renderAll();
+}
+
+function setCurFilter(f) {
+  curFilter = f;
+  renderTapahtumat();
+}
+
+// ── MODALS ────────────────────────────────────────────────────────────────────
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function openAddModal() { openModal('addModal'); }
+
+function openCameraModal() {
+  document.getElementById('cameraArea').innerHTML = '<div class="cam-icon">📷</div><div class="cam-text">Valitse kuva kuitista</div>';
+  document.getElementById('cameraArea').classList.remove('has-img');
+  document.getElementById('camLoading').classList.remove('active');
+  document.getElementById('camResult').classList.remove('active');
+  openModal('cameraModal');
+}
+
+async function handleReceiptImg(event) {
   const file = event.target.files[0];
   if (!file) return;
+  const {base64, mime} = await resizeImage(file);
+  const area = document.getElementById('cameraArea');
+  area.innerHTML = `<img src="data:${mime};base64,${base64}" alt="Kuitti">`;
+  area.classList.add('has-img');
+  document.getElementById('camLoading').classList.add('active');
+  document.getElementById('camResult').classList.remove('active');
 
-  // Detect media type — iPhones send PNG/HEIC, not always JPEG
-  let mediaType = file.type || 'image/jpeg';
-  // Anthropic API only accepts jpeg, png, gif, webp — convert HEIC/other to jpeg label
-  if (!['image/jpeg','image/png','image/gif','image/webp'].includes(mediaType)) {
-    mediaType = 'image/jpeg';
+  let parsed = null;
+  if (API_BASE) {
+    try { parsed = await parseReceiptAI(base64, mime); } catch(e) { showToast('AI-parsinta epäonnistui','err'); }
   }
-
-  const reader = new FileReader();
-  reader.onload = async (e) => {
-    const base64Full = e.target.result;
-    // Extract pure base64 and detect actual type from data URL
-    const mimeMatch = base64Full.match(/^data:([^;]+);base64,/);
-    const detectedMime = mimeMatch ? mimeMatch[1] : mediaType;
-    const allowedMimes = ['image/jpeg','image/png','image/gif','image/webp'];
-    const finalMime = allowedMimes.includes(detectedMime) ? detectedMime : 'image/jpeg';
-
-    pendingImageBase64 = base64Full.split(',')[1];
-
-    const area = document.getElementById('cameraArea');
-    area.innerHTML = `<img src="${base64Full}" alt="Kuitti">`;
-    area.classList.add('has-image');
-
-    document.getElementById('aiLoading').classList.add('active');
-    document.getElementById('parsedResult').classList.remove('active');
-
-    try {
-      const result = await parseReceiptWithClaude(pendingImageBase64, finalMime);
-      displayParsedReceipt(result);
-    } catch(err) {
-      showToast('AI-parsinta epäonnistui: ' + err.message, 'error');
-      document.getElementById('aiLoading').classList.remove('active');
-    }
-  };
-  reader.readAsDataURL(file);
+  document.getElementById('camLoading').classList.remove('active');
+  document.getElementById('camResult').classList.add('active');
+  document.getElementById('camDate').value = parsed?.date || todayISO();
+  document.getElementById('camMerchant').value = parsed?.merchant || '';
+  document.getElementById('camAmount').value = parsed?.total || '';
+  renderChips('camChips', parsed?.category ? catNameForMobile(parsed.category) : 'Muut');
 }
 
-function extractJSON(text) {
-  // Try direct parse first
-  try { return JSON.parse(text); } catch(_) {}
-  // Strip markdown code fences
-  const stripped = text.replace(/```(?:json)?/gi, '').trim();
-  try { return JSON.parse(stripped); } catch(_) {}
-  // Extract first {...} block
-  const match = stripped.match(/\{[\s\S]*\}/);
-  if (match) {
-    try { return JSON.parse(match[0]); } catch(_) {}
-  }
-  throw new Error('Invalid response format');
+function catNameForMobile(shortName) {
+  const map = {ruoka:'Päivittäistavarat',ravintola:'Ravintolat',liikenne:'Liikkuminen — arki',koti:'Asuminen',viihde:'Ostokset',terveys:'Ostokset',alkoholi:'Baarit',muut:'Muut'};
+  return map[shortName] || 'Muut';
 }
 
-async function parseReceiptWithClaude(base64Image, mediaType = 'image/jpeg') {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1000,
-      system: `Olet kuittien parsija. Analysoi kuittikuva ja palauta AINOASTAAN yksi JSON-objekti ilman mitään muuta tekstiä, ei backtickejä, ei selityksiä.
-
-Formaatti täsmälleen näin:
-{"merchant":"kauppiaannimi","date":"YYYY-MM-DD","total":12.50,"category":"ravintola","items":[{"name":"tuotenimi","amount":3.50,"category":"ruoka"}]}
-
-Kategoriat: ruoka, ravintola, liikenne, koti, vaatteet, viihde, terveys, alkoholi, muut
-Alkoholituotteet (olut, viini, siideri, lonkero) → kategoria "alkoholi" aina.
-Päivämäärä tänään jos ei näy: ${new Date().toISOString().split('T')[0]}`,
-      messages: [{
-        role: 'user',
-        content: [
-          {
-            type: 'image',
-            source: { type: 'base64', media_type: mediaType, data: base64Image }
-          },
-          { type: 'text', text: 'Parsii kuitti. Vastaa vain JSON.' }
-        ]
-      }]
-    })
-  });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error?.message || `HTTP ${response.status}`);
-  }
-
-  const data = await response.json();
-  const rawText = data.content?.map(b => b.text || '').join('') || '';
-  return extractJSON(rawText);
-}
-
-function displayParsedReceipt(result) {
-  document.getElementById('aiLoading').classList.remove('active');
-  document.getElementById('parsedResult').classList.add('active');
-
-  document.getElementById('parsedMerchant').value = result.merchant || '';
-  document.getElementById('parsedTotal').value = result.total || '';
-
-  let itemsHtml = '';
-  (result.items || []).forEach(item => {
-    const cat = getCatById(item.category || result.category || 'muut');
-    itemsHtml += `
-      <div class="item-row">
-        <div class="item-cat-dot" style="background:${cat.color}"></div>
-        <div class="item-name">${item.name}</div>
-        <div class="item-amount">${formatAmt(item.amount)} €</div>
-        <div style="font-size:11px;color:var(--text-dim)">${cat.icon}</div>
-      </div>`;
-  });
-  document.getElementById('itemsList').innerHTML = itemsHtml || '<div class="item-row"><div class="item-name" style="color:var(--text-muted)">Ei rivejä tunnistettu</div></div>';
-
-  pendingReceipt = result;
-}
-
-function saveReceipt() {
-  if (!pendingReceipt) return;
-  const receipt = {
-    id: Date.now(),
-    merchant: document.getElementById('parsedMerchant').value || pendingReceipt.merchant,
-    total: parseFloat(document.getElementById('parsedTotal').value) || pendingReceipt.total,
-    date: pendingReceipt.date || new Date().toISOString().split('T')[0],
-    category: pendingReceipt.category || 'muut',
-    items: pendingReceipt.items || [],
-    source: 'photo',
-    createdAt: new Date().toISOString()
-  };
-  receipts.push(receipt);
-  saveData();
+function saveCameraReceipt() {
+  const merchant = document.getElementById('camMerchant').value.trim();
+  const amount = parseFloat(document.getElementById('camAmount').value);
+  if (!merchant||!amount){showToast('Täytä kauppias ja summa','err');return;}
+  const cat = getSelectedChip('camChips');
+  const c = catObj(cat);
+  addTx({payee:merchant, amount:-amount, date:document.getElementById('camDate').value, cat:c.name, type:c.type, source:'receipt'});
   closeModal('cameraModal');
-  render();
-  showToast('✓ Kuitti tallennettu', 'success');
+  showToast('✓ Kuitti tallennettu','ok');
 }
 
-// ─── QUICK FLOW ─────────────────────────────────────────────────────────────
-function openQuick() {
-  document.getElementById('quickModal').classList.add('open');
-  document.getElementById('quickResult').classList.remove('active');
+function openQuickModal() {
+  document.getElementById('quickIn').value='';
   document.getElementById('quickLoading').classList.remove('active');
-  document.getElementById('quickInput').value = '';
-  document.getElementById('quickDate').value = new Date().toISOString().split('T')[0];
-  renderCatChips('quickCatChips', 'muut');
-  setTimeout(() => document.getElementById('quickInput').focus(), 300);
+  document.getElementById('quickResult').classList.remove('active');
+  document.getElementById('quickDate').value = todayISO();
+  renderChips('quickChips','Muut');
+  openModal('quickModal');
+  setTimeout(()=>document.getElementById('quickIn').focus(),300);
 }
 
 async function sendQuick() {
-  const input = document.getElementById('quickInput').value.trim();
+  const input = document.getElementById('quickIn').value.trim();
   if (!input) return;
-
   document.getElementById('quickLoading').classList.add('active');
   document.getElementById('quickResult').classList.remove('active');
 
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 500,
-        system: `Parsii vapaamuotoinen kulumerkintä JSON-objektiksi. Palauta VAIN JSON.
-{"merchant":"nimi","amount":12.50,"category":"ruoka","date":"YYYY-MM-DD"}
-Kategoriat: ruoka, ravintola, liikenne, koti, vaatteet, viihde, terveys, alkoholi, muut
-Päivä tänään: ${new Date().toISOString().split('T')[0]}`,
-        messages: [{ role: 'user', content: input }]
-      })
-    });
-
-    const data = await response.json();
-    const rawText = data.content?.map(b => b.text || '').join('') || '';
-    const parsed = extractJSON(rawText);
-
-    document.getElementById('quickMerchant').value = parsed.merchant || input;
-    document.getElementById('quickAmount').value = parsed.amount || '';
-    document.getElementById('quickDate').value = parsed.date || new Date().toISOString().split('T')[0];
-    renderCatChips('quickCatChips', parsed.category || 'muut');
-
-    document.getElementById('quickLoading').classList.remove('active');
-    document.getElementById('quickResult').classList.add('active');
-  } catch(err) {
-    document.getElementById('quickLoading').classList.remove('active');
-    showToast('Parsinta epäonnistui', 'error');
+  let parsed = null;
+  if (API_BASE) {
+    try { parsed = await parseQuickAI(input); } catch(e) {}
   }
+  document.getElementById('quickLoading').classList.remove('active');
+  document.getElementById('quickResult').classList.add('active');
+  document.getElementById('quickMerchant').value = parsed?.merchant || input;
+  document.getElementById('quickAmount').value = parsed?.amount || '';
+  document.getElementById('quickDate').value = parsed?.date || todayISO();
+  renderChips('quickChips', parsed?.category ? catNameForMobile(parsed.category) : 'Muut');
 }
 
 function saveQuick() {
-  const merchant = document.getElementById('quickMerchant').value;
+  const merchant = document.getElementById('quickMerchant').value.trim();
   const amount = parseFloat(document.getElementById('quickAmount').value);
-  if (!merchant || !amount) { showToast('Täytä kauppias ja summa', 'error'); return; }
-
-  const receipt = {
-    id: Date.now(),
-    merchant,
-    total: amount,
-    date: document.getElementById('quickDate').value,
-    category: getSelectedChip('quickCatChips'),
-    items: [],
-    source: 'manual',
-    createdAt: new Date().toISOString()
-  };
-  receipts.push(receipt);
-  saveData();
+  if (!merchant||!amount){showToast('Täytä kauppias ja summa','err');return;}
+  const cat = getSelectedChip('quickChips');
+  const c = catObj(cat);
+  addTx({payee:merchant, amount:-amount, date:document.getElementById('quickDate').value, cat:c.name, type:c.type, source:'manual'});
   closeModal('quickModal');
-  render();
-  showToast('✓ Tallennettu', 'success');
+  showToast('✓ Tallennettu','ok');
 }
 
-// ─── UTILS ──────────────────────────────────────────────────────────────────
-function switchTab(tab) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-  event.target.classList.add('active');
-  document.getElementById('view-' + tab).classList.add('active');
+function openManualModal() {
+  document.getElementById('manMerchant').value='';
+  document.getElementById('manAmount').value='';
+  document.getElementById('manDate').value = todayISO();
+  renderChips('manChips','Muut');
+  openModal('manualModal');
 }
 
-function closeModal(id) {
-  document.getElementById(id).classList.remove('open');
+function saveManual() {
+  const merchant = document.getElementById('manMerchant').value.trim();
+  const amount = parseFloat(document.getElementById('manAmount').value);
+  if (!merchant||!amount){showToast('Täytä kauppias ja summa','err');return;}
+  const cat = getSelectedChip('manChips');
+  const c = catObj(cat);
+  addTx({payee:merchant, amount:-amount, date:document.getElementById('manDate').value, cat:c.name, type:c.type, source:'manual'});
+  closeModal('manualModal');
+  showToast('✓ Tallennettu','ok');
 }
 
-function showToast(msg, type = '') {
+function addTx(tx) {
+  const id = `manual_${Date.now()}_${Math.random().toString(36).substr(2,5)}`;
+  txs.push({id, selitys:'', viesti:'', ...tx});
+  const months = allMonths();
+  if (months.includes(tx.date.substring(0,7))) curMonth = tx.date.substring(0,7);
+  else { const ms = allMonths(); curMonth = ms[0] || fmtMonthKey(new Date()); }
+  saveState(); renderAll();
+}
+
+// ── IMPORT / EXPORT ───────────────────────────────────────────────────────────
+function exportJSON() {
+  const blob = new Blob([JSON.stringify({txs,rules,saldot,exported:new Date().toISOString()},null,2)],{type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `omattalous-${todayISO()}.json`;
+  a.click();
+}
+
+function handleJSONInput(event) {
+  const f = event.target.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = ev => {
+    try {
+      const d = JSON.parse(ev.target.result);
+      if (d.txs) txs = d.txs;
+      if (d.rules) rules = d.rules;
+      if (d.saldot) saldot = d.saldot;
+      const months = allMonths(); curMonth = months[0] || fmtMonthKey(new Date());
+      saveState(); renderAll();
+      showToast(`Tuotu: ${txs.length} tapahtumaa`,'ok');
+    } catch(e) { showToast('Virhe tuonnissa','err'); }
+  };
+  rd.readAsText(f);
+}
+
+function handleCSVInput(event) { loadCSVFiles(Array.from(event.target.files)); }
+function handleDrop(event) {
+  event.preventDefault();
+  document.getElementById('dropZone').classList.remove('drag');
+  loadCSVFiles(Array.from(event.dataTransfer.files).filter(f=>f.name.endsWith('.csv')));
+}
+
+// ── UTILS ─────────────────────────────────────────────────────────────────────
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function fmtDateLbl(d) {
+  if (!d) return '—';
+  const today = todayISO();
+  const yest = new Date(); yest.setDate(yest.getDate()-1); const yesterdayISO = yest.toISOString().split('T')[0];
+  if (d===today) return 'Tänään';
+  if (d===yesterdayISO) return 'Eilen';
+  return new Date(d).toLocaleDateString('fi-FI',{weekday:'long',day:'numeric',month:'long'});
+}
+
+function showToast(msg, type='') {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.className = 'toast ' + type;
   t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2500);
+  setTimeout(()=>t.classList.remove('show'), 2800);
 }
 
-function formatAmt(n) {
-  const num = parseFloat(n) || 0;
-  return num.toLocaleString('fi-FI', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function formatDate(d) {
-  if (!d || d === 'Tuntematon') return 'Tuntematon päivä';
-  const date = new Date(d);
-  const today = new Date();
-  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
-  if (d === today.toISOString().split('T')[0]) return 'Tänään';
-  if (d === yesterday.toISOString().split('T')[0]) return 'Eilen';
-  return date.toLocaleDateString('fi-FI', { weekday: 'long', day: 'numeric', month: 'long' });
-}
-
-// Close modal on overlay click
-document.querySelectorAll('.modal-overlay').forEach(overlay => {
-  overlay.addEventListener('click', e => {
-    if (e.target === overlay) overlay.classList.remove('open');
-  });
-});
-
-// Set month
-const monthNames = ['Tammikuu','Helmikuu','Maaliskuu','Huhtikuu','Toukokuu','Kesäkuu','Heinäkuu','Elokuu','Syyskuu','Lokakuu','Marraskuu','Joulukuu'];
-const now = new Date();
-document.getElementById('currentMonth').textContent = monthNames[now.getMonth()] + ' ' + now.getFullYear();
-
-// Init
-render();
+// ── INIT ──────────────────────────────────────────────────────────────────────
+loadState();
+if (!curMonth) curMonth = fmtMonthKey(new Date());
+renderAll();
 </script>
 </body>
 </html>

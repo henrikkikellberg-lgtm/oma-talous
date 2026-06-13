@@ -1,0 +1,16 @@
+name = "oma-talous-api"
+main = "src/index.js"
+compatibility_date = "2025-06-13"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "oma-talous-db"
+database_id = "5f4a86cb-8d6d-42db-a541-07f25e6873cd"
+
+[[r2_buckets]]
+binding = "RECEIPTS"
+bucket_name = "oma-talous-receipts"
+
+[vars]
+# APP_SECRET and ANTHROPIC_API_KEY set via: wrangler secret put <KEY>

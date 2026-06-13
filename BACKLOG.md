@@ -8,246 +8,257 @@
 
 ---
 
-## VAIHE 0 — Cloudflare-ympäristö ja GitHub
-> Esivaatimukset ennen kuin mikään muu voi alkaa.
+## VAIHE 0 — Cloudflare-ympäristö ja GitHub ✅
 
 ### 👤 SINÄ TEET
 
-- [x] **CF-tili ja projekti** — olemassa
-- [x] **D1-tietokanta** — `oma-talous-db` luotu, ID: `5f4a86cb-8d6d-42db-a541-07f25e6873cd`
-- [x] **R2-bucket** — `oma-talous-receipts` luotu
-- [ ] **API Token** — luo uusi token (edellinen peruutettava välittömästi, se vuoti)
-  CF Dashboard → My Profile → API Tokens → Revoke vanha → Create Token
-  Oikeudet: Workers Scripts:Edit, D1:Edit, Pages:Edit, Workers R2 Storage:Edit, Workers KV Storage:Edit, Cloudflare Pages:Edit
-  ⚠️ Älä jaa tokenia missään — tallenna vain paikallisesti tai suoraan ympäristömuuttujiin
-
-- [ ] **GitHub-repo**
-  Luo yksityinen repo: `oma-talous` (private — sisältää henkilökohtaisen talouslogiikan)
-  ```bash
-  git init
-  git remote add origin git@github.com:<sinä>/oma-talous.git
-  ```
-  Rakenne repossa:
-  ```
-  oma-talous/
-    api/          — Workers-koodi (wrangler.toml tänne)
-    app/          — PWA frontend
-    scripts/      — migraatio- ja import-skriptit
-    .gitignore    — sisältää .env, *.json (export-tiedostot), node_modules
-  ```
-
-- [ ] **Asenna Wrangler**
+- [x] **CF-tili ja projekti**
+- [x] **D1-tietokanta** — `oma-talous-db`, ID: `5f4a86cb-8d6d-42db-a541-07f25e6873cd`
+- [x] **R2-bucket** — `oma-talous-receipts`
+- [x] **API Token** — uusi luotu (vanha vuotanut token peruutettu)
+  Oikeudet: Workers Scripts, D1, Pages, Workers R2 Storage, Workers KV Storage, Cloudflare Pages — kaikki Edit
+- [x] **GitHub-repo** — https://github.com/henrikkikellberg-lgtm/oma-talous (private)
+  Repossa: `app/index.html` (mobiiliproto), `CLAUDE.md`, `BACKLOG.md`, `Makefile`, `.gitignore`
+- [x] **CF Pages** — ylhäällä, yhdistetty GitHub-repoon
+- [ ] **Wrangler** — asenna ja kirjaudu ennen Vaihetta 2
   ```bash
   npm install -g wrangler
   wrangler login
   ```
 
-- [ ] **Yhdistä CF Pages GitHubiin** (kun repo on luotu)
-  CF Dashboard → Pages → Create → Connect to GitHub → valitse `oma-talous` → branch: `main`, build dir: `app/`
-
 ---
 
 ## VAIHE 1 — D1 Schema ja migraatio
+
 > budjetti-2.html jatkaa toimintaansa normaalisti tämän vaiheen aikana.
 
 ### 🤖 CLAUDE CODE TEKEE
 
-- [ ] **D1 schema** (`schema.sql`)
-  Luo taulut:
-  - `transactions` — id, date, amount, description, category, type (needs/wants/savings/income), source (csv/manual/receipt), account, month, created_at
-  - `categories` — id, name, type, budget_monthly, color
-  - `rules` — id, keyword, category_id, priority (auto-kategorisointisäännöt)
+- [ ] **D1 schema** (`api/schema.sql`)
+  Taulut:
+  - `transactions` — id, date, amount, description, category, type (needs/wants/savings/income), source (csv/manual/receipt/bank), account_id, month, merchant_normalized, exclude (0/1), recurring (0/1), created_at
+  - `categories` — id, name, type, budget_monthly, color, icon
+  - `rules` — id, keyword, category_id, priority
   - `budgets` — id, category_id, month, amount
   - `accounts` — id, name, type (checking/credit/savings), balance, updated_at
   - `receipts` — id, transaction_id, r2_key, raw_text, parsed_json, created_at
+  - `settings` — key, value (mm. `salary_day` 1–31 joka määrittää budjettikuukauden alun)
+  - `bank_sessions` — id, provider, session_id, account_ids_json, valid_until, created_at (Enable Banking -integraatiota varten)
 
 - [ ] **Migraatioskripti** (`scripts/migrate-from-json.js`)
-  Lukee budjetti-2.html:n viedyn JSON-tiedoston ja kirjoittaa tapahtumat D1:een Workers API:n kautta. Duplikaattisuojaus (hash päivämäärä+summa+kuvaus).
+  Lukee budjetti-2.html:n viedyn JSON:n → kirjoittaa D1:een Workers API:n kautta.
+  Duplikaattisuojaus: hash(date + amount + description).
 
-- [ ] **Kategorioiden alustus** (`scripts/seed-categories.js`)
-  Lisää oletuskategoriat D1:een: Ruoka, Ravintolat, Liikenne, Koti, Vaatteet, Viihde, Terveys, Alkoholi, Muut + Palkka/Tulot.
+- [ ] **Kategorioiden ja asetusten alustus** (`scripts/seed.js`)
+  Oletuskategoriat: Ruoka, Ravintolat, Liikenne, Koti, Vaatteet, Viihde, Terveys, Alkoholi, Muut + Tulot.
+  Oletusasetus: `salary_day = 25`.
 
 ### 👤 SINÄ TEET
 
 - [ ] **Vie JSON budjetti-2.html:stä**
-  Avaa budjetti-2.html selaimessa → "Vie JSON" → tallenna tiedosto nimellä `export-YYYY-MM.json` kansioon `Oma talous/`.
+  Avaa selaimessa → "Vie JSON" → tallenna `scripts/export.json` (gitignoressa, ei mene repoon)
 
 - [ ] **Aja migraatio** (kun Claude Code on kirjoittanut skriptin)
   ```bash
-  node scripts/migrate-from-json.js export-YYYY-MM.json
+  node scripts/migrate-from-json.js scripts/export.json
   ```
 
 ---
 
 ## VAIHE 2 — Workers API
-> REST API jota sekä uusi PWA että mahdollinen open banking käyttää.
+
+> REST API jota sekä PWA että Open Banking käyttää.
 
 ### 🤖 CLAUDE CODE TEKEE
 
-- [ ] **Workers-projekti** (`wrangler.toml` + rakenne)
+- [ ] **Workers-projekti** (`api/`)
   ```
-  oma-talous-api/
+  api/
     src/
-      index.js        — reititys
+      index.js
       routes/
         transactions.js
         categories.js
         rules.js
         accounts.js
         receipts.js
-    wrangler.toml
+        settings.js
+        connect.js      ← Enable Banking OAuth-flow
+    wrangler.toml       ← D1 + R2 bindings tänne
   ```
 
 - [ ] **Endpointit**
-  - `GET/POST /transactions` — listaa, luo
-  - `PUT/DELETE /transactions/:id` — muokkaa, poista
-  - `GET /transactions?month=2025-05` — kuukausisuodatus
-  - `GET/POST /categories` — kategoriat
-  - `GET/POST /rules` — automaattisäännöt
-  - `GET /summary?month=2025-05` — yhteenveto (tulot/needs/wants/savings)
-  - `POST /receipts/parse` — ottaa base64-kuvan, kutsuu Claude Vision API:a, palauttaa parsitun kuitin
-  - `POST /accounts` — saldopäivitykset
+  - `GET/POST /transactions` — listaa (month-filter), luo
+  - `PUT/DELETE /transactions/:id`
+  - `GET /summary?month=YYYY-MM` — tulot/needs/wants/savings, säästöaste
+  - `GET/POST /categories`
+  - `GET/POST /rules`
+  - `GET/PUT /settings` — mm. salary_day
+  - `POST /receipts/parse` — base64-kuva → Claude Haiku 4.5 → JSON
+  - `POST /import/csv` — tunnistaa pankin (OP Debit, OP Credit, S-Pankki), ajaa säännöt
+  - `GET /connect/bank?bank=OP` — käynnistää Enable Banking consent-flow'n
+  - `GET /connect/callback?code=xxx` — vaihdetaan koodi session_id:ksi, tallennetaan D1:een
 
-- [ ] **Auth** (yksinkertainen)
-  Bearer token ympäristömuuttujasta. Ei tarvita user managementia — henkilökohtainen app.
+- [ ] **Auth** — Bearer token (`APP_SECRET`) kaikissa pyynnöissä
 
-- [ ] **CSV-import endpoint** (`POST /import/csv`)
-  Ottaa CSV-sisällön, tunnistaa pankin (OP Debit, OP Credit, Nordea, S-Pankki), parsii tapahtumat, ajaa säännöt, tallentaa D1:een.
+- [ ] **Kuittikuvien resize** ennen Claude API -kutsua
+  Canvas API client-puolella → max 1024px, ~300 KB JPEG ennen lähetystä
 
 ### 👤 SINÄ TEET
 
-- [ ] **Aseta ympäristömuuttujat** CF Dashboardissa tai wranglerilla:
-  - `ANTHROPIC_API_KEY` — Claude Vision API:lle
-  - `APP_SECRET` — yksinkertainen bearer token jonka keksit itse
+- [ ] **Aseta Workers secrets** (`wrangler secret put`):
+  - `ANTHROPIC_API_KEY`
+  - `APP_SECRET` (keksi pitkä random string)
+  - `ENABLE_BANKING_APP_ID` (saadaan Vaiheessa 5)
+  - `ENABLE_BANKING_PRIVATE_KEY` (`.pem`-tiedoston sisältö, saadaan Vaiheessa 5)
 
 - [ ] **Deploy Workers**
   ```bash
-  cd oma-talous-api
-  wrangler deploy
+  cd api && wrangler deploy
   ```
+  Noteeraa deployattu URL: `https://oma-talous-api.<sinun-account>.workers.dev`
 
 ---
 
 ## VAIHE 3 — Mobile-first PWA
-> Uusi app. budjetti-2.html edelleen käytettävissä rinnalla.
+
+> Korvaa budjetti.html ja budjetti-2.html. Rakennetaan `app/`-kansioon.
+
+### Nykyinen proto: `app/index.html`
+- Mobiili-UI toimii ✅
+- Kamera-ikkunan avaus toimii ✅
+- **Bugi:** `capture="environment"` estää gallerian valinnan → korjataan kaksi erillistä nappia
+
+### Design
+- Vaalea teema, ei tumma
+- Värit: metsänvihreä `#1B6B3A`, kulta `#B5883E`, luottamussininen `#1A5BAB`
+- Taustaväri `#F2F6FA` (erittäin vaalea siniharmaa)
+- Typografia: Inter (jo käytössä protossa)
 
 ### 🤖 CLAUDE CODE TEKEE
 
-- [ ] **PWA-runko** (`oma-talous-app/`)
-  Vanilla JS + CSS, ei frameworkia (kevyt, nopea mobiilissa). Service worker + manifest → asentuu iPhoneen "Add to Home Screen".
+- [ ] **Kuittisyöttö — kameran korjaus**
+  Kaksi erillistä nappia: "📷 Kamera" (`capture="environment"`) ja "🖼️ Galleria" (ilman capture).
 
-- [ ] **Mobiili — Etusivu / Dashboard**
-  - Tämän kuukauden kulutus isoilla luvuilla (needs/wants/savings)
-  - Edistymispalkit vs. budjetti
-  - Pikalisaus-painike (kuitti tai manuaalinen)
+- [ ] **Kuittisyöttö — resize ennen API-kutsua**
+  Canvas API: skaalaa alle 1024px leveäksi, laatu 0.85 JPEG → suojaa R2-rajoja ja API-kuluja.
 
-- [ ] **Mobiili — Kuittisyöttö**
-  - Kamera-nappi → ottaa kuvan → lähettää Workers API:lle → Claude Vision parsii → käyttäjä vahvistaa/korjaa summan, kategorian → tallennetaan
-  - Pikasyöttö: "sushit, 19€" → AI parsii vapaatekstistä
+- [ ] **Workers-integraatio** — korvaa suorat `api.anthropic.com`-kutsut Workers-proxyllä
+  `POST /receipts/parse` Workers-endpointtiin (API-avain pysyy serverillä).
 
-- [ ] **Mobiili — Tapahtumat**
-  - Lista tämän kuukauden tapahtumista
-  - Swipe kategorisointia varten
-  - Hakutoiminto
+- [ ] **Dashboard** — needs/wants/savings palkit, kuukauden total, pikalisäys-FAB
 
-- [ ] **Mobiili — Kategoriat**
-  - Piirakkakaavio tai palkki per kategoria
-  - Porautuminen: kategoria → tapahtumat
+- [ ] **Tapahtumat** — lista, haku, swipe-kategoriointi
 
-- [ ] **Desktop — CSV-import**
-  Siirretään budjetti-2.html:n CSV-logiikka Workers API:n kautta D1:een. Sama UI-tyyli.
+- [ ] **Kategoriat** — kulutus per kategoria, budjetti vs. toteuma
 
-- [ ] **Desktop — Analytiikka**
-  Kuukausivertailu, trendit, säästöaste — sama kuin budjetti-2.html mutta data D1:stä.
+- [ ] **Desktop — CSV-import** (sama app, leveämpi näkymä)
 
-- [ ] **Desktop — Säännöt**
-  Keyword-säännöt tallennetaan D1:een, toimivat myös CSV-importissa serveripäässä.
+- [ ] **Desktop — Analytiikka** — kuukausivertailu, trendit, säästöaste
+
+- [ ] **Asetukset** — `salary_day`, budjettiraja per kategoria
+
+- [ ] **PWA manifest + service worker** — asentuu iPhonen kotinäytölle
 
 ### 👤 SINÄ TEET
 
-- [ ] **Luo CF Pages -projekti**
-  CF Dashboard → Pages → Create → Connect to Git tai Direct Upload. Tai:
-  ```bash
-  cd oma-talous-app
-  wrangler pages deploy dist/
-  ```
-
-- [ ] **Testaa iPhonessa**
-  Avaa Pages URL Safarissa → "Lisää kotinäyttöön" → testaa kuittikamera.
+- [ ] **Testaa iPhonessa** CF Pages URL:sta → Safari → "Lisää kotinäyttöön"
+- [ ] **Testaa kamera + galleria** molemmat toimivat
 
 ---
 
 ## VAIHE 4 — Historiadata D1:een
-> Tuo vanhemmat CSV-tiedostot suoraan D1:een ilman budjetti-2.html:ää.
+
+> Tuo vanhat CSV:t suoraan D1:een.
 
 ### 🤖 CLAUDE CODE TEKEE
 
-- [ ] **Batch CSV import -skripti** (`scripts/import-csv-batch.js`)
-  Lukee kansion kaikki CSV-tiedostot, tunnistaa pankin formaatin automaattisesti, ajaa kategorisointisäännöt, tuo D1:een. Yhteenveto: X riviä tuotu, Y duplikaattia ohitettu.
+- [ ] **Batch CSV import** (`scripts/import-csv-batch.js`)
+  Lukee hakemiston kaikki CSV:t, tunnistaa pankin automaattisesti, ajaa säännöt, tuo D1:een.
+  Raportti: X tuotu, Y duplikaattia ohitettu.
 
 ### 👤 SINÄ TEET
 
-- [ ] **Kerää historialliset CSV:t**
-  OP nettipalvelu → Tapahtumat → Lataa CSV (voit valita aikavälin). Kerää niin pitkältä kuin haluat.
+- [ ] **Kerää historialliset CSV:t** — OP-nettipalvelu → Tapahtumat → Lataa CSV
+  Tallenna kansioon `scripts/csv-historia/` (gitignoressa)
 
-- [ ] **Aja batch-import**
+- [ ] **Aja import**
   ```bash
-  node scripts/import-csv-batch.js ./csv-historia/
+  node scripts/import-csv-batch.js scripts/csv-historia/
   ```
 
 ---
 
 ## VAIHE 5 — Open Banking (Enable Banking API)
-> Automaattinen tapahtumahaku suoraan pankista. Toteuttava myöhemmin kun muu on valmis.
 
-### Tutkimustulos
+> Automaattinen tapahtumahaku suoraan OP:sta ja S-Pankista. Rakennetaan kun Workers API on valmis.
 
-Enable Banking (enablebanking.com) on PSD2-aggregaattori joka tukee suomalaisia pankkeja: OP, Nordea, S-Pankki, Säästöpankki, Aktia, Handelsbanken. Olet tutkinut oikeaa palvelua.
+### Status
 
-**Miten se toimii henkilökohtaiseen käyttöön:**
-Käyttäjä (sinä) kirjautuu pankkiin Enable Bankingin consent-flown kautta → annat luvan tilitietojen lukuun → API palauttaa tapahtumat JSON-muodossa. Et tarvitse TPP-lisenssiä kun kyse on omien tiliesi lukemisesta omaan appiisi.
+- [x] **Production-sovellus rekisteröity** Enable Bankingiin
+- [x] **RSA-avain (.pem) ladattu** — tallenna turvallisesti, tarvitaan Workers secretiksi
+- [ ] **Päivitä redirect URL** Enable Banking -sovellukseen kun Workers on deployattu (Vaihe 2):
+  `https://oma-talous-api.<account>.workers.dev/connect/callback`
 
-**Sandbox on ilmainen** — voit testata ilman oikeita pankkitietoja jo nyt.
+### Miten flow toimii (JS-esimerkin perusteella)
 
-**Tuotantokäyttö** vaatii rekisteröitymisen Enable Bankingin developeriksi (ilmainen suunnitelma olemassa) + consent-flow käyttäjältä joka kerta (token vanhenee, uusittava).
+```
+1. Worker luo JWT omalla RSA-avaimella
+2. POST /auth → valitset pankin (name: "OP", country: "FI") + redirect_url → saat auth URL:n
+3. Käyttäjä kirjautuu OP:n verkkopankkiin, hyväksyy luvan
+4. OP ohjaa takaisin → Worker napaa ?code-parametrin
+5. POST /sessions → vaihdetaan code → session_id tallennetaan D1:een (bank_sessions-taulu)
+6. GET /accounts/{id}/transactions → tapahtumat suoraan tililtä
+```
 
-### 👤 SINÄ TEET (kun valmis kokeilemaan)
+Consent voimassa `valid_until`-päivään (max ~90 päivää). Kun vanhenee → uusi kirjautuminen.
+Tuetut pankit: OP, Nordea, S-Pankki, Säästöpankki, Aktia, Handelsbanken.
+OP:n ja S-Pankin omat PSD2-rajapinnat vaativat TPP-lisenssin — Enable Banking hoitaa tämän.
 
-- [ ] Rekisteröidy: https://enablebanking.com → Developer signup
-- [ ] Testaa Sandbox: https://enablebanking.com/docs/api/sandbox/
-- [ ] Katso tuetut pankit Suomessa: https://enablebanking.com/docs/markets/
+### 👤 SINÄ TEET (kun Workers on valmis)
 
-### 🤖 CLAUDE CODE TEKEE (kun sinä olet rekisteröitynyt)
+- [ ] Päivitä redirect URL Enable Banking -hallintapaneeliin
+- [ ] Aseta secrets:
+  ```bash
+  wrangler secret put ENABLE_BANKING_APP_ID
+  wrangler secret put ENABLE_BANKING_PRIVATE_KEY
+  ```
 
-- [ ] **Open Banking -integraatio Workers API:iin**
-  - `GET /connect/bank` — käynnistää consent-flow:n (redirect Enable Bankingiin)
-  - `GET /connect/callback` — vastaanottaa tokenin, tallentaa D1:een
-  - Workers cron job: hakee uudet tapahtumat automaattisesti päivittäin
+### 🤖 CLAUDE CODE TEKEE
+
+- [ ] **JWT-allekirjoitus Workers-koodissa** (Web Crypto API, ei ulkoisia kirjastoja)
+- [ ] **`GET /connect/bank?bank=OP`** — käynnistää consent-flow'n
+- [ ] **`GET /connect/callback`** — vaihdetaan koodi, tallennetaan session D1:een
+- [ ] **Workers cron job** — hakee uudet tapahtumat päivittäin, ajaa kategorisointisäännöt
 
 ---
 
-## Tekniset päätökset ja muistiinpanot
+## Tekniset päätökset
 
 | Asia | Päätös | Perustelu |
 |------|--------|-----------|
-| Frontend framework | Vanilla JS | Kevyt, nopea, ei build step |
-| CSS | Custom properties + flexbox/grid | Sama tyyli kuin nykyinen app |
-| Auth | Bearer token env var | Henkilökohtainen app, ei tarvita user managementia |
-| Kuittikuvat | R2 + metadata D1:ssä | R2 ei maksa paljon, kuvat eivät täytä D1:stä |
-| CSV-parsinta | Workers-serverissä | Logiikka yhdessä paikassa, toimii mobiilista ja desktopista |
-| budjetti-2.html | Säilytetään koskemattomana | Keskeytymätön käyttö migraation aikana |
-| Kuittikuvat R2:ssa | Resizataan aina alle 1024px / ~300 KB ennen uploadia | Suojaa R2 free tier -rajoja (10 GB) ja pitää Claude API -kulut minimissä |
-| GitHub | Yksityinen repo, ei tokeneita tai secreteja koodissa | API-avaimet aina ympäristömuuttujina, ei koskaan .gitiin |
+| Frontend | Vanilla JS, ei frameworkia | Kevyt, nopea, ei build step |
+| Design | Vaalea teema, vihreä+kulta+sininen | Oma brändi, finanssimaailman luottamus |
+| Auth | Bearer token (APP_SECRET) | Henkilökohtainen app, ei user managementia |
+| Kuittikuvat | R2 + resize alle 1024px ennen uploadia | R2 free tier (10 GB) + Claude API -kulut minimissä |
+| CSV-parsinta | Workers-serverissä | Logiikka yhdessä paikassa, ei client-puolella |
+| AI-malli kuitit | Claude Haiku 4.5 | Riittää parsintaan, ~$0.003/kuitti |
+| Budjettikuukausi | Alkaa `salary_day`-asetuksesta (oletus 25.) | Vastaa todellisuutta paremmin kuin kalenterikuukausi |
+| Open Banking | Enable Banking (ei suoraan OP/S-Pankki) | Hoitaa TPP-lisenssin, tukee kaikkia suom. pankkeja |
+| budjetti-2.html | Säilytetään koskemattomana | Keskeytymätön käyttö koko migraation ajan |
+| Secrets | Kaikki `wrangler secret put` — ei koodiin eikä gitiin | Turvallisuus |
 
 ---
 
-## Järjestys käytännössä
+## Järjestys
 
 ```
-Vaihe 0 (sinä): CF infra ✅ osittain, GitHub repo + uusi token vielä tekemättä
-  → Vaihe 1: schema + migraatio (Claude Code + sinä viemässä JSON:in)
-  → Vaihe 2: Workers API (Claude Code + sinä deployaamassa)
-  → Vaihe 3: PWA (Claude Code + sinä testaamassa iPhonella)
-  → Vaihe 4: Historiadata (valinnainen, Claude Code + sinä CSV:t kokoamassa)
-  → Vaihe 5: Open Banking (myöhemmin, sinä rekisteröitymässä + Claude Code)
+Vaihe 0 ✅
+  → Vaihe 1: D1 schema + migraatio  (Claude Code + sinä vie JSON)
+  → Vaihe 2: Workers API             (Claude Code + sinä deployaa + asettaa secrets)
+  → Vaihe 3: PWA                     (Claude Code + sinä testaa iPhonella)
+  → Vaihe 4: Historiadata CSV        (valinnainen)
+  → Vaihe 5: Open Banking            (sinä päivittää redirect URL + Claude Code)
 ```
+
+**Seuraava konkreettinen askel:** `wrangler login` terminaalissa → Vaihe 1 alkaa.

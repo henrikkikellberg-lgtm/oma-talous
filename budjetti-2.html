@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Budjettiseuranta</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Syne+Mono&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0f0f13; --surface: #17171d; --surface2: #1e1e26; --border: #2a2a35;
+  --text: #e8e8f0; --muted: #6b6b80;
+  --needs: #4ade80; --wants: #fb923c; --savings: #60a5fa; --danger: #f87171; --income: #a78bfa;
+  --needs-bg: rgba(74,222,128,0.08); --wants-bg: rgba(251,146,60,0.08);
+  --savings-bg: rgba(96,165,250,0.08); --income-bg: rgba(167,139,250,0.08);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; font-weight: 300; line-height: 1.6; min-height: 100vh; }
+
+header { padding: 1.2rem 2rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.8rem; }
+.logo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.2rem; }
+.logo span { color: var(--needs); }
+.header-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.btn { padding: 0.4rem 1rem; border-radius: 4px; font-family: 'Syne', sans-serif; font-size: 0.75rem; font-weight: 600; cursor: pointer; border: none; letter-spacing: 0.04em; transition: opacity 0.15s; }
+.btn:hover { opacity: 0.8; }
+.btn-green { background: var(--needs); color: #0f0f13; }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+.btn-outline:hover { border-color: var(--text); color: var(--text); opacity: 1; }
+.btn-red { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
+
+.tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 2rem; overflow-x: auto; }
+.tab { padding: 0.8rem 1.2rem; font-family: 'Syne', sans-serif; font-size: 0.78rem; font-weight: 600; letter-spacing: 0.06em; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; transition: all 0.15s; }
+.tab.active { color: var(--text); border-bottom-color: var(--needs); }
+.tab:hover { color: var(--text); }
+.tab-content { display: none; padding: 1.5rem 2rem 4rem; }
+.tab-content.active { display: block; }
+
+.upload-area { border: 2px dashed var(--border); border-radius: 8px; padding: 2rem; text-align: center; cursor: pointer; transition: all 0.2s; background: var(--surface); margin-bottom: 1rem; }
+.upload-area:hover, .upload-area.drag { border-color: var(--needs); background: rgba(74,222,128,0.04); }
+.upload-area h3 { font-family: 'Syne', sans-serif; font-size: 0.95rem; margin-bottom: 0.4rem; }
+.upload-area p { font-size: 0.8rem; color: var(--muted); }
+
+.cards-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 0.8rem; margin-bottom: 1rem; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.2rem; position: relative; overflow: hidden; }
+.card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+.card.needs::before { background: var(--needs); } .card.wants::before { background: var(--wants); }
+.card.savings::before { background: var(--savings); } .card.income::before { background: var(--income); }
+.card.neutral::before { background: var(--border); }
+.card-label { font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.4rem; }
+.card-value { font-family: 'Syne', sans-serif; font-size: 1.6rem; font-weight: 700; line-height: 1; }
+.card.needs .card-value { color: var(--needs); } .card.wants .card-value { color: var(--wants); }
+.card.savings .card-value { color: var(--savings); } .card.income .card-value { color: var(--income); }
+.card-sub { font-size: 0.75rem; color: var(--muted); margin-top: 0.3rem; }
+.card-bar { height: 3px; background: var(--border); border-radius: 2px; margin-top: 0.8rem; overflow: hidden; }
+.card-bar-fill { height: 100%; border-radius: 2px; transition: width 0.8s ease; }
+
+.section-title { font-family: 'Syne', sans-serif; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.8rem; margin-top: 1.5rem; display: flex; align-items: center; gap: 0.5rem; }
+.section-title:first-child { margin-top: 0; }
+
+.flag-banner { background: rgba(251,146,60,0.1); border: 1px solid rgba(251,146,60,0.3); border-radius: 6px; padding: 0.8rem 1.2rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem; color: var(--wants); }
+
+.cat-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 0.8rem; margin-bottom: 1rem; }
+.cat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 1rem; }
+.cat-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.6rem; }
+.cat-name { font-family: 'Syne', sans-serif; font-size: 0.85rem; font-weight: 600; }
+.cat-amount { font-family: 'Syne Mono', monospace; font-size: 0.88rem; }
+.type-badge { font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.1rem 0.4rem; border-radius: 8px; display: inline-block; margin-top: 0.2rem; }
+.badge-needs { background: var(--needs-bg); color: var(--needs); } .badge-wants { background: var(--wants-bg); color: var(--wants); }
+.badge-savings { background: var(--savings-bg); color: var(--savings); } .badge-neutral { background: rgba(107,107,128,0.15); color: var(--muted); }
+.cat-bar { height: 3px; background: var(--border); border-radius: 2px; margin: 0.5rem 0; overflow: hidden; }
+.cat-bar-fill { height: 100%; border-radius: 2px; }
+.cat-items { font-size: 0.75rem; }
+.cat-item { display: flex; justify-content: space-between; padding: 0.2rem 0; border-bottom: 1px solid var(--border); color: var(--muted); }
+.cat-item:last-child { border-bottom: none; }
+
+.table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 1rem; }
+.table-filters { padding: 0.8rem 1.2rem; display: flex; gap: 0.4rem; flex-wrap: wrap; border-bottom: 1px solid var(--border); align-items: center; }
+.filter-btn { padding: 0.25rem 0.7rem; border-radius: 20px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 0.72rem; cursor: pointer; transition: all 0.15s; }
+.filter-btn.fa { border-color: var(--needs); color: var(--needs); background: var(--needs-bg); }
+.filter-btn.fw { border-color: var(--wants); color: var(--wants); background: var(--wants-bg); }
+.filter-btn.fs { border-color: var(--savings); color: var(--savings); background: var(--savings-bg); }
+.filter-btn.ff { border-color: var(--danger); color: var(--danger); background: rgba(248,113,113,0.08); }
+.search-input { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 0.25rem 0.6rem; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 0.78rem; outline: none; margin-left: auto; }
+.search-input:focus { border-color: var(--needs); }
+table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+th { text-align: left; padding: 0.6rem 1rem; font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 400; border-bottom: 1px solid var(--border); font-family: 'Syne', sans-serif; }
+td { padding: 0.55rem 1rem; border-bottom: 1px solid rgba(42,42,53,0.4); }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--surface2); }
+.tx-amount { font-family: 'Syne Mono', monospace; text-align: right; }
+.tx-neg { color: var(--danger); } .tx-pos { color: var(--needs); }
+.cat-select { background: var(--surface2); border: 1px solid var(--border); border-radius: 3px; padding: 0.15rem 0.3rem; color: var(--text); font-size: 0.72rem; font-family: 'DM Sans', sans-serif; outline: none; cursor: pointer; max-width: 160px; }
+.cat-select:focus { border-color: var(--needs); }
+
+.rules-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.2rem; margin-bottom: 1rem; }
+.rule-row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; }
+.rule-input { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 0.3rem 0.6rem; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 0.78rem; outline: none; }
+.rule-input:focus { border-color: var(--needs); }
+.rule-select { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 0.3rem 0.4rem; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 0.78rem; outline: none; cursor: pointer; }
+.rule-match { font-size: 0.7rem; color: var(--muted); }
+
+.saldo-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 0.8rem; margin-bottom: 1rem; }
+.saldo-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 1rem; }
+.saldo-label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.4rem; }
+.saldo-input { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 0.4rem 0.6rem; color: var(--text); font-family: 'Syne Mono', monospace; font-size: 0.88rem; width: 100%; outline: none; }
+.saldo-input:focus { border-color: var(--needs); }
+.netto-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; display: flex; justify-content: space-between; align-items: center; }
+
+.month-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px,1fr)); gap: 0.6rem; margin-bottom: 1.2rem; }
+.month-pill { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 0.7rem; cursor: pointer; transition: all 0.15s; }
+.month-pill:hover, .month-pill.sel { border-color: var(--needs); background: var(--needs-bg); }
+.month-pill-name { font-family: 'Syne', sans-serif; font-size: 0.8rem; font-weight: 600; }
+.month-pill-sum { font-family: 'Syne Mono', monospace; font-size: 0.75rem; color: var(--muted); }
+
+.compare-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: auto; }
+.compare-row { display: flex; border-bottom: 1px solid var(--border); }
+.compare-row:last-child { border-bottom: none; }
+.compare-cell { padding: 0.5rem 0.8rem; font-size: 0.78rem; font-family: 'Syne Mono', monospace; flex: 1; min-width: 90px; }
+.compare-cell.lbl { font-family: 'DM Sans', sans-serif; color: var(--muted); font-size: 0.75rem; flex: 1.5; }
+.compare-cell.hdr { font-family: 'Syne', sans-serif; font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); background: var(--surface2); }
+.compare-cell.better { color: var(--needs); } .compare-cell.worse { color: var(--danger); }
+
+@media (max-width: 700px) {
+  .cards-row { grid-template-columns: 1fr 1fr; }
+  .cat-grid, .saldo-grid { grid-template-columns: 1fr; }
+  .tab-content { padding: 1rem 1rem 3rem; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">budjetti<span>.</span></div>
+  <div class="header-actions">
+    <span id="dataStatus" style="font-size:0.72rem;color:var(--muted)">Ei dataa</span>
+    <button class="btn btn-outline" onclick="exportData()">💾 Vie JSON</button>
+    <button class="btn btn-outline" onclick="document.getElementById('importInput').click()">📂 Tuo JSON</button>
+    <input type="file" id="importInput" accept=".json" style="display:none" onchange="handleImport(event)">
+    <button class="btn btn-red" onclick="clearAll()">Tyhjennä</button>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="showTab('yht')">Yhteenveto</div>
+  <div class="tab" onclick="showTab('kat')">Kategoriat</div>
+  <div class="tab" onclick="showTab('tx')">Tapahtumat</div>
+  <div class="tab" onclick="showTab('ver')">Kuukausivertailu</div>
+  <div class="tab" onclick="showTab('san')">Säännöt</div>
+  <div class="tab" onclick="showTab('sal')">Saldot</div>
+</div>
+
+<!-- YHTEENVETO -->
+<div class="tab-content active" id="tab-yht">
+  <div class="upload-area" id="uploadArea" ondragover="ev.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="onDrop(event)">
+    <h3>📂 Lataa tiliotetiedostot</h3>
+    <p>OP Debit · OP Credit · Finnair Visa · Säästötili — useita CSV:itä kerralla</p>
+    <label class="btn btn-green" style="margin-top:0.8rem;display:inline-block;cursor:pointer">
+      Valitse CSV-tiedostot
+      <input type="file" accept=".csv" multiple style="display:none" onchange="onFiles(event)">
+    </label>
+    <p style="margin-top:0.6rem;font-size:0.72rem;color:var(--muted)">Duplikaatit poistetaan · Data tallennetaan selaimen muistiin</p>
+  </div>
+
+  <div class="flag-banner" id="flagBanner" style="display:none">
+    <span id="flagText"></span>
+    <button class="btn btn-outline" onclick="showTab('tx');setFilter('flag',null)">Kategorisoi →</button>
+  </div>
+
+  <div class="section-title">
+    Kuukausi
+    <select id="msel" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:0.2rem 0.4rem;color:var(--text);font-size:0.72rem;outline:none;font-family:'DM Sans',sans-serif" onchange="renderYht()"></select>
+  </div>
+
+  <div class="cards-row">
+    <div class="card income"><div class="card-label">Tulot</div><div class="card-value" id="vIncome">—</div><div class="card-sub" id="vIncomeSub"></div></div>
+    <div class="card needs"><div class="card-label">Needs — tavoite 50%</div><div class="card-value" id="vNeeds">—</div><div class="card-sub" id="vNeedsSub"></div><div class="card-bar"><div class="card-bar-fill" id="bNeeds" style="background:var(--needs);width:0"></div></div></div>
+    <div class="card wants"><div class="card-label">Wants — tavoite 30%</div><div class="card-value" id="vWants">—</div><div class="card-sub" id="vWantsSub"></div><div class="card-bar"><div class="card-bar-fill" id="bWants" style="background:var(--wants);width:0"></div></div></div>
+    <div class="card savings"><div class="card-label">Savings — tavoite 20%</div><div class="card-value" id="vSavings">—</div><div class="card-sub" id="vSavingsSub"></div><div class="card-bar"><div class="card-bar-fill" id="bSavings" style="background:var(--savings);width:0"></div></div></div>
+  </div>
+  <div class="cards-row" style="grid-template-columns:repeat(3,1fr)">
+    <div class="card neutral"><div class="card-label">Säästöaste</div><div class="card-value" id="vRate">0%</div><div class="card-sub">Tavoite yli 20%</div></div>
+    <div class="card neutral"><div class="card-label">Ylijäämä / alijäämä</div><div class="card-value" id="vSurplus">—</div><div class="card-sub" id="vSurplusSub"></div></div>
+    <div class="card neutral"><div class="card-label">Nettovarallisuus</div><div class="card-value" id="vNetto">—</div><div class="card-sub">Saldoista laskettuna</div></div>
+  </div>
+</div>
+
+<!-- KATEGORIAT -->
+<div class="tab-content" id="tab-kat">
+  <div class="section-title">Kuukausi
+    <select id="mselKat" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:0.2rem 0.4rem;color:var(--text);font-size:0.72rem;outline:none;font-family:'DM Sans',sans-serif" onchange="renderKat()"></select>
+  </div>
+  <div class="cat-grid" id="catGrid"></div>
+</div>
+
+<!-- TAPAHTUMAT -->
+<div class="tab-content" id="tab-tx">
+  <div class="table-wrap">
+    <div class="table-filters">
+      <button class="filter-btn fa" onclick="setFilter('all',this)">Kaikki</button>
+      <button class="filter-btn" onclick="setFilter('needs',this)">Needs</button>
+      <button class="filter-btn" onclick="setFilter('wants',this)">Wants</button>
+      <button class="filter-btn" onclick="setFilter('savings',this)">Savings</button>
+      <button class="filter-btn" onclick="setFilter('income',this)">Tulot</button>
+      <button class="filter-btn" onclick="setFilter('flag',this)">⚠️ Kategorisoimatta</button>
+      <input class="search-input" placeholder="Hae..." oninput="curSearch=this.value;renderTx()">
+    </div>
+    <table><thead><tr>
+      <th>Päivä</th><th>Saaja / Paikka</th><th>Lähde</th><th>Kategoria</th><th style="text-align:right">Summa</th>
+    </tr></thead><tbody id="txBody"></tbody></table>
+  </div>
+</div>
+
+<!-- VERTAILU -->
+<div class="tab-content" id="tab-ver">
+  <div class="section-title">Valitse kuukaudet (max 4)</div>
+  <div class="month-grid" id="monthGrid"></div>
+  <div class="section-title">Vertailu kategorioittain</div>
+  <div id="compareWrap"></div>
+</div>
+
+<!-- SÄÄNNÖT -->
+<div class="tab-content" id="tab-san">
+  <div class="rules-wrap">
+    <div class="section-title" style="margin-top:0">Kategorisointisäännöt</div>
+    <p style="font-size:0.78rem;color:var(--muted);margin-bottom:1rem">Hakusana etsitään saajan/paikan nimestä. Ensimmäinen osuma voittaa. Kun kategorisoit tapahtuman, sääntö lisätään automaattisesti.</p>
+    <div id="rulesList"></div>
+    <div style="margin-top:1rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
+      <input class="rule-input" id="nKw" placeholder="Hakusana" style="width:160px">
+      <input class="rule-input" id="nCat" placeholder="Kategoria" style="width:150px">
+      <select class="rule-select" id="nType">
+        <option value="needs">Needs</option><option value="wants" selected>Wants</option>
+        <option value="savings">Savings</option><option value="income">Tulo</option><option value="neutral">Neutraali (ohita)</option>
+      </select>
+      <button class="btn btn-green" onclick="addRule()">+ Lisää</button>
+    </div>
+  </div>
+  <p style="font-size:0.72rem;color:var(--muted)">Säännöt tallentuvat selaimen muistiin. Vie JSON-varmuuskopio säännöllisesti.</p>
+</div>
+
+<!-- SALDOT -->
+<div class="tab-content" id="tab-sal">
+  <div class="section-title" style="margin-top:0">Lähtösaldot</div>
+  <div class="saldo-grid">
+    <div class="saldo-card"><div class="saldo-label">OP Perustili</div><input class="saldo-input" id="sPerus" type="number" placeholder="0.00" oninput="saveSaldot()"></div>
+    <div class="saldo-card"><div class="saldo-label">OP Säästötili</div><input class="saldo-input" id="sSaasto" type="number" placeholder="0.00" oninput="saveSaldot()"></div>
+    <div class="saldo-card"><div class="saldo-label">Säästölipas</div><input class="saldo-input" id="sLipas" type="number" placeholder="0.00" oninput="saveSaldot()"></div>
+    <div class="saldo-card"><div class="saldo-label">OP Visa Credit (velka −)</div><input class="saldo-input" id="sOPCredit" type="number" placeholder="0.00" oninput="saveSaldot()"></div>
+    <div class="saldo-card"><div class="saldo-label">Finnair Visa (velka −)</div><input class="saldo-input" id="sFinnair" type="number" placeholder="0.00" oninput="saveSaldot()"></div>
+    <div class="saldo-card"><div class="saldo-label">Muu velka (−)</div><input class="saldo-input" id="sMuu" type="number" placeholder="0.00" oninput="saveSaldot()"></div>
+  </div>
+  <div class="netto-card">
+    <div>
+      <div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.3rem">Nettovarallisuus yhteensä</div>
+      <div style="font-family:'Syne',sans-serif;font-size:2rem;font-weight:700" id="nettoTotal">0 €</div>
+    </div>
+    <div style="font-size:0.78rem;color:var(--muted);text-align:right">Varat − velat</div>
+  </div>
+</div>
+
+<script>
+// STATE
+let txs = [], rules = [], saldot = {}, selMonths = [], curFilter = 'all', curSearch = '';
+
+const CATS = [
+  {name:'Palkka ja tulot',type:'income'},{name:'Sijoittaminen',type:'savings'},{name:'Säästöt',type:'savings'},
+  {name:'Säästölipas',type:'savings'},{name:'Luotot — lyhennys',type:'needs'},{name:'Luotot — korko',type:'needs'},
+  {name:'Asuminen',type:'needs'},{name:'Päivittäistavarat',type:'needs'},{name:'Suoratoisto & liittymät',type:'needs'},
+  {name:'Liikkuminen — arki',type:'needs'},{name:'Ostokset',type:'wants'},{name:'Ravintolat',type:'wants'},
+  {name:'Baarit',type:'wants'},{name:'Kahvilat',type:'wants'},{name:'Matkailu — harrastus',type:'wants'},
+  {name:'MobilePay & siirrot',type:'neutral'},{name:'Muut',type:'wants'},
+];
+
+const DEF_RULES = [
+  {kw:'ykkös-ja onnikodit',cat:'Palkka ja tulot',type:'income'},{kw:'palkka',cat:'Palkka ja tulot',type:'income'},
+  {kw:'säästötavoitteeseen',cat:'Säästölipas',type:'savings'},
+  {kw:'nordnet',cat:'Sijoittaminen',type:'savings'},{kw:'säänn.sääst',cat:'Sijoittaminen',type:'savings'},
+  {kw:'op-kiina',cat:'Sijoittaminen',type:'savings'},{kw:'op-maailma',cat:'Sijoittaminen',type:'savings'},
+  {kw:'op-amerikka',cat:'Sijoittaminen',type:'savings'},{kw:'op-eurooppa',cat:'Sijoittaminen',type:'savings'},
+  {kw:'rollover fee',cat:'Luotot — korko',type:'needs'},{kw:'within limit interest',cat:'Luotot — korko',type:'needs'},
+  {kw:'overdue interest',cat:'Luotot — korko',type:'needs'},{kw:'visa credit korko',cat:'Luotot — korko',type:'needs'},
+  {kw:'visa credit suoritus',cat:'Luotot — lyhennys',type:'needs'},{kw:'aktia bank',cat:'Luotot — lyhennys',type:'needs'},
+  {kw:'op yrityspankki',cat:'Luotot — lyhennys',type:'needs'},{kw:'op vähittäis',cat:'Luotot — lyhennys',type:'needs'},
+  {kw:'kaarlo henri',cat:'Luotot — lyhennys',type:'needs'},{kw:'kellberg hen',cat:'Luotot — lyhennys',type:'needs'},
+  {kw:'vastike',cat:'Asuminen',type:'needs'},{kw:'vuokra',cat:'Asuminen',type:'needs'},{kw:'sähkö',cat:'Asuminen',type:'needs'},
+  {kw:'ykkös-ja',cat:'Asuminen',type:'needs'},
+  {kw:'k-market',cat:'Päivittäistavarat',type:'needs'},{kw:'alepa',cat:'Päivittäistavarat',type:'needs'},
+  {kw:'lidl',cat:'Päivittäistavarat',type:'needs'},{kw:'s-market',cat:'Päivittäistavarat',type:'needs'},
+  {kw:'prisma',cat:'Päivittäistavarat',type:'needs'},{kw:'rimi',cat:'Päivittäistavarat',type:'needs'},
+  {kw:'pingo doce',cat:'Päivittäistavarat',type:'needs'},{kw:'dunaspar',cat:'Päivittäistavarat',type:'needs'},
+  {kw:'elisa',cat:'Suoratoisto & liittymät',type:'needs'},{kw:'telia',cat:'Suoratoisto & liittymät',type:'needs'},
+  {kw:'spotify',cat:'Suoratoisto & liittymät',type:'needs'},{kw:'apple.com',cat:'Suoratoisto & liittymät',type:'needs'},
+  {kw:'netflix',cat:'Suoratoisto & liittymät',type:'needs'},
+  {kw:'mob.pay*helsingin s',cat:'Liikkuminen — arki',type:'needs'},{kw:'mob.pay*vr',cat:'Liikkuminen — arki',type:'needs'},
+  {kw:'neste',cat:'Liikkuminen — arki',type:'needs'},{kw:'bolt',cat:'Liikkuminen — arki',type:'needs'},
+  {kw:'espresso house',cat:'Kahvilat',type:'wants'},{kw:'cafes buondi',cat:'Kahvilat',type:'wants'},
+  {kw:'reids gelataria',cat:'Kahvilat',type:'wants'},{kw:'kalakukkoleipomo',cat:'Kahvilat',type:'wants'},
+  {kw:'ravintola',cat:'Ravintolat',type:'wants'},{kw:'onnes',cat:'Ravintolat',type:'wants'},
+  {kw:'restoran',cat:'Ravintolat',type:'wants'},{kw:'restaurante',cat:'Ravintolat',type:'wants'},
+  {kw:'friends & brgrs',cat:'Ravintolat',type:'wants'},{kw:'hesburger',cat:'Ravintolat',type:'wants'},
+  {kw:'wolt',cat:'Ravintolat',type:'wants'},{kw:'chez marius',cat:'Ravintolat',type:'wants'},
+  {kw:'bon kuopio',cat:'Ravintolat',type:'wants'},{kw:'filhos do mar',cat:'Ravintolat',type:'wants'},
+  {kw:'apolo',cat:'Ravintolat',type:'wants'},{kw:'tapas',cat:'Ravintolat',type:'wants'},
+  {kw:'atlantic',cat:'Ravintolat',type:'wants'},{kw:'infante',cat:'Ravintolat',type:'wants'},
+  {kw:'papa manuel',cat:'Ravintolat',type:'wants'},{kw:'mm lado ar',cat:'Ravintolat',type:'wants'},
+  {kw:'funchal tb',cat:'Ravintolat',type:'wants'},{kw:'panorama resort',cat:'Ravintolat',type:'wants'},
+  {kw:'augello',cat:'Baarit',type:'wants'},{kw:'vintagebar',cat:'Baarit',type:'wants'},
+  {kw:'alko',cat:'Baarit',type:'wants'},{kw:'liviko',cat:'Baarit',type:'wants'},
+  {kw:'fairytale',cat:'Baarit',type:'wants'},{kw:'paypayue',cat:'Baarit',type:'wants'},
+  {kw:'mystar',cat:'Baarit',type:'wants'},{kw:'manns',cat:'Baarit',type:'wants'},
+  {kw:'mob.pay*veikkaus',cat:'Baarit',type:'wants'},
+  {kw:'aurinkomatkat',cat:'Matkailu — harrastus',type:'wants'},{kw:'finnair',cat:'Matkailu — harrastus',type:'wants'},
+  {kw:'agencia viagens',cat:'Matkailu — harrastus',type:'wants'},{kw:'welcome madeira',cat:'Matkailu — harrastus',type:'wants'},
+  {kw:'htl vila porto',cat:'Matkailu — harrastus',type:'wants'},{kw:'metropol spa',cat:'Matkailu — harrastus',type:'wants'},
+  {kw:'cover me',cat:'Ostokset',type:'wants'},{kw:'modest dog',cat:'Ostokset',type:'wants'},
+  {kw:'coursiv',cat:'Ostokset',type:'wants'},{kw:'madeira duty free',cat:'Ostokset',type:'wants'},
+  {kw:'mob.pay*ari',cat:'MobilePay & siirrot',type:'neutral'},{kw:'mob.pay*henri',cat:'MobilePay & siirrot',type:'neutral'},
+  {kw:'kellberg henrikki',cat:'MobilePay & siirrot',type:'neutral'},{kw:'kellberg leena',cat:'MobilePay & siirrot',type:'neutral'},
+];
+
+// PERSISTENCE
+function load() {
+  try {
+    const t=localStorage.getItem('b2_tx'), r=localStorage.getItem('b2_rules'), s=localStorage.getItem('b2_sal');
+    txs = t ? JSON.parse(t) : [];
+    rules = r ? JSON.parse(r) : [...DEF_RULES];
+    saldot = s ? JSON.parse(s) : {};
+  } catch(e) { rules=[...DEF_RULES]; }
+}
+function save() {
+  try {
+    localStorage.setItem('b2_tx', JSON.stringify(txs));
+    localStorage.setItem('b2_rules', JSON.stringify(rules));
+    localStorage.setItem('b2_sal', JSON.stringify(saldot));
+  } catch(e) { alert('Tallennusvirhe — vie JSON varmuuskopioksi!'); }
+}
+
+// CSV PARSE
+function detectFmt(text) {
+  return text.split('\n')[0].includes('Maksupäivä') ? 'finnair' : 'op';
+}
+function parseFile(text, fname) {
+  const fmt = detectFmt(text);
+  const rows = [], lines = text.split('\n').filter(l=>l.trim());
+  if (fmt === 'finnair') {
+    for (let i=1;i<lines.length;i++) {
+      const c = splitCSV(lines[i], ',');
+      if (c.length < 9) continue;
+      const amt = parseFloat(c[8]);
+      if (isNaN(amt)) continue;
+      const payee = c[1].replace(/"/g,'').trim();
+      rows.push({ id:`FI_${c[0]}_${payee}_${amt}`, date:c[0].trim(), payee, selitys:'Finnair Visa', viesti:'', amount:amt, source:'Finnair Visa', cat:null, type:null });
+    }
+  } else {
+    for (let i=1;i<lines.length;i++) {
+      const c = lines[i].split(';').map(x=>x.replace(/^"|"$/g,'').trim());
+      if (c.length<6) continue;
+      const amt = parseFloat((c[2]||'').replace(',','.'));
+      if (isNaN(amt)) continue;
+      rows.push({ id:c[10]||`OP_${c[0]}_${c[5]}_${amt}`, date:c[0], payee:c[5]||'', selitys:c[4]||'', viesti:c[9]||'', amount:amt, source:fname||'OP', cat:null, type:null });
+    }
+  }
+  return rows;
+}
+function splitCSV(line, sep) {
+  const res=[]; let cur='', inQ=false;
+  for (const ch of line) {
+    if (ch==='"') { inQ=!inQ; } else if (ch===sep&&!inQ) { res.push(cur); cur=''; } else cur+=ch;
+  }
+  res.push(cur); return res;
+}
+
+// CATEGORIZE
+function catTx(tx) {
+  const txt = (tx.payee+' '+(tx.selitys||'')+' '+(tx.viesti||'')).toLowerCase();
+  for (const r of rules) if (txt.includes(r.kw.toLowerCase())) return {cat:r.cat,type:r.type};
+  if (tx.amount > 0) return {cat:'Palkka ja tulot',type:'income'};
+  return {cat:'— Kategorisoimatta',type:'flag'};
+}
+function catAll() { txs = txs.map(tx=>({...tx,...catTx(tx)})); }
+
+// FILE HANDLING
+function onFiles(e) { loadFiles(Array.from(e.target.files)); }
+function onDrop(e) { e.preventDefault(); document.getElementById('uploadArea').classList.remove('drag'); loadFiles(Array.from(e.dataTransfer.files)); }
+function loadFiles(files) {
+  let done=0;
+  files.forEach(f => {
+    const rd=new FileReader();
+    rd.onload=ev=>{
+      const newRows=parseFile(ev.target.result, f.name);
+      const ids=new Set(txs.map(t=>t.id));
+      const added=newRows.filter(r=>!ids.has(r.id));
+      txs.push(...added);
+      if (++done===files.length) { catAll(); save(); renderAll(); updateStatus(); }
+    };
+    rd.readAsText(f,'UTF-8');
+  });
+}
+
+// MONTHS
+function months() { return [...new Set(txs.map(t=>t.date.substring(0,7)))].sort().reverse(); }
+function curMonth() { return document.getElementById('msel')?.value||''; }
+function monthTxs(m) { return txs.filter(t=>t.date.startsWith(m)); }
+function fillMonthSels() {
+  const ms=months();
+  ['msel','mselKat'].forEach(id=>{
+    const el=document.getElementById(id); if(!el) return;
+    const v=el.value;
+    el.innerHTML=ms.map(m=>`<option value="${m}">${m}</option>`).join('');
+    if (v&&ms.includes(v)) el.value=v;
+  });
+}
+
+// FORMAT
+function eur(n) { return Math.abs(n).toLocaleString('fi-FI',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'; }
+function esigned(n) { return (n>=0?'+':'-')+eur(n); }
+function tcolor(t) { return t==='needs'?'var(--needs)':t==='wants'?'var(--wants)':t==='savings'?'var(--savings)':t==='income'?'var(--income)':'var(--muted)'; }
+function tbadge(t) { return t==='needs'?'badge-needs':t==='wants'?'badge-wants':t==='savings'?'badge-savings':'badge-neutral'; }
+function set(id,v) { const e=document.getElementById(id); if(e) e.textContent=v; }
+function pct(id,v) { const e=document.getElementById(id); if(e) e.style.width=Math.min(v,100)+'%'; }
+
+// RENDER ALL
+function renderAll() { fillMonthSels(); renderYht(); renderKat(); renderTx(); renderVer(); renderRules(); renderSaldot(); updateFlag(); }
+
+// YHTEENVETO
+function renderYht() {
+  const m=curMonth(); if(!m) return;
+  const mt=monthTxs(m);
+  const income=mt.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+  const needs=mt.filter(t=>t.type==='needs'&&t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0);
+  const wants=mt.filter(t=>t.type==='wants'&&t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0);
+  const sav=mt.filter(t=>t.type==='savings').reduce((s,t)=>s+Math.abs(t.amount),0);
+  const surplus=income-needs-wants-sav;
+  const rate=income>0?Math.round(sav/income*100):0;
+  const np=income>0?Math.round(needs/income*100):0;
+  const wp=income>0?Math.round(wants/income*100):0;
+  const sp=income>0?Math.round(sav/income*100):0;
+  set('vIncome',eur(income)); set('vNeeds',eur(needs)); set('vWants',eur(wants)); set('vSavings',eur(sav));
+  set('vNeedsSub',np+'% tuloista · tavoite 50%'); set('vWantsSub',wp+'% tuloista · tavoite 30%'); set('vSavingsSub',sp+'% tuloista · tavoite 20%');
+  set('vRate',rate+'%'); document.getElementById('vRate').style.color=rate>=20?'var(--needs)':'var(--danger)';
+  set('vSurplus',esigned(surplus)); set('vSurplusSub',surplus>=0?'Jäi yli':'Alijäämä');
+  document.getElementById('vSurplus').style.color=surplus>=0?'var(--needs)':'var(--danger)';
+  const netto=calcNetto(); set('vNetto',esigned(netto));
+  document.getElementById('vNetto').style.color=netto>=0?'var(--income)':'var(--danger)';
+  setTimeout(()=>{ pct('bNeeds',np/50*100); pct('bWants',wp/30*100); pct('bSavings',sp/20*100); },50);
+}
+
+// KATEGORIAT
+function renderKat() {
+  const m=document.getElementById('mselKat')?.value||curMonth(); if(!m) return;
+  const mt=monthTxs(m).filter(t=>t.type!=='neutral'&&t.type!=='flag');
+  const map={};
+  mt.forEach(tx=>{ if(!map[tx.cat]) map[tx.cat]={cat:tx.cat,type:tx.type,total:0,items:[]}; map[tx.cat].total+=Math.abs(tx.amount); map[tx.cat].items.push(tx); });
+  const cats=Object.values(map).sort((a,b)=>b.total-a.total);
+  const mx=cats[0]?.total||1;
+  document.getElementById('catGrid').innerHTML=cats.map(c=>`
+    <div class="cat-card">
+      <div class="cat-header">
+        <div><div class="cat-name">${c.cat}</div><span class="type-badge ${tbadge(c.type)}">${c.type}</span></div>
+        <div class="cat-amount" style="color:${tcolor(c.type)}">${eur(c.total)}</div>
+      </div>
+      <div class="cat-bar"><div class="cat-bar-fill" style="width:${Math.round(c.total/mx*100)}%;background:${tcolor(c.type)}"></div></div>
+      <div class="cat-items">${c.items.slice(0,5).map(tx=>`<div class="cat-item"><span>${tx.payee.substring(0,26)}</span><span>${eur(tx.amount)}</span></div>`).join('')}${c.items.length>5?`<div style="color:var(--muted);font-size:0.7rem;padding-top:0.2rem">+${c.items.length-5} lisää</div>`:''}</div>
+    </div>`).join('');
+}
+
+// TAPAHTUMAT
+function renderTx() {
+  const catOpts=CATS.map(c=>`<option value="${c.name}">${c.name}</option>`).join('');
+  let list=[...txs].sort((a,b)=>b.date.localeCompare(a.date));
+  if (curFilter==='needs') list=list.filter(t=>t.type==='needs');
+  else if (curFilter==='wants') list=list.filter(t=>t.type==='wants');
+  else if (curFilter==='savings') list=list.filter(t=>t.type==='savings');
+  else if (curFilter==='income') list=list.filter(t=>t.type==='income');
+  else if (curFilter==='flag') list=list.filter(t=>t.type==='flag');
+  if (curSearch) { const s=curSearch.toLowerCase(); list=list.filter(t=>t.payee.toLowerCase().includes(s)||(t.selitys||'').toLowerCase().includes(s)); }
+  document.getElementById('txBody').innerHTML=list.map(tx=>`
+    <tr>
+      <td style="color:var(--muted);white-space:nowrap;font-size:0.73rem">${tx.date}</td>
+      <td>${tx.type==='flag'?'<span style="color:var(--wants)">⚠️ </span>':''}${tx.payee.substring(0,30)}</td>
+      <td style="color:var(--muted);font-size:0.7rem">${(tx.source||'').substring(0,14)}</td>
+      <td><select class="cat-select" data-id="${tx.id}" onchange="setCat(this)"><option value="">— Valitse —</option>${catOpts}</select></td>
+      <td class="tx-amount ${tx.amount<0?'tx-neg':'tx-pos'}">${tx.amount<0?'-':'+'}${eur(tx.amount)}</td>
+    </tr>`).join('');
+  // Set current category values
+  document.getElementById('txBody').querySelectorAll('select').forEach((sel,i)=>{ if(list[i]?.cat) sel.value=list[i].cat; });
+}
+
+function setCat(sel) {
+  const id=sel.dataset.id, catName=sel.value;
+  const catObj=CATS.find(c=>c.name===catName); if(!catObj) return;
+  const tx=txs.find(t=>t.id===id); if(!tx) return;
+  tx.cat=catName; tx.type=catObj.type;
+  // Auto-add rule
+  const kw=tx.payee.toLowerCase().substring(0,22).trim();
+  if (kw&&!rules.find(r=>r.kw===kw)) rules.unshift({kw,cat:catName,type:catObj.type});
+  save(); updateFlag(); updateStatus();
+}
+
+function setFilter(f, btn) {
+  curFilter=f;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.className='filter-btn');
+  if (btn) btn.classList.add(f==='needs'?'fa':f==='wants'?'fw':f==='savings'?'fs':f==='flag'?'ff':'fa');
+  renderTx();
+}
+
+function updateFlag() {
+  const n=txs.filter(t=>t.type==='flag').length;
+  const b=document.getElementById('flagBanner');
+  if(b){b.style.display=n>0?'flex':'none'; set('flagText',`⚠️ ${n} tapahtumaa ilman kategoriaa`);}
+}
+
+// VERTAILU
+function renderVer() {
+  const ms=months();
+  document.getElementById('monthGrid').innerHTML=ms.map(m=>`
+    <div class="month-pill ${selMonths.includes(m)?'sel':''}" onclick="toggleMonth('${m}')">
+      <div class="month-pill-name">${m}</div>
+      <div class="month-pill-sum">${eur(monthTxs(m).filter(t=>t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0))}</div>
+    </div>`).join('');
+  if (!selMonths.length) { document.getElementById('compareWrap').innerHTML='<p style="color:var(--muted);font-size:0.82rem">Valitse kuukaudet ylhäältä vertailuun</p>'; return; }
+  const allCats=new Set();
+  selMonths.forEach(m=>monthTxs(m).forEach(t=>{ if(t.type!=='neutral'&&t.cat&&!t.cat.startsWith('—')) allCats.add(t.cat); }));
+  const catRows=[...allCats].map(cat=>{
+    const amounts=selMonths.map(m=>monthTxs(m).filter(t=>t.cat===cat).reduce((s,t)=>s+Math.abs(t.amount),0));
+    return {cat,amounts};
+  }).sort((a,b)=>Math.max(...b.amounts)-Math.max(...a.amounts));
+  const cols=selMonths.length;
+  const hdr=`<div class="compare-row"><div class="compare-cell lbl hdr">Kategoria</div>${selMonths.map(m=>`<div class="compare-cell hdr">${m}</div>`).join('')}</div>`;
+  const rowsHTML=catRows.map(r=>{
+    const positives=r.amounts.filter(a=>a>0);
+    const min=positives.length>1?Math.min(...positives):null;
+    const max=positives.length>1?Math.max(...positives):null;
+    const cells=r.amounts.map(a=>{
+      const cls=a===min&&min!==null?'better':a===max&&max!==null?'worse':'';
+      return `<div class="compare-cell ${cls}">${a>0?eur(a):'—'}</div>`;
+    }).join('');
+    return `<div class="compare-row"><div class="compare-cell lbl">${r.cat}</div>${cells}</div>`;
+  }).join('');
+  const totals=selMonths.map(m=>monthTxs(m).filter(t=>t.amount<0&&t.type!=='neutral').reduce((s,t)=>s+Math.abs(t.amount),0));
+  const totRow=`<div class="compare-row" style="background:var(--surface2)"><div class="compare-cell lbl" style="color:var(--text);font-family:'Syne',sans-serif;font-weight:600">YHTEENSÄ</div>${totals.map(t=>`<div class="compare-cell" style="color:var(--text)">${eur(t)}</div>`).join('')}</div>`;
+  document.getElementById('compareWrap').innerHTML=`<div class="compare-wrap">${hdr}${rowsHTML}${totRow}</div>`;
+}
+function toggleMonth(m) {
+  selMonths=selMonths.includes(m)?selMonths.filter(x=>x!==m):(selMonths.length<4?[...selMonths,m]:selMonths);
+  renderVer();
+}
+
+// SÄÄNNÖT
+function renderRules() {
+  document.getElementById('rulesList').innerHTML=rules.map((r,i)=>{
+    const n=txs.filter(tx=>(tx.payee+' '+(tx.selitys||'')).toLowerCase().includes(r.kw.toLowerCase())).length;
+    return `<div class="rule-row">
+      <input class="rule-input" value="${r.kw}" onchange="updRule(${i},'kw',this.value)" style="width:155px">
+      <input class="rule-input" value="${r.cat}" onchange="updRule(${i},'cat',this.value)" style="width:145px">
+      <select class="rule-select" onchange="updRule(${i},'type',this.value)">
+        <option value="needs" ${r.type==='needs'?'selected':''}>Needs</option>
+        <option value="wants" ${r.type==='wants'?'selected':''}>Wants</option>
+        <option value="savings" ${r.type==='savings'?'selected':''}>Savings</option>
+        <option value="income" ${r.type==='income'?'selected':''}>Tulo</option>
+        <option value="neutral" ${r.type==='neutral'?'selected':''}>Neutraali</option>
+      </select>
+      <span class="rule-match">${n>0?n+' osumaa':''}</span>
+      <button class="btn btn-red" style="padding:0.2rem 0.5rem;font-size:0.7rem" onclick="delRule(${i})">✕</button>
+    </div>`;
+  }).join('');
+}
+function addRule() {
+  const kw=document.getElementById('nKw').value.trim(), cat=document.getElementById('nCat').value.trim(), type=document.getElementById('nType').value;
+  if(!kw||!cat){alert('Täytä hakusana ja kategoria');return;}
+  rules.unshift({kw,cat,type}); document.getElementById('nKw').value=''; document.getElementById('nCat').value='';
+  catAll(); save(); renderAll();
+}
+function updRule(i,k,v) { rules[i][k]=v; catAll(); save(); renderAll(); }
+function delRule(i) { rules.splice(i,1); save(); renderRules(); }
+
+// SALDOT
+function saveSaldot() {
+  ['Perus','Saasto','Lipas','OPCredit','Finnair','Muu'].forEach(k=>{
+    const el=document.getElementById('s'+k); saldot[k]=el?parseFloat(el.value)||0:0;
+  });
+  save(); renderSaldot(); set('vNetto',esigned(calcNetto())); document.getElementById('vNetto').style.color=calcNetto()>=0?'var(--income)':'var(--danger)';
+}
+function renderSaldot() {
+  ['Perus','Saasto','Lipas','OPCredit','Finnair','Muu'].forEach(k=>{
+    const el=document.getElementById('s'+k); if(el&&saldot[k]!==undefined) el.value=saldot[k]||'';
+  });
+  const n=calcNetto(); set('nettoTotal',esigned(n)); document.getElementById('nettoTotal').style.color=n>=0?'var(--income)':'var(--danger)';
+}
+function calcNetto() { return ['Perus','Saasto','Lipas','OPCredit','Finnair','Muu'].reduce((s,k)=>s+(saldot[k]||0),0); }
+
+// EXPORT/IMPORT
+function exportData() {
+  const blob=new Blob([JSON.stringify({txs,rules,saldot,exported:new Date().toISOString()},null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=`budjetti-${new Date().toISOString().substring(0,10)}.json`; a.click();
+}
+function handleImport(e) {
+  const f=e.target.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=ev=>{ try{ const d=JSON.parse(ev.target.result); if(d.txs) txs=d.txs; if(d.rules) rules=d.rules; if(d.saldot) saldot=d.saldot; save(); renderAll(); alert(`Tuotu: ${txs.length} tapahtumaa`); }catch(e){alert('Virhe tuonnissa');} };
+  rd.readAsText(f);
+}
+function clearAll() { if(!confirm('Tyhjennä kaikki data? Vie JSON ensin!')) return; txs=[]; save(); renderAll(); }
+
+function updateStatus() { set('dataStatus',`${txs.length} tapahtumaa · ${months().length} kk`); }
+
+function showTab(id) {
+  const ids=['yht','kat','tx','ver','san','sal'];
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',ids[i]===id));
+  document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+}
+
+// INIT
+load(); renderAll(); updateStatus();
+</script>
+</body>
+</html>
