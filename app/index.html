@@ -497,7 +497,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.2.1';
+const APP_VERSION = '1.3.0';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 const API_SECRET = '8128f7da46a8a897b418f7f85a517bae788abeb3626d49a48840c232d2186248';
 
@@ -684,7 +684,7 @@ const DEF_ACCOUNTS = [
 
 // ── STATE ───────────────────────────────────────────────────────────────────
 let txs = [], rules = [], saldot = {}, selMonths = [];
-let accounts = [], settings = {salary_day:27, monthly_salary:3267};
+let accounts = [], settings = {salary_day:27, monthly_salary:3267}, actualBalances = {};
 let curMonth = '', curFilter = 'all', curSearch = '', curTab = 'yhteenveto', curCatFilter = '', curCatDrill = null;
 
 // ── TILILASKENTA ──────────────────────────────────────────────────────────────
@@ -821,6 +821,7 @@ async function initState() {
     txs    = JSON.parse(localStorage.getItem('ot_tx')    || '[]');
     accounts = JSON.parse(localStorage.getItem('ot_accounts') || 'null') || DEF_ACCOUNTS.map(a=>({...a}));
     settings = Object.assign({salary_day:27, monthly_salary:3267}, JSON.parse(localStorage.getItem('ot_settings') || '{}'));
+    actualBalances = JSON.parse(localStorage.getItem('ot_actualbal') || '{}');
   } catch(e) { rules = [...DEF_RULES]; saldot = {}; txs = []; accounts = DEF_ACCOUNTS.map(a=>({...a})); }
   if (!accounts.length) accounts = DEF_ACCOUNTS.map(a=>({...a}));
   curMonth = allMonths()[0] || fmtMonthKey(new Date());
@@ -1705,6 +1706,23 @@ function refreshSaldotSummary() {
 }
 
 function renderAcctEdit(bals) {
+  const chkRows = bals.map(b=>{
+    const act = actualBalances[b.key];
+    const has = act!==undefined && act!=='';
+    const diff = has ? (b.balance - parseFloat(act)) : null;
+    const col = diff===null?'var(--dim)':Math.abs(diff)<0.01?'var(--green)':'var(--red)';
+    return `<div style="display:grid;grid-template-columns:1.1fr 1fr 0.8fr;gap:8px;align-items:center;padding:5px 0;border-bottom:.5px solid var(--border)">
+      <div style="font-size:12px">${esc(b.label)}<div style="color:var(--dim);font-size:11px">laskettu ${eur(b.balance)}</div></div>
+      <input class="saldo-in" type="number" step="0.01" placeholder="todellinen €" value="${has?act:''}" onchange="saveActualBalance('${b.key}',this.value)">
+      <div id="chk_${b.key}" style="text-align:right;font-size:13px;font-weight:500;color:${col}">${diff===null?'—':esigned(diff)}</div>
+    </div>`;
+  }).join('');
+  const chkCard = `
+    <div class="saldo-card" style="border-top:2.5px solid var(--green)">
+      <div class="saldo-lbl" style="margin-bottom:8px">Tarkistus — laskettu vs. todellinen</div>
+      ${chkRows}
+      <div style="font-size:11px;color:var(--dim);margin-top:8px">Syötä tilin todellinen saldo pankista. Ero ≈ 0 → data aukoton. Iso ero → tapahtumia puuttuu tai on tuplana.</div>
+    </div>`;
   const salaryCard = `
     <div class="saldo-card" style="border-top:2.5px solid var(--blue)">
       <div class="saldo-lbl" style="margin-bottom:6px">Palkka</div>
@@ -1714,7 +1732,7 @@ function renderAcctEdit(bals) {
       </div>
       <div style="font-size:11px;color:var(--dim);margin-top:6px">Jos palkkapäivä osuu viikonlopulle/pyhälle, maksu siirtyy edelliseen pankkipäivään.</div>
     </div>`;
-  return '<div style="margin-top:12px;display:flex;flex-direction:column;gap:12px">' + salaryCard + bals.map(b=>`
+  return '<div style="margin-top:12px;display:flex;flex-direction:column;gap:12px">' + chkCard + salaryCard + bals.map(b=>`
     <div class="saldo-card">
       <div class="saldo-lbl" style="margin-bottom:6px">${esc(b.label)} <span style="color:var(--dim)">(${b.key})</span></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
@@ -1736,6 +1754,18 @@ function saveSetting(key, value) {
     fetch(`${API_BASE}/settings`, {method:'PUT', headers:apiHeaders(), body:JSON.stringify({[key]:settings[key]})}).catch(()=>{});
   }
   refreshSaldotSummary();
+}
+
+function saveActualBalance(key, val) {
+  actualBalances[key] = val;
+  try { localStorage.setItem('ot_actualbal', JSON.stringify(actualBalances)); } catch(e){}
+  const b = computeBalances().find(x=>x.key===key);
+  const span = document.getElementById('chk_'+key);
+  if (span && b) {
+    const diff = (val===''||val===undefined) ? null : (b.balance - parseFloat(val));
+    span.textContent = diff===null ? '—' : esigned(diff);
+    span.style.color = diff===null ? 'var(--dim)' : Math.abs(diff)<0.01 ? 'var(--green)' : 'var(--red)';
+  }
 }
 
 function saveAcctField(key, field, value) {
@@ -2083,7 +2113,7 @@ function addTx(tx) {
 
 // ── IMPORT / EXPORT ───────────────────────────────────────────────────────────
 function exportJSON() {
-  const blob = new Blob([JSON.stringify({txs,rules,saldot,accounts,settings,exported:new Date().toISOString()},null,2)],{type:'application/json'});
+  const blob = new Blob([JSON.stringify({txs,rules,saldot,accounts,settings,actualBalances,exported:new Date().toISOString()},null,2)],{type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `omattalous-${todayISO()}.json`;
@@ -2100,6 +2130,7 @@ function handleJSONInput(event) {
       if (d.saldot) saldot = d.saldot;
       if (d.accounts && d.accounts.length) accounts = d.accounts;
       if (d.settings) settings = Object.assign(settings, d.settings);
+      if (d.actualBalances) actualBalances = d.actualBalances;
       if (d.txs) {
         if (API_BASE) {
           // Lähetä tapahtumat D1:een erissä
