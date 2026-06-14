@@ -52,6 +52,13 @@ export default {
       // Summary
       if (method === 'GET' && path === '/summary') return handleSummary(req, env, url);
 
+      // Accounts & balances
+      if (path === '/accounts') {
+        if (method === 'GET') return handleAccountsList(env);
+        if (method === 'PUT') return handleAccountsPut(req, env);
+      }
+      if (method === 'GET' && path === '/balances') return handleBalances(env, url);
+
       // CSV import
       if (method === 'POST' && path === '/import/csv') return handleCSVImport(req, env);
 
@@ -187,15 +194,15 @@ async function handleTxCreate(req, env) {
   tx.id = tx.id || `manual_${Date.now()}_${Math.random().toString(36).substr(2,5)}`;
   tx.month = tx.date.substring(0,7);
   await env.DB.prepare(
-    'INSERT OR REPLACE INTO transactions (id,date,payee,selitys,viesti,amount,cat,type,source,month) VALUES (?,?,?,?,?,?,?,?,?,?)'
-  ).bind(tx.id,tx.date,tx.payee||'',tx.selitys||'',tx.viesti||'',tx.amount,tx.cat||null,tx.type||null,tx.source||'manual',tx.month).run();
+    'INSERT OR REPLACE INTO transactions (id,date,payee,selitys,viesti,amount,cat,type,source,account,month) VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+  ).bind(tx.id,tx.date,tx.payee||'',tx.selitys||'',tx.viesti||'',tx.amount,tx.cat||null,tx.type||null,tx.source||'manual',tx.account||'Perus',tx.month).run();
   return ok({ id: tx.id });
 }
 
 async function handleTxUpdate(req, env, id) {
   const decodedId = decodeURIComponent(id);
   const updates = await req.json();
-  const fields = ['cat','type','payee','amount','date'].filter(f=>updates[f]!==undefined);
+  const fields = ['cat','type','payee','amount','date','account'].filter(f=>updates[f]!==undefined);
   if (!fields.length) return err('Nothing to update');
   const sets = fields.map(f=>`${f}=?`).join(',');
   const vals = fields.map(f=>updates[f]);
@@ -223,6 +230,57 @@ async function handleSummary(req, env, url) {
   return ok({ month, income, needs, wants, savings, rate, surplus: income-needs-wants-savings });
 }
 
+// ── ACCOUNTS & BALANCES ───────────────────────────────────────────────────────
+async function handleAccountsList(env) {
+  const { results } = await env.DB.prepare('SELECT * FROM accounts ORDER BY sort, key').all();
+  return ok(results);
+}
+
+async function handleAccountsPut(req, env) {
+  const data = await req.json();
+  const list = Array.isArray(data) ? data : [data];
+  for (const a of list) {
+    if (!a.key) continue;
+    await env.DB.prepare(
+      `INSERT INTO accounts (key,label,kind,opening_balance,opening_date,credit_limit,apr,sort)
+       VALUES (?,?,?,?,?,?,?,?)
+       ON CONFLICT(key) DO UPDATE SET
+         label=excluded.label, kind=excluded.kind,
+         opening_balance=excluded.opening_balance, opening_date=excluded.opening_date,
+         credit_limit=excluded.credit_limit, apr=excluded.apr, sort=excluded.sort`
+    ).bind(a.key, a.label||a.key, a.kind||'checking',
+           a.opening_balance||0, a.opening_date||'2026-01-01',
+           a.credit_limit??null, a.apr??null, a.sort||0).run();
+  }
+  return ok({ ok: true });
+}
+
+// Saldo = opening_balance + Σ(tilin tapahtumat joiden date > opening_date)
+async function handleBalances(env, url) {
+  const asOf = url.searchParams.get('asOf') || new Date().toISOString().split('T')[0];
+  const { results: accts } = await env.DB.prepare('SELECT * FROM accounts ORDER BY sort, key').all();
+  const { results: txs }   = await env.DB.prepare('SELECT account, amount, date FROM transactions').all();
+  const accounts = accts.map(a => {
+    const delta = txs
+      .filter(t => t.account === a.key && t.date > a.opening_date && t.date <= asOf)
+      .reduce((s,t)=>s+t.amount, 0);
+    const balance = a.opening_balance + delta;
+    const r = { key:a.key, label:a.label, kind:a.kind, balance,
+                opening_balance:a.opening_balance, opening_date:a.opening_date };
+    if (a.kind === 'credit') {
+      r.credit_limit = a.credit_limit;
+      r.apr = a.apr;
+      r.available = (a.credit_limit || 0) + balance;             // balance on negatiivinen
+      r.utilization = a.credit_limit ? Math.min(Math.abs(balance)/a.credit_limit, 1) : 0;
+      r.est_monthly_interest = a.apr ? Math.abs(balance) * (a.apr/100) / 12 : null;
+    }
+    return r;
+  });
+  const assets = accounts.filter(a=>a.kind!=='credit').reduce((s,a)=>s+a.balance,0);
+  const debt   = accounts.filter(a=>a.kind==='credit').reduce((s,a)=>s+a.balance,0); // negatiivinen
+  return ok({ asOf, accounts, assets, debt, netWorth: assets + debt });
+}
+
 // ── CSV IMPORT ────────────────────────────────────────────────────────────────
 async function handleCSVImport(req, env) {
   const { csv, filename } = await req.json();
@@ -237,8 +295,8 @@ async function handleCSVImport(req, env) {
     const cat = categorize(row, rulesRows);
     row.month = row.date.substring(0,7);
     await env.DB.prepare(
-      'INSERT INTO transactions (id,date,payee,selitys,viesti,amount,cat,type,source,month) VALUES (?,?,?,?,?,?,?,?,?,?)'
-    ).bind(row.id,row.date,row.payee,row.selitys,row.viesti,row.amount,cat.cat,cat.type,row.source,row.month).run();
+      'INSERT INTO transactions (id,date,payee,selitys,viesti,amount,cat,type,source,account,month) VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+    ).bind(row.id,row.date,row.payee,row.selitys,row.viesti,row.amount,cat.cat,cat.type,row.source,row.account||'Perus',row.month).run();
     added++;
   }
   return ok({ added, total: rows.length });
@@ -280,7 +338,10 @@ async function handleSettingsPut(req, env) {
 function parseCSV(text, fname) {
   const lines = text.split('\n').filter(l=>l.trim());
   if (!lines.length) return [];
-  const isFinnair = lines[0].includes('Maksupäivä');
+  const head = lines[0] || '';
+  const isFinnair = head.includes('Maksupäivä');
+  const isRevolut = text.includes('Revolut') || text.includes('Tapahtumaote');
+  if (isRevolut && !isFinnair) return parseRevolut(lines, fname);
   const rows = [];
   for (let i=1; i<lines.length; i++) {
     if (isFinnair) {
@@ -289,16 +350,43 @@ function parseCSV(text, fname) {
       const amt = parseFloat(c[8]);
       if (isNaN(amt)) continue;
       const payee = c[1].replace(/"/g,'').trim();
-      rows.push({id:`FI_${c[0]}_${payee}_${amt}`, date:c[0].trim(), payee, selitys:'Finnair Visa', viesti:'', amount:amt, source:fname||'Finnair Visa'});
+      rows.push({id:`FI_${c[0]}_${payee}_${amt}`, date:c[0].trim(), payee, selitys:'Finnair Visa', viesti:'', amount:amt, source:fname||'Finnair Visa', account:'Finnair'});
     } else {
       const c = lines[i].split(';').map(x=>x.replace(/^"|"$/g,'').trim());
       if (c.length<6) continue;
       const amt = parseFloat((c[2]||'').replace(',','.'));
       if (isNaN(amt)) continue;
-      rows.push({id:c[10]||`OP_${c[0]}_${c[5]}_${amt}`, date:c[0], payee:c[5]||'', selitys:c[4]||'', viesti:c[9]||'', amount:amt, source:fname||'OP'});
+      rows.push({id:c[10]||`OP_${c[0]}_${c[5]}_${amt}`, date:c[0], payee:c[5]||'', selitys:c[4]||'', viesti:c[9]||'', amount:amt, source:fname||'OP', account:'Perus'});
     }
   }
   return rows;
+}
+
+// Revolut: monitiliote, osiot ja sisäiset taulut. Rivit alkavat P.K.VVVV-päivällä.
+// Sarakkeet: Päivämäärä,Kuvaus,Kategoria,"Saapuvat/lähtevät varat",Saldo,...
+function parseRevolut(lines, fname) {
+  const rows = [];
+  for (const line of lines) {
+    const c = splitCSV(line, ',').map(x=>x.replace(/^"|"$/g,'').trim());
+    if (c.length < 4) continue;
+    const d = c[0];
+    const m = d.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+    if (!m) continue;                                   // ei tapahtumarivi
+    const date = `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+    const amt = parseRevAmount(c[3]);
+    if (amt === null) continue;
+    const payee = c[1] || '';
+    const kat   = c[2] || '';
+    rows.push({id:`RV_${date}_${payee}_${amt}`, date, payee, selitys:kat, viesti:'Revolut', amount:amt, source:fname||'Revolut', account:'Revolut'});
+  }
+  return rows;
+}
+
+function parseRevAmount(s) {
+  if (!s) return null;
+  const cleaned = s.replace(/€/g,'').replace(/ /g,'').replace(/\s/g,'').replace(',', '.');
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? null : n;
 }
 
 function splitCSV(line, sep) {

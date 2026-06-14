@@ -2,6 +2,27 @@
 
 ---
 
+## v1.1.0 — Analytiikka & elävät luottokorttisaldot (toteutettu, odottaa deployta)
+
+Toteutettu suoriteperusteinen tilimalli. Ks. `SUUNNITELMA-analytiikka-velat.md`.
+- ✅ `accounts`-taulu + `transactions.account` (migraatio `api/migrations/002_accounts.sql`)
+- ✅ Lasketut saldot (alkusaldo + tapahtumat), korttinäkymä: velka/limit/käytettävissä/käyttöaste/korkoarvio
+- ✅ Runway: €/pv palkkaan, ennuste palkkapäivänä, päiväkulutus-mittari (efektiivinen palkkapäivä 27. → edellinen pankkipäivä)
+- ✅ Nettovelkaantuminen-mittari (rehellinen kuva velaksi elämisestä)
+- ✅ Double-counting-korjaus: `visa credit suoritus` → neutral
+- ✅ Revolut-CSV-parseri + tilikohdistus tuonnissa
+- ✅ Kategoriat laajennettu OP:n taksonomian mukaan (Kauneus, Vakuutukset, Terveys, Harrastukset, Polttoaine & auto, Lapset, Lemmikit) + needs/wants-linjaus
+- ✅ Tilivalitsin manuaali-/pika-/kuittisyöttöön + tx-muokkaukseen
+- ✅ Palkka-asetukset (kk-palkka, palkkapäivä) UI:ssa, "Aja säännöt uudelleen" -napit
+
+**Deploy-toimet (sinä):**
+1. `cd api && wrangler d1 execute oma-talous-db --remote --file=migrations/002_accounts.sql`
+2. `cd api && wrangler deploy`
+3. Pushaa repo → CF Pages deployaa appin
+4. Avaa Säännöt-välilehti → "Kategorisoi puuttuvat" (ja tarvittaessa "Aja säännöt uudelleen") → toukokuun täsmäytys OP:ta vastaan
+
+---
+
 ## Kehitysjonossa (prioriteettijärjestyksessä)
 
 ### Luottokortti-kirjanpito: double-counting bugi (KRIITTINEN)

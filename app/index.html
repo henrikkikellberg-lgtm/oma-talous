@@ -324,13 +324,15 @@ tr:hover td{background:var(--surface2)}
       <span>📂</span>
       <span>Vedä CSV tähän tai</span>
       <label style="color:var(--green);font-weight:500;cursor:pointer">valitse tiedostot<input type="file" accept=".csv" multiple hidden onchange="handleCSVInput(event)"></label>
-      <span style="color:var(--dim);font-size:12px">· OP Debit, OP Credit, Finnair Visa · duplikaatit poistetaan</span>
+      <span style="color:var(--dim);font-size:12px">· OP Debit, Finnair Visa, Revolut · duplikaatit poistetaan</span>
     </div>
     <div id="flagBannerMob" class="flag-banner mob-only" style="display:none">
       <span id="flagBannerMobText"></span>
       <button class="btn btn-secondary" style="height:28px;padding:0 10px;font-size:12px" onclick="switchTab('tapahtumat');setCurFilter('flag')">Kategorisoi →</button>
     </div>
+    <div id="runwayCard"></div>
     <div class="sum-grid" id="sumGrid"></div>
+    <div id="tipsCard"></div>
     <div id="recentTxs"></div>
   </div>
 
@@ -423,6 +425,7 @@ tr:hover td{background:var(--surface2)}
       </div>
       <div class="field-label" style="margin-bottom:6px">Tapahtumat</div>
       <div id="camGroups" style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px"></div>
+      <div class="field-group"><div class="field-label">Maksettu tililtä / kortilta</div><select class="field-input" id="camAccount"></select></div>
       <button class="btn btn-primary btn-full" onclick="saveCameraReceipt()">Tallenna</button>
     </div>
     <button class="modal-cancel" onclick="closeModal('cameraModal')">Peruuta</button>
@@ -447,6 +450,7 @@ tr:hover td{background:var(--surface2)}
         <div class="field-group" style="flex:1"><div class="field-label">Päivämäärä</div><input class="field-input" id="quickDate" type="date"></div>
       </div>
       <div class="field-group"><div class="field-label">Kategoria</div><div class="cat-chips" id="quickChips"></div></div>
+      <div class="field-group"><div class="field-label">Maksettu tililtä / kortilta</div><select class="field-input" id="quickAccount"></select></div>
       <button class="btn btn-primary btn-full" onclick="saveQuick()">Tallenna</button>
     </div>
     <button class="modal-cancel" onclick="closeModal('quickModal')">Peruuta</button>
@@ -464,6 +468,7 @@ tr:hover td{background:var(--surface2)}
       <div class="field-group" style="flex:1"><div class="field-label">Päivämäärä</div><input class="field-input" id="manDate" type="date"></div>
     </div>
     <div class="field-group"><div class="field-label">Kategoria</div><div class="cat-chips" id="manChips"></div></div>
+    <div class="field-group"><div class="field-label">Maksettu tililtä / kortilta</div><select class="field-input" id="manAccount"></select></div>
     <button class="btn btn-primary btn-full" onclick="saveManual()">Tallenna</button>
     <button class="modal-cancel" onclick="closeModal('manualModal')">Peruuta</button>
   </div>
@@ -481,6 +486,7 @@ tr:hover td{background:var(--surface2)}
       <div id="txEditAmt" style="font-size:22px;font-weight:300;color:var(--text)"></div>
     </div>
     <div class="field-group"><div class="field-label">Kategoria</div><div class="cat-chips" id="txEditChips"></div></div>
+    <div class="field-group"><div class="field-label">Maksettu tililtä / kortilta</div><select class="field-input" id="txEditAccount"></select></div>
     <button class="btn btn-primary btn-full" onclick="saveTxEdit()">Tallenna</button>
     <button class="btn btn-full" style="background:var(--red-light);color:var(--red);border:none;height:44px;border-radius:var(--radius);font-size:15px;font-weight:500;margin-top:6px" onclick="deleteTxEdit()">Poista tapahtuma</button>
     <button class="modal-cancel" onclick="closeModal('txEditModal')">Peruuta</button>
@@ -491,7 +497,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.1.0';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 const API_SECRET = '8128f7da46a8a897b418f7f85a517bae788abeb3626d49a48840c232d2186248';
 
@@ -502,21 +508,33 @@ const CATS = [
   {name:'Sijoittaminen',          type:'savings', icon:'📈'},
   {name:'Säästöt',                type:'savings', icon:'🏦'},
   {name:'Säästölipas',            type:'savings', icon:'🐷'},
-  {name:'Luotot — lyhennys',      type:'needs',   icon:'🏠'},
-  {name:'Luotot — korko',         type:'needs',   icon:'💳'},
+  // ── Välttämättömyydet (needs) ──
   {name:'Asuminen',               type:'needs',   icon:'🏡'},
   {name:'Päivittäistavarat',      type:'needs',   icon:'🛒'},
   {name:'Suoratoisto & liittymät',type:'needs',   icon:'📱'},
-  {name:'Liikkuminen — arki',     type:'needs',   icon:'🚗'},
+  {name:'Liikkuminen — arki',     type:'needs',   icon:'🚌'},
+  {name:'Polttoaine & auto',      type:'needs',   icon:'⛽'},
+  {name:'Terveys',                type:'needs',   icon:'💊'},
+  {name:'Vakuutukset',            type:'needs',   icon:'🛡️'},
+  {name:'Lapset',                 type:'needs',   icon:'🧸'},
+  {name:'Lemmikit',               type:'needs',   icon:'🐾'},
+  {name:'Luotot — lyhennys',      type:'needs',   icon:'🏠'},
+  {name:'Luotot — korko',         type:'needs',   icon:'💳'},
+  {name:'Muut välttämättömyydet', type:'needs',   icon:'🧾'},
+  // ── Huvit ja hyödyt (wants) ──
   {name:'Ostokset',               type:'wants',   icon:'🛍️'},
   {name:'Ravintolat',             type:'wants',   icon:'🍽️'},
   {name:'Lounas',                 type:'wants',   icon:'🥗'},
   {name:'Baarit',                 type:'wants',   icon:'🍺'},
   {name:'Alkoholi',               type:'wants',   icon:'🍷'},
   {name:'Kahvilat',               type:'wants',   icon:'☕'},
+  {name:'Kauneus ja hyvinvointi', type:'wants',   icon:'💇'},
+  {name:'Harrastukset',           type:'wants',   icon:'🎯'},
+  {name:'Kulttuuri ja viihde',    type:'wants',   icon:'🎬'},
   {name:'Matkailu — harrastus',   type:'wants',   icon:'✈️'},
-  {name:'MobilePay & siirrot',    type:'neutral', icon:'📲'},
   {name:'Muut',                   type:'wants',   icon:'📦'},
+  // ── Neutraali ──
+  {name:'MobilePay & siirrot',    type:'neutral', icon:'📲'},
 ];
 
 const GROUP_CAT_MAP = {
@@ -546,7 +564,7 @@ const DEF_RULES = [
   {kw:'within limit interest',cat:'Luotot — korko',type:'needs'},
   {kw:'overdue interest',cat:'Luotot — korko',type:'needs'},
   {kw:'visa credit korko',cat:'Luotot — korko',type:'needs'},
-  {kw:'visa credit suoritus',cat:'Luotot — lyhennys',type:'needs'},
+  {kw:'visa credit suoritus',cat:'MobilePay & siirrot',type:'neutral'},
   {kw:'aktia bank',cat:'Luotot — lyhennys',type:'needs'},
   {kw:'op yrityspankki',cat:'Luotot — lyhennys',type:'needs'},
   {kw:'op vähittäis',cat:'Luotot — lyhennys',type:'needs'},
@@ -569,7 +587,15 @@ const DEF_RULES = [
   {kw:'netflix',cat:'Suoratoisto & liittymät',type:'needs'},
   {kw:'mob.pay*helsingin s',cat:'Liikkuminen — arki',type:'needs'},
   {kw:'mob.pay*vr',cat:'Liikkuminen — arki',type:'needs'},
-  {kw:'neste',cat:'Liikkuminen — arki',type:'needs'},
+  {kw:'neste',cat:'Polttoaine & auto',type:'needs'},
+  {kw:'abc-',cat:'Polttoaine & auto',type:'needs'},
+  {kw:'st1',cat:'Polttoaine & auto',type:'needs'},
+  {kw:'teboil',cat:'Polttoaine & auto',type:'needs'},
+  {kw:'shell',cat:'Polttoaine & auto',type:'needs'},
+  {kw:'easypark',cat:'Polttoaine & auto',type:'needs'},
+  {kw:'q-park',cat:'Polttoaine & auto',type:'needs'},
+  {kw:'aimo park',cat:'Polttoaine & auto',type:'needs'},
+  {kw:'autohuolto',cat:'Polttoaine & auto',type:'needs'},
   {kw:'bolt',cat:'Liikkuminen — arki',type:'needs'},
   {kw:'espresso house',cat:'Kahvilat',type:'wants'},
   {kw:'cafes buondi',cat:'Kahvilat',type:'wants'},
@@ -592,13 +618,156 @@ const DEF_RULES = [
   {kw:'mob.pay*henri',cat:'MobilePay & siirrot',type:'neutral'},
   {kw:'kellberg henrikki',cat:'MobilePay & siirrot',type:'neutral'},
   {kw:'kellberg leena',cat:'MobilePay & siirrot',type:'neutral'},
+  // ── Vakuutukset (needs) ──
+  {kw:'vakuutus',cat:'Vakuutukset',type:'needs'},
+  {kw:'lähitapiola',cat:'Vakuutukset',type:'needs'},
+  {kw:'pohjola vakuutus',cat:'Vakuutukset',type:'needs'},
+  {kw:'op vakuutus',cat:'Vakuutukset',type:'needs'},
+  {kw:'mandatum',cat:'Vakuutukset',type:'needs'},
+  {kw:'fennia',cat:'Vakuutukset',type:'needs'},
+  {kw:'if vahinko',cat:'Vakuutukset',type:'needs'},
+  {kw:'turva',cat:'Vakuutukset',type:'needs'},
+  // ── Terveys (needs) ──
+  {kw:'apteekki',cat:'Terveys',type:'needs'},
+  {kw:'apteek',cat:'Terveys',type:'needs'},
+  {kw:'terveystalo',cat:'Terveys',type:'needs'},
+  {kw:'mehiläinen',cat:'Terveys',type:'needs'},
+  {kw:'pihlajalinna',cat:'Terveys',type:'needs'},
+  {kw:'hammas',cat:'Terveys',type:'needs'},
+  // ── Kauneus ja hyvinvointi (wants) ──
+  {kw:'parturi',cat:'Kauneus ja hyvinvointi',type:'wants'},
+  {kw:'kampaamo',cat:'Kauneus ja hyvinvointi',type:'wants'},
+  {kw:'barber',cat:'Kauneus ja hyvinvointi',type:'wants'},
+  {kw:'hieronta',cat:'Kauneus ja hyvinvointi',type:'wants'},
+  {kw:'kosmetolog',cat:'Kauneus ja hyvinvointi',type:'wants'},
+  // ── Kulttuuri ja viihde (wants) ──
+  {kw:'finnkino',cat:'Kulttuuri ja viihde',type:'wants'},
+  {kw:'steam',cat:'Kulttuuri ja viihde',type:'wants'},
+  {kw:'playstation',cat:'Kulttuuri ja viihde',type:'wants'},
+  {kw:'nintendo',cat:'Kulttuuri ja viihde',type:'wants'},
+  {kw:'teatteri',cat:'Kulttuuri ja viihde',type:'wants'},
+  {kw:'disney',cat:'Kulttuuri ja viihde',type:'wants'},
+  {kw:'hbo',cat:'Kulttuuri ja viihde',type:'wants'},
+  {kw:'viaplay',cat:'Kulttuuri ja viihde',type:'wants'},
+  // ── Harrastukset (wants) ──
+  {kw:'kuntosali',cat:'Harrastukset',type:'wants'},
+  {kw:'elixia',cat:'Harrastukset',type:'wants'},
+  {kw:'fitness24',cat:'Harrastukset',type:'wants'},
+  {kw:'xxl',cat:'Harrastukset',type:'wants'},
+  {kw:'intersport',cat:'Harrastukset',type:'wants'},
+  // ── Lemmikit (needs) ──
+  {kw:'musti ja mirri',cat:'Lemmikit',type:'needs'},
+  {kw:'eläinlääk',cat:'Lemmikit',type:'needs'},
+  // ── Muut välttämättömyydet (needs) ──
+  {kw:'verohallinto',cat:'Muut välttämättömyydet',type:'needs'},
+  {kw:'ulosotto',cat:'Muut välttämättömyydet',type:'needs'},
+  // ── Revolut sisäiset siirrot (neutral) ──
+  {kw:'rahanlisäys',cat:'MobilePay & siirrot',type:'neutral'},
+  {kw:'revpoints',cat:'MobilePay & siirrot',type:'neutral'},
+  {kw:'transfer to revolut',cat:'MobilePay & siirrot',type:'neutral'},
 ];
 
 const MONTHS_FI = ['Tammikuu','Helmikuu','Maaliskuu','Huhtikuu','Toukokuu','Kesäkuu','Heinäkuu','Elokuu','Syyskuu','Lokakuu','Marraskuu','Joulukuu'];
 
+// ── TILIT (lasketut saldot) ───────────────────────────────────────────────────
+const DEF_ACCOUNTS = [
+  {key:'Perus',   label:'OP Perustili',   kind:'checking', opening_balance:826.20,   opening_date:'2026-06-14', credit_limit:null, apr:null,   sort:1},
+  {key:'Saasto',  label:'OP Säästötili',  kind:'savings',  opening_balance:13601.21, opening_date:'2026-06-14', credit_limit:null, apr:null,   sort:2},
+  {key:'Lipas',   label:'OP Säästölipas', kind:'savings',  opening_balance:6009.04,  opening_date:'2026-06-14', credit_limit:null, apr:null,   sort:3},
+  {key:'OPCredit',label:'OP Visa Credit', kind:'credit',   opening_balance:-2482.23, opening_date:'2026-06-14', credit_limit:8000, apr:11.054, sort:4},
+  {key:'Finnair', label:'Finnair Visa',   kind:'credit',   opening_balance:-4921.92, opening_date:'2026-06-14', credit_limit:8000, apr:15.51,  sort:5},
+  {key:'Revolut', label:'Revolut',        kind:'checking', opening_balance:0,        opening_date:'2026-04-26', credit_limit:null, apr:null,   sort:6},
+];
+
 // ── STATE ───────────────────────────────────────────────────────────────────
 let txs = [], rules = [], saldot = {}, selMonths = [];
+let accounts = [], settings = {salary_day:27, monthly_salary:3267};
 let curMonth = '', curFilter = 'all', curSearch = '', curTab = 'yhteenveto', curCatFilter = '', curCatDrill = null;
+
+// ── TILILASKENTA ──────────────────────────────────────────────────────────────
+let lastAccount = (typeof localStorage!=='undefined' && localStorage.getItem('ot_lastacct')) || 'Perus';
+function accountByKey(k) { return accounts.find(a=>a.key===k) || null; }
+function fillAccountSelect(id, sel) {
+  const el = document.getElementById(id); if (!el) return;
+  const want = sel || lastAccount || 'Perus';
+  el.innerHTML = accounts.map(a=>`<option value="${a.key}"${a.key===want?' selected':''}>${esc(a.label)}</option>`).join('');
+}
+function rememberAccount(k) { lastAccount = k; try { localStorage.setItem('ot_lastacct', k); } catch(e){} }
+function computeBalances(asOf) {
+  asOf = asOf || todayISO();
+  return accounts.map(a => {
+    const delta = txs
+      .filter(t => t.account === a.key && t.date > a.opening_date && t.date <= asOf)
+      .reduce((s,t)=>s+(+t.amount||0), 0);
+    const balance = a.opening_balance + delta;
+    const r = {...a, balance};
+    if (a.kind === 'credit') {
+      r.available    = (a.credit_limit||0) + balance;                 // balance negatiivinen
+      r.utilization  = a.credit_limit ? Math.min(Math.abs(balance)/a.credit_limit, 1) : 0;
+      r.est_monthly_interest = a.apr ? Math.abs(balance)*(a.apr/100)/12 : null;
+    }
+    return r;
+  });
+}
+function balanceOf(key, asOf) { const b = computeBalances(asOf).find(x=>x.key===key); return b ? b.balance : 0; }
+
+// ── PALKKAPÄIVÄ & RUNWAY ──────────────────────────────────────────────────────
+const FIXED_HOLIDAYS = ['01-01','01-06','05-01','12-06','12-24','12-25','12-26'];
+function isBankDay(d) {
+  const wd = d.getDay();
+  if (wd === 0 || wd === 6) return false;                            // la/su
+  const mmdd = String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  return !FIXED_HOLIDAYS.includes(mmdd);
+}
+// Efektiivinen palkkapäivä: salary_day, siirretään taaksepäin lähimpään pankkipäivään
+function effectivePayday(year, month) {
+  const day = settings.salary_day || 27;
+  let d = new Date(year, month, day);
+  while (!isBankDay(d)) d.setDate(d.getDate()-1);
+  return d;
+}
+function nextPaydayFrom(today) {
+  let p = effectivePayday(today.getFullYear(), today.getMonth());
+  if (p <= today) p = effectivePayday(today.getFullYear(), today.getMonth()+1);
+  return p;
+}
+function prevPaydayFrom(today) {
+  let p = effectivePayday(today.getFullYear(), today.getMonth());
+  if (p > today) p = effectivePayday(today.getFullYear(), today.getMonth()-1);
+  return p;
+}
+function daysBetween(a, b) { return Math.round((b - a) / 86400000); }
+function isoLocal(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
+// Runway-laskenta käyttötilille (Perus) tähän hetkeen
+function computeRunway() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const nextPay = nextPaydayFrom(today);
+  const prevPay = prevPaydayFrom(today);
+  const daysLeft = Math.max(daysBetween(today, nextPay), 0);
+  const periodLen = Math.max(daysBetween(prevPay, nextPay), 1);
+  const daysElapsed = Math.max(daysBetween(prevPay, today), 1);
+  const checking = balanceOf('Perus');
+  const startISO = isoLocal(prevPay);
+  const todayISOv = isoLocal(today);
+  const spentSoFar = txs
+    .filter(t => (t.type==='needs'||t.type==='wants') && t.amount<0 && t.date>=startISO && t.date<=todayISOv)
+    .reduce((s,t)=>s+Math.abs(t.amount), 0);
+  const avgDaily = spentSoFar / daysElapsed;
+  const dailyAllowance = daysLeft>0 ? checking/daysLeft : checking;
+  const projection = checking - avgDaily*daysLeft;            // tilin saldo palkkapäivänä (arvio)
+  const targetDaily = ((settings.monthly_salary||0)*0.8) / periodLen;
+  return {today, nextPay, prevPay, daysLeft, periodLen, daysElapsed, checking,
+          spentSoFar, avgDaily, dailyAllowance, projection, targetDaily};
+}
+
+// Nettovelkaantuminen kuukaudelle: korttiostot+korot − maksut korteille
+function netBorrowingForMonth(month) {
+  const credit = txs.filter(t => { const a=accountByKey(t.account); return a && a.kind==='credit' && t.date.startsWith(month); });
+  const purchasesAndInterest = credit.filter(t=>t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0);
+  const payments = credit.filter(t=>t.amount>0).reduce((s,t)=>s+t.amount,0);
+  return purchasesAndInterest - payments;     // positiivinen = velka kasvoi
+}
 
 // ── STORAGE ─────────────────────────────────────────────────────────────────
 function saveLocalState() {
@@ -606,6 +775,8 @@ function saveLocalState() {
     localStorage.setItem('ot_tx',    JSON.stringify(txs));
     localStorage.setItem('ot_rules', JSON.stringify(rules));
     localStorage.setItem('ot_sal',   JSON.stringify(saldot));
+    localStorage.setItem('ot_accounts', JSON.stringify(accounts));
+    localStorage.setItem('ot_settings', JSON.stringify(settings));
   } catch(e) { showToast('Tallennusvirhe — vie JSON!', 'err'); }
 }
 
@@ -639,11 +810,24 @@ async function initState() {
     rules  = JSON.parse(localStorage.getItem('ot_rules') || 'null') || [...DEF_RULES];
     saldot = JSON.parse(localStorage.getItem('ot_sal')   || '{}');
     txs    = JSON.parse(localStorage.getItem('ot_tx')    || '[]');
-  } catch(e) { rules = [...DEF_RULES]; saldot = {}; txs = []; }
+    accounts = JSON.parse(localStorage.getItem('ot_accounts') || 'null') || DEF_ACCOUNTS.map(a=>({...a}));
+    settings = Object.assign({salary_day:27, monthly_salary:3267}, JSON.parse(localStorage.getItem('ot_settings') || '{}'));
+  } catch(e) { rules = [...DEF_RULES]; saldot = {}; txs = []; accounts = DEF_ACCOUNTS.map(a=>({...a})); }
+  if (!accounts.length) accounts = DEF_ACCOUNTS.map(a=>({...a}));
   curMonth = allMonths()[0] || fmtMonthKey(new Date());
   renderAll();
 
   if (!API_BASE) return;
+
+  // Hae tilit + asetukset taustalla (ei estä renderöintiä)
+  fetch(`${API_BASE}/accounts`, { headers: apiHeaders() })
+    .then(r=>r.ok?r.json():null)
+    .then(rows=>{ if(Array.isArray(rows)&&rows.length){ accounts = rows; saveLocalState(); renderTab(curTab); } })
+    .catch(()=>{});
+  fetch(`${API_BASE}/settings`, { headers: apiHeaders() })
+    .then(r=>r.ok?r.json():null)
+    .then(s=>{ if(s){ settings = Object.assign(settings, {salary_day:+s.salary_day||27, monthly_salary:+s.monthly_salary||3267}); saveLocalState(); renderTab(curTab); } })
+    .catch(()=>{});
 
   try {
     const res = await fetch(`${API_BASE}/transactions`, { headers: apiHeaders() });
@@ -734,6 +918,8 @@ function parseCSVFile(text, fname) {
   const lines = text.split('\n').filter(l=>l.trim());
   if (!lines.length) return [];
   const isFinnair = lines[0].includes('Maksupäivä');
+  const isRevolut = (text.includes('Revolut') || text.includes('Tapahtumaote')) && !isFinnair;
+  if (isRevolut) return parseRevolutFile(lines, fname);
   const rows = [];
   for (let i=1; i<lines.length; i++) {
     if (isFinnair) {
@@ -742,16 +928,36 @@ function parseCSVFile(text, fname) {
       const amt = parseFloat(c[8]);
       if (isNaN(amt)) continue;
       const payee = c[1].replace(/"/g,'').trim();
-      rows.push({id:`FI_${c[0]}_${payee}_${amt}`, date:c[0].trim(), payee, selitys:'Finnair Visa', viesti:'', amount:amt, source:fname||'Finnair Visa', cat:null, type:null});
+      rows.push({id:`FI_${c[0]}_${payee}_${amt}`, date:c[0].trim(), payee, selitys:'Finnair Visa', viesti:'', amount:amt, source:fname||'Finnair Visa', account:'Finnair', cat:null, type:null});
     } else {
       const c = lines[i].split(';').map(x=>x.replace(/^"|"$/g,'').trim());
       if (c.length<6) continue;
       const amt = parseFloat((c[2]||'').replace(',','.'));
       if (isNaN(amt)) continue;
-      rows.push({id:c[10]||`OP_${c[0]}_${c[5]}_${amt}`, date:c[0], payee:c[5]||'', selitys:c[4]||'', viesti:c[9]||'', amount:amt, source:fname||'OP', cat:null, type:null});
+      rows.push({id:c[10]||`OP_${c[0]}_${c[5]}_${amt}`, date:c[0], payee:c[5]||'', selitys:c[4]||'', viesti:c[9]||'', amount:amt, source:fname||'OP', account:'Perus', cat:null, type:null});
     }
   }
   return rows;
+}
+
+function parseRevolutFile(lines, fname) {
+  const rows = [];
+  for (const line of lines) {
+    const c = splitCSV(line, ',').map(x=>x.replace(/^"|"$/g,'').trim());
+    if (c.length < 4) continue;
+    const m = (c[0]||'').match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+    if (!m) continue;
+    const date = m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+    const amt = parseRevAmount(c[3]);
+    if (amt === null) continue;
+    rows.push({id:`RV_${date}_${c[1]||''}_${amt}`, date, payee:c[1]||'', selitys:c[2]||'', viesti:'Revolut', amount:amt, source:fname||'Revolut', account:'Revolut', cat:null, type:null});
+  }
+  return rows;
+}
+function parseRevAmount(s) {
+  if (!s) return null;
+  const n = parseFloat(s.replace(/€/g,'').replace(/\s/g,'').replace(',','.'));
+  return isNaN(n) ? null : n;
 }
 
 function loadCSVFiles(files) {
@@ -916,7 +1122,71 @@ function renderTab(tab) {
 }
 
 // ── YHTEENVETO ────────────────────────────────────────────────────────────────
+function prevMonthKey(m) { const [y,mo]=m.split('-').map(Number); return fmtMonthKey(new Date(y, mo-2, 1)); }
+
+function renderRunwayCard() {
+  const el = document.getElementById('runwayCard'); if (!el) return;
+  if (curMonth !== fmtMonthKey(new Date())) { el.innerHTML = ''; return; }
+  const r = computeRunway();
+  const light = r.projection > 200 ? 'var(--green)' : r.projection >= 0 ? 'var(--gold)' : 'var(--red)';
+  const lightTxt = r.projection > 200 ? 'Hyvin menee' : r.projection >= 0 ? 'Tarkkana' : 'Varoitus';
+  const overPace = r.avgDaily > r.targetDaily;
+  const paceExpected = r.targetDaily * r.daysElapsed;
+  const pacePct = paceExpected > 0 ? Math.min(r.spentSoFar/paceExpected*100, 100) : 0;
+  el.innerHTML = `
+    <div class="sum-card" style="border-top:2.5px solid ${light};margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <div class="sum-label">Käytettävissä / päivä · ${r.daysLeft} pv palkkaan</div>
+        <span style="font-size:11px;font-weight:500;color:${light}">● ${lightTxt}</span>
+      </div>
+      <div class="sum-value" style="color:${light}">${eur(Math.max(r.dailyAllowance,0))}<span style="font-size:13px;color:var(--muted);font-weight:400"> /pv</span></div>
+      <div class="sum-sub">Käyttötili nyt ${eur(r.checking)} · palkka ${fmtDateLbl(isoLocal(r.nextPay))}</div>
+      <div style="margin-top:8px;display:flex;justify-content:space-between;font-size:12px">
+        <span style="color:var(--muted)">Kulutus ${eur(r.avgDaily)}/pv · tahti ${eur(r.targetDaily)}/pv</span>
+        <span style="color:${overPace?'var(--red)':'var(--green)'}">${overPace?'yli tahdin':'tahdissa'}</span>
+      </div>
+      <div class="sum-bar" style="margin-top:4px"><div class="sum-bar-fill" style="width:${pacePct}%;background:${overPace?'var(--red)':'var(--green)'}"></div></div>
+      <div class="sum-sub" style="margin-top:6px;color:${r.projection<0?'var(--red)':'var(--muted)'}">
+        Ennuste palkkapäivänä: ${esigned(r.projection)}${r.projection<0?' — vaje ennen palkkaa':''}
+      </div>
+    </div>`;
+}
+
+function buildTips(month) {
+  const tips = [];
+  const nb = netBorrowingForMonth(month);
+  if (nb > 0) tips.push(`Velka kasvoi <b>${eur(nb)}</b> tässä kuussa — osa kulutuksesta on velaksi.`);
+  else if (nb < 0) tips.push(`Lyhensit velkaa <b>${eur(-nb)}</b> tässä kuussa. 👍`);
+  const interest = txsForMonth(month).filter(t=>t.cat==='Luotot — korko').reduce((s,t)=>s+Math.abs(t.amount),0);
+  if (interest > 0) tips.push(`Maksoit korkoja ja kuluja <b>${eur(interest)}</b>. Korttivelan lyhennys pienentää tätä.`);
+  const s = monthSummary(txsForMonth(month));
+  const bInc = budgetIncomeForMonth(month).income;
+  if (bInc > 0) {
+    const sp = Math.round(s.sav/bInc*100);
+    if (sp < 20) tips.push(`Säästöaste ${sp}% (tavoite 20%) — lisää ~${eur(bInc*0.2 - s.sav)} päästäksesi tavoitteeseen.`);
+    const wp = Math.round(s.wants/bInc*100);
+    if (wp > 30) tips.push(`Wants ${wp}% tuloista (tavoite 30%) — karsi harkinnanvaraisia ${eur(s.wants - bInc*0.3)}.`);
+  }
+  const catTot = mn => { const o={}; txsForMonth(mn).filter(t=>t.type==='wants'&&t.amount<0).forEach(t=>{o[t.cat]=(o[t.cat]||0)+Math.abs(t.amount);}); return o; };
+  const cur = catTot(month), prev = catTot(prevMonthKey(month));
+  let top = null; Object.entries(cur).forEach(([c,v])=>{ if(!top||v>top.v) top={c,v}; });
+  if (top) { const pv = prev[top.c]||0; if (pv>0 && top.v>pv*1.2) tips.push(`${esc(top.c)} ${eur(top.v)} (viime kk ${eur(pv)}) — ${esigned(-(top.v-pv))}.`); }
+  return tips;
+}
+function renderTipsCard() {
+  const el = document.getElementById('tipsCard'); if (!el) return;
+  const tips = buildTips(curMonth);
+  if (!tips.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="sum-card" style="margin:4px 0 12px">
+    <div class="sum-label">💡 Vinkit · ${fmtMonthLbl(curMonth)}</div>
+    <ul style="margin:8px 0 0;padding-left:18px;font-size:13px;color:var(--text);line-height:1.6">
+      ${tips.map(t=>`<li>${t}</li>`).join('')}
+    </ul></div>`;
+}
+
 function renderYhteenveto() {
+  renderRunwayCard();
+  renderTipsCard();
   const list = txsForMonth(curMonth);
   const s = monthSummary(list);
   const bi = budgetIncomeForMonth(curMonth);
@@ -1256,7 +1526,38 @@ function renderSaannot() {
       <select class="rule-input" id="rType" style="cursor:pointer">${typeOpts}</select>
       <button class="btn btn-primary" onclick="addRule()">+ Lisää</button>
     </div>
-    <p style="font-size:12px;color:var(--dim);margin-top:12px">Säännöt tallentuvat selaimen muistiin. Vie JSON varmuuskopioksi.</p>`;
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+      <button class="btn btn-secondary" onclick="recategorize('missing')">🏷️ Kategorisoi puuttuvat</button>
+      <button class="btn btn-secondary" onclick="recategorize('all')">🔁 Aja säännöt uudelleen kaikkiin</button>
+    </div>
+    <p style="font-size:12px;color:var(--dim);margin-top:12px">Säännöt tallentuvat selaimen muistiin. Vie JSON varmuuskopioksi. "Aja uudelleen" päivittää myös käsin korjatut — käytä harkiten.</p>`;
+}
+
+async function recategorize(mode) {
+  if (mode==='all' && !confirm('Tämä ajaa säännöt KAIKKIIN tapahtumiin ja voi ylikirjoittaa käsin korjatut kategoriat. Jatketaanko?')) return;
+  const changed = [];
+  txs = txs.map(t => {
+    const isMissing = t.type==='flag' || !t.cat || String(t.cat).startsWith('—');
+    if (mode==='missing' && !isMissing) return t;
+    const c = categorizeTx(t);
+    if (c.cat !== t.cat || c.type !== t.type) { const nt = {...t, ...c}; changed.push(nt); return nt; }
+    return t;
+  });
+  saveLocalState(); updateFlagBanner(); renderAll();
+  if (API_BASE && changed.length) {
+    let ok = 0;
+    for (const t of changed) {
+      try {
+        const r = await fetch(`${API_BASE}/transactions/${encodeURIComponent(t.id)}`, {
+          method:'PUT', headers:apiHeaders(), body:JSON.stringify({cat:t.cat, type:t.type})
+        });
+        if (r.ok) ok++;
+      } catch(e) {}
+    }
+    showToast(`Päivitetty ${ok}/${changed.length} tapahtumaa D1:een`, 'ok');
+  } else {
+    showToast(`Päivitetty ${changed.length} tapahtumaa`, 'ok');
+  }
 }
 
 function addRule() {
@@ -1271,37 +1572,117 @@ function addRule() {
 function deleteRule(i) { rules.splice(i,1); saveLocalState(); renderSaannot(); }
 
 // ── SALDOT ────────────────────────────────────────────────────────────────────
+let saldotEditMode = false;
 function renderSaldot() {
-  const accounts = [
-    {key:'Perus',   label:'OP Perustili'},
-    {key:'Saasto',  label:'OP Säästötili'},
-    {key:'Lipas',   label:'Säästölipas'},
-    {key:'OPCredit',label:'OP Visa Credit (velka −)'},
-    {key:'Finnair', label:'Finnair Visa (velka −)'},
-    {key:'Muu',     label:'Muu velka (−)'},
-  ];
-  const grid = accounts.map(a=>`
-    <div class="saldo-card">
-      <div class="saldo-lbl">${a.label}</div>
-      <input class="saldo-in" id="sal_${a.key}" type="number" placeholder="0.00" value="${saldot[a.key]||''}" oninput="saveSaldo()">
-    </div>`).join('');
-  const netto = calcNetto();
-  document.getElementById('saldotContent').innerHTML = `
-    <div class="saldo-grid">${grid}</div>
-    <div class="netto-card">
-      <div><div class="netto-lbl">Nettovarallisuus yhteensä</div><div class="netto-val" id="nettoVal" style="color:${netto>=0?'var(--blue)':'var(--red)'}">${esigned(netto)}</div></div>
-      <div style="font-size:13px;color:var(--muted)">Varat − velat</div>
+  const bals = computeBalances();
+  const assets = bals.filter(b=>b.kind!=='credit');
+  const credits = bals.filter(b=>b.kind==='credit');
+
+  const assetCard = b => `
+    <div class="saldo-card" style="display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div class="saldo-lbl">${esc(b.label)}</div>
+        <div style="font-size:11px;color:var(--dim)">${b.kind==='savings'?'Säästö':'Käyttötili'} · alkaen ${fmtDateLbl(b.opening_date)}</div>
+      </div>
+      <div style="font-size:20px;font-weight:300;color:var(--text)">${eur(b.balance)}</div>
     </div>`;
+
+  const creditCard = b => {
+    const pct = Math.round((b.utilization||0)*100);
+    const barColor = pct>=80?'var(--red)':pct>=50?'var(--gold)':'var(--green)';
+    return `
+    <div class="saldo-card" style="border-top:2.5px solid var(--gold)">
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <div class="saldo-lbl">${esc(b.label)}</div>
+        <div style="font-size:20px;font-weight:300;color:${b.balance<0?'var(--red)':'var(--text)'}">${esigned(b.balance)}</div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:4px">
+        <span>Käytettävissä ${eur(b.available)}</span>
+        <span>Limiitti ${eur(b.credit_limit||0)}</span>
+      </div>
+      <div class="sum-bar" style="margin-top:6px"><div class="sum-bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-top:4px">
+        <span>Käyttöaste ${pct}%</span>
+        <span>${b.apr?('Korko '+b.apr.toLocaleString('fi-FI')+'% · ~'+eur(b.est_monthly_interest)+'/kk'):''}</span>
+      </div>
+    </div>`;
+  };
+
+  const netto = bals.reduce((s,b)=>s+b.balance,0);
+  const totalDebt = credits.reduce((s,b)=>s+b.balance,0);
+  const netBorrow = netBorrowingForMonth(curMonth);
+
+  document.getElementById('saldotContent').innerHTML = `
+    <div class="section-lbl">Varat</div>
+    <div class="saldo-grid">${assets.map(assetCard).join('')}</div>
+    <div class="section-lbl" style="margin-top:16px">Luotot</div>
+    <div class="saldo-grid">${credits.map(creditCard).join('')}</div>
+
+    <div class="netto-card" style="margin-top:16px">
+      <div><div class="netto-lbl">Nettovarallisuus</div>
+        <div class="netto-val" style="color:${netto>=0?'var(--blue)':'var(--red)'}">${esigned(netto)}</div></div>
+      <div style="text-align:right;font-size:12px;color:var(--muted)">
+        Velkaa yhteensä<br><span style="color:var(--red)">${eur(totalDebt)}</span>
+      </div>
+    </div>
+
+    <div class="netto-card" style="margin-top:8px">
+      <div><div class="netto-lbl">Velkaantuminen ${fmtMonthLbl(curMonth)}</div>
+        <div class="netto-val" style="font-size:20px;color:${netBorrow>0?'var(--red)':'var(--green)'}">${esigned(-netBorrow)}</div></div>
+      <div style="text-align:right;font-size:12px;color:var(--muted);max-width:160px">
+        ${netBorrow>0?'Velka kasvoi tässä kuussa':netBorrow<0?'Lyhensit velkaa':'Ei muutosta'}
+      </div>
+    </div>
+
+    <button class="btn btn-secondary" style="margin-top:16px" onclick="toggleSaldotEdit()">${saldotEditMode?'Sulje asetukset':'⚙️ Tilien asetukset (alkusaldo, limiitti, korko)'}</button>
+    <div id="acctEdit">${saldotEditMode?renderAcctEdit(bals):''}</div>
+    <p style="font-size:11px;color:var(--dim);margin-top:10px">Saldot lasketaan: alkusaldo + tilin tapahtumat alkupäivän jälkeen. Tuoreus = viimeisin tuonti.</p>`;
 }
-function saveSaldo() {
-  ['Perus','Saasto','Lipas','OPCredit','Finnair','Muu'].forEach(k=>{
-    const el=document.getElementById('sal_'+k); saldot[k]=el?parseFloat(el.value)||0:0;
-  });
+
+function renderAcctEdit(bals) {
+  const salaryCard = `
+    <div class="saldo-card" style="border-top:2.5px solid var(--blue)">
+      <div class="saldo-lbl" style="margin-bottom:6px">Palkka</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
+        <label>Kk-palkka €<input class="saldo-in" type="number" step="1" value="${settings.monthly_salary||0}" onchange="saveSetting('monthly_salary',this.value)"></label>
+        <label>Palkkapäivä<input class="saldo-in" type="number" min="1" max="31" value="${settings.salary_day||27}" onchange="saveSetting('salary_day',this.value)"></label>
+      </div>
+      <div style="font-size:11px;color:var(--dim);margin-top:6px">Jos palkkapäivä osuu viikonlopulle/pyhälle, maksu siirtyy edelliseen pankkipäivään.</div>
+    </div>`;
+  return '<div style="margin-top:12px;display:flex;flex-direction:column;gap:12px">' + salaryCard + bals.map(b=>`
+    <div class="saldo-card">
+      <div class="saldo-lbl" style="margin-bottom:6px">${esc(b.label)} <span style="color:var(--dim)">(${b.key})</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
+        <label>Alkusaldo<input class="saldo-in" type="number" step="0.01" value="${b.opening_balance}" onchange="saveAcctField('${b.key}','opening_balance',this.value)"></label>
+        <label>Alkupäivä<input class="saldo-in" type="date" value="${b.opening_date}" onchange="saveAcctField('${b.key}','opening_date',this.value)"></label>
+        ${b.kind==='credit'?`
+        <label>Limiitti<input class="saldo-in" type="number" step="1" value="${b.credit_limit||0}" onchange="saveAcctField('${b.key}','credit_limit',this.value)"></label>
+        <label>Korko % (APR)<input class="saldo-in" type="number" step="0.001" value="${b.apr||0}" onchange="saveAcctField('${b.key}','apr',this.value)"></label>`:''}
+      </div>
+    </div>`).join('') + '</div>';
+}
+
+function toggleSaldotEdit() { saldotEditMode = !saldotEditMode; renderSaldot(); }
+
+function saveSetting(key, value) {
+  settings[key] = parseFloat(value) || 0;
   saveLocalState();
-  const netto=calcNetto(); const el=document.getElementById('nettoVal');
-  if(el){el.textContent=esigned(netto);el.style.color=netto>=0?'var(--blue)':'var(--red)';}
+  if (API_BASE) {
+    fetch(`${API_BASE}/settings`, {method:'PUT', headers:apiHeaders(), body:JSON.stringify({[key]:settings[key]})}).catch(()=>{});
+  }
+  renderSaldot();
 }
-function calcNetto() { return ['Perus','Saasto','Lipas','OPCredit','Finnair','Muu'].reduce((s,k)=>s+(saldot[k]||0),0); }
+
+function saveAcctField(key, field, value) {
+  const a = accountByKey(key);
+  if (!a) return;
+  a[field] = (field==='opening_date') ? value : (parseFloat(value)||0);
+  saveLocalState();
+  if (API_BASE) {
+    fetch(`${API_BASE}/accounts`, {method:'PUT', headers:apiHeaders(), body:JSON.stringify(a)}).catch(()=>{});
+  }
+  renderSaldot();
+}
 
 // ── LISÄÄ (mobile "more") ─────────────────────────────────────────────────────
 function renderLisaa() {
@@ -1418,6 +1799,7 @@ function openCameraModal() {
   document.getElementById('cameraArea').classList.remove('has-img');
   document.getElementById('camLoading').classList.remove('active');
   document.getElementById('camResult').classList.remove('active');
+  fillAccountSelect('camAccount');
   openModal('cameraModal');
 }
 
@@ -1474,6 +1856,8 @@ function saveCameraReceipt() {
   const merchant = document.getElementById('camMerchant').value.trim();
   const date = document.getElementById('camDate').value;
   if (!merchant) { showToast('Anna kauppias', 'err'); return; }
+  const acct = document.getElementById('camAccount').value || 'Perus';
+  rememberAccount(acct);
   let saved = 0;
   document.querySelectorAll('#camGroups .cam-grp-row').forEach(row => {
     const cb = row.querySelector('input[type=checkbox]');
@@ -1481,7 +1865,7 @@ function saveCameraReceipt() {
     const amtInput = row.querySelector('input[type=number]');
     const amount = parseFloat(amtInput.value);
     if (!amount || isNaN(amount) || amount <= 0) return;
-    addTx({payee:merchant, amount:-amount, date, cat:amtInput.dataset.cat, type:amtInput.dataset.type, source:'receipt'});
+    addTx({payee:merchant, amount:-amount, date, cat:amtInput.dataset.cat, type:amtInput.dataset.type, source:'receipt', account:acct});
     saved++;
   });
   if (!saved) { showToast('Ei valittuja tapahtumia', 'err'); return; }
@@ -1495,6 +1879,7 @@ function openQuickModal() {
   document.getElementById('quickResult').classList.remove('active');
   document.getElementById('quickDate').value = todayISO();
   renderChips('quickChips','Muut');
+  fillAccountSelect('quickAccount');
   openModal('quickModal');
   setTimeout(()=>document.getElementById('quickIn').focus(),300);
 }
@@ -1523,7 +1908,9 @@ function saveQuick() {
   if (!merchant||!amount){showToast('Täytä kauppias ja summa','err');return;}
   const cat = getSelectedChip('quickChips');
   const c = catObj(cat);
-  addTx({payee:merchant, amount:-amount, date:document.getElementById('quickDate').value, cat:c.name, type:c.type, source:'manual'});
+  const acct = document.getElementById('quickAccount').value || 'Perus';
+  rememberAccount(acct);
+  addTx({payee:merchant, amount:-amount, date:document.getElementById('quickDate').value, cat:c.name, type:c.type, source:'manual', account:acct});
   closeModal('quickModal');
   showToast('✓ Tallennettu','ok');
 }
@@ -1533,6 +1920,7 @@ function openManualModal() {
   document.getElementById('manAmount').value='';
   document.getElementById('manDate').value = todayISO();
   renderChips('manChips','Muut');
+  fillAccountSelect('manAccount');
   openModal('manualModal');
 }
 
@@ -1542,7 +1930,9 @@ function saveManual() {
   if (!merchant||!amount){showToast('Täytä kauppias ja summa','err');return;}
   const cat = getSelectedChip('manChips');
   const c = catObj(cat);
-  addTx({payee:merchant, amount:-amount, date:document.getElementById('manDate').value, cat:c.name, type:c.type, source:'manual'});
+  const acct = document.getElementById('manAccount').value || 'Perus';
+  rememberAccount(acct);
+  addTx({payee:merchant, amount:-amount, date:document.getElementById('manDate').value, cat:c.name, type:c.type, source:'manual', account:acct});
   closeModal('manualModal');
   showToast('✓ Tallennettu','ok');
 }
@@ -1557,6 +1947,7 @@ function openTxEdit(id) {
   const amtSign = tx.amount>=0?'+':'−';
   document.getElementById('txEditAmt').textContent = amtSign + eur(tx.amount);
   renderChips('txEditChips', tx.cat || 'Muut');
+  fillAccountSelect('txEditAccount', tx.account || 'Perus');
   openModal('txEditModal');
 }
 function saveTxEdit() {
@@ -1565,13 +1956,15 @@ function saveTxEdit() {
   const catName = getSelectedChip('txEditChips');
   const c = catObj(catName);
   tx.cat = c.name; tx.type = c.type;
+  const acct = document.getElementById('txEditAccount').value || 'Perus';
+  tx.account = acct;
   const kw = (tx.payee||'').toLowerCase().substring(0,22).trim();
   const isNewRule = kw && !rules.find(r=>r.kw===kw);
   if (isNewRule) rules.unshift({kw, cat:c.name, type:c.type});
   saveLocalState(); updateFlagBanner(); renderAll();
   if (API_BASE) {
     fetch(`${API_BASE}/transactions/${encodeURIComponent(txEditId)}`, {
-      method:'PUT', headers:apiHeaders(), body:JSON.stringify({cat:c.name, type:c.type})
+      method:'PUT', headers:apiHeaders(), body:JSON.stringify({cat:c.name, type:c.type, account:acct})
     }).then(r => {
       if (!r.ok) showToast('Tallennus epäonnistui — yritä uudelleen', 'err');
     }).catch(()=> showToast('Tallennus epäonnistui — yritä uudelleen', 'err'));
@@ -1617,7 +2010,7 @@ function addTx(tx) {
 
 // ── IMPORT / EXPORT ───────────────────────────────────────────────────────────
 function exportJSON() {
-  const blob = new Blob([JSON.stringify({txs,rules,saldot,exported:new Date().toISOString()},null,2)],{type:'application/json'});
+  const blob = new Blob([JSON.stringify({txs,rules,saldot,accounts,settings,exported:new Date().toISOString()},null,2)],{type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `omattalous-${todayISO()}.json`;
@@ -1632,6 +2025,8 @@ function handleJSONInput(event) {
       const d = JSON.parse(ev.target.result);
       if (d.rules) rules = d.rules;
       if (d.saldot) saldot = d.saldot;
+      if (d.accounts && d.accounts.length) accounts = d.accounts;
+      if (d.settings) settings = Object.assign(settings, d.settings);
       if (d.txs) {
         if (API_BASE) {
           // Lähetä tapahtumat D1:een erissä
