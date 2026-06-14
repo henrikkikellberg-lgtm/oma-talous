@@ -497,7 +497,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.1.2';
+const APP_VERSION = '1.1.3';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 const API_SECRET = '8128f7da46a8a897b418f7f85a517bae788abeb3626d49a48840c232d2186248';
 
@@ -552,6 +552,8 @@ const GROUP_CAT_MAP = {
 const DEF_RULES = [
   {kw:'ykkös-ja onnikodit',cat:'Palkka ja tulot',type:'income'},
   {kw:'palkka',cat:'Palkka ja tulot',type:'income'},
+  {kw:'258218',cat:'Säästölipas',type:'savings'},
+  {kw:'036608',cat:'Säästötili',type:'savings'},
   {kw:'säästötavoitteeseen',cat:'Säästölipas',type:'savings'},
   {kw:'säästölipas',cat:'Säästölipas',type:'savings'},
   {kw:'säästötili',cat:'Säästötili',type:'savings'},
@@ -941,7 +943,8 @@ function parseCSVFile(text, fname) {
       if (c.length<6) continue;
       const amt = parseFloat((c[2]||'').replace(',','.'));
       if (isNaN(amt)) continue;
-      rows.push({id:c[10]||`OP_${c[0]}_${c[5]}_${amt}`, date:c[0], payee:c[5]||'', selitys:c[4]||'', viesti:c[9]||'', amount:amt, source:fname||'OP', account:'Perus', cat:null, type:null});
+      const viesti = ((c[9]||'') + (c[6] ? ' ' + c[6] : '')).trim();   // sis. saajan tilinumero
+      rows.push({id:c[10]||`OP_${c[0]}_${c[5]}_${amt}`, date:c[0], payee:c[5]||'', selitys:c[4]||'', viesti, amount:amt, source:fname||'OP', account:'Perus', cat:null, type:null});
     }
   }
   return rows;

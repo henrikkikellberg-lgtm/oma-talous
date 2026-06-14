@@ -360,7 +360,8 @@ function parseCSV(text, fname) {
       if (c.length<6) continue;
       const amt = parseFloat((c[2]||'').replace(',','.'));
       if (isNaN(amt)) continue;
-      rows.push({id:c[10]||`OP_${c[0]}_${c[5]}_${amt}`, date:c[0], payee:c[5]||'', selitys:c[4]||'', viesti:c[9]||'', amount:amt, source:fname||'OP', account:'Perus'});
+      const viesti = ((c[9]||'') + (c[6] ? ' ' + c[6] : '')).trim();   // sis. saajan tilinumero
+      rows.push({id:c[10]||`OP_${c[0]}_${c[5]}_${amt}`, date:c[0], payee:c[5]||'', selitys:c[4]||'', viesti, amount:amt, source:fname||'OP', account:'Perus'});
     }
   }
   return rows;
