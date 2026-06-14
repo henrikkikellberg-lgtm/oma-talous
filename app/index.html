@@ -497,7 +497,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.1.1';
+const APP_VERSION = '1.1.2';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 const API_SECRET = '8128f7da46a8a897b418f7f85a517bae788abeb3626d49a48840c232d2186248';
 
@@ -506,7 +506,7 @@ const CATS = [
   {name:'Palkka ja tulot',        type:'income',  icon:'💰'},
   {name:'Lainan nosto',           type:'financing',icon:'🏦'},
   {name:'Sijoittaminen',          type:'savings', icon:'📈'},
-  {name:'Säästöt',                type:'savings', icon:'🏦'},
+  {name:'Säästötili',             type:'savings', icon:'🏦'},
   {name:'Säästölipas',            type:'savings', icon:'🐷'},
   // ── Välttämättömyydet (needs) ──
   {name:'Asuminen',               type:'needs',   icon:'🏡'},
@@ -553,6 +553,8 @@ const DEF_RULES = [
   {kw:'ykkös-ja onnikodit',cat:'Palkka ja tulot',type:'income'},
   {kw:'palkka',cat:'Palkka ja tulot',type:'income'},
   {kw:'säästötavoitteeseen',cat:'Säästölipas',type:'savings'},
+  {kw:'säästölipas',cat:'Säästölipas',type:'savings'},
+  {kw:'säästötili',cat:'Säästötili',type:'savings'},
   {kw:'nordnet',cat:'Sijoittaminen',type:'savings'},
   {kw:'säänn.sääst',cat:'Sijoittaminen',type:'savings'},
   {kw:'op-kiina',cat:'Sijoittaminen',type:'savings'},
@@ -686,6 +688,8 @@ let curMonth = '', curFilter = 'all', curSearch = '', curTab = 'yhteenveto', cur
 // ── TILILASKENTA ──────────────────────────────────────────────────────────────
 let lastAccount = (typeof localStorage!=='undefined' && localStorage.getItem('ot_lastacct')) || 'Perus';
 function accountByKey(k) { return accounts.find(a=>a.key===k) || null; }
+// Sisäisen siirron kohdetili kategorian perusteella (kasvattaa kohdetilin saldoa)
+const CAT_DEST = { 'Säästötili':'Saasto', 'Säästölipas':'Lipas' };
 function fillAccountSelect(id, sel) {
   const el = document.getElementById(id); if (!el) return;
   const want = sel || lastAccount || 'Perus';
@@ -698,7 +702,11 @@ function computeBalances(asOf) {
     const delta = txs
       .filter(t => t.account === a.key && t.date > a.opening_date && t.date <= asOf)
       .reduce((s,t)=>s+(+t.amount||0), 0);
-    const balance = a.opening_balance + delta;
+    // Sisäiset siirrot tälle tilille (esim. Perus → Säästölipas): lisää kohdetiliin
+    const incoming = txs
+      .filter(t => CAT_DEST[t.cat] === a.key && t.account !== a.key && (+t.amount||0) < 0 && t.date > a.opening_date && t.date <= asOf)
+      .reduce((s,t)=>s+Math.abs(+t.amount||0), 0);
+    const balance = a.opening_balance + delta + incoming;
     const r = {...a, balance};
     if (a.kind === 'credit') {
       r.available    = (a.credit_limit||0) + balance;                 // balance negatiivinen

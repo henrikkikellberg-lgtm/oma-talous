@@ -260,11 +260,15 @@ async function handleBalances(env, url) {
   const asOf = url.searchParams.get('asOf') || new Date().toISOString().split('T')[0];
   const { results: accts } = await env.DB.prepare('SELECT * FROM accounts ORDER BY sort, key').all();
   const { results: txs }   = await env.DB.prepare('SELECT account, amount, date FROM transactions').all();
+  const CAT_DEST = { 'Säästötili':'Saasto', 'Säästölipas':'Lipas' };
   const accounts = accts.map(a => {
     const delta = txs
       .filter(t => t.account === a.key && t.date > a.opening_date && t.date <= asOf)
       .reduce((s,t)=>s+t.amount, 0);
-    const balance = a.opening_balance + delta;
+    const incoming = txs
+      .filter(t => CAT_DEST[t.cat] === a.key && t.account !== a.key && t.amount < 0 && t.date > a.opening_date && t.date <= asOf)
+      .reduce((s,t)=>s+Math.abs(t.amount), 0);
+    const balance = a.opening_balance + delta + incoming;
     const r = { key:a.key, label:a.label, kind:a.kind, balance,
                 opening_balance:a.opening_balance, opening_date:a.opening_date };
     if (a.kind === 'credit') {
