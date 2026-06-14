@@ -107,6 +107,17 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 .tx-meta{font-size:12px;color:var(--muted);margin-top:1px}
 .tx-amt{font-size:14px;font-weight:500;white-space:nowrap;flex-shrink:0}
 .tx-amt.pos{color:var(--blue)}.tx-amt.neg{color:var(--text)}.tx-amt.red{color:var(--red)}
+.tx-splits{margin-top:4px;display:flex;flex-direction:column;gap:2px}
+.tx-split-row{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);padding-left:2px}
+.tx-split-row .tx-split-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tx-split-row .tx-split-amt{flex-shrink:0;margin-left:8px;font-variant-numeric:tabular-nums}
+.split-editor{margin-top:10px;padding:10px 12px;background:var(--surface2);border-radius:var(--radius-sm)}
+.split-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.split-row:last-of-type{margin-bottom:0}
+.split-amt-in{width:72px;text-align:right;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);font-size:14px;color:var(--text)}
+.split-lbl-in{flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);font-size:13px;color:var(--text)}
+.split-rem{font-size:12px;text-align:right;margin-top:6px}
+.split-rem.ok{color:var(--green)}.split-rem.err{color:var(--red)}
 
 /* ── CATEGORY GRID ───────────────────────────────────── */
 .cat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -485,9 +496,27 @@ tr:hover td{background:var(--surface2)}
       </div>
       <div id="txEditAmt" style="font-size:22px;font-weight:300;color:var(--text)"></div>
     </div>
-    <div class="field-group"><div class="field-label">Kategoria</div><div class="cat-chips" id="txEditChips"></div></div>
-    <div class="field-group"><div class="field-label">Maksettu tililtä / kortilta</div><select class="field-input" id="txEditAccount"></select></div>
-    <button class="btn btn-primary btn-full" onclick="saveTxEdit()">Tallenna</button>
+    <div id="txEditNormal">
+      <div class="field-group"><div class="field-label">Kategoria</div><div class="cat-chips" id="txEditChips"></div></div>
+      <div class="field-group"><div class="field-label">Maksettu tililtä / kortilta</div><select class="field-input" id="txEditAccount"></select></div>
+    </div>
+    <div id="txEditSplitSection" style="display:none">
+      <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.07em;color:var(--dim);margin-bottom:6px">Jako kategorioihin</div>
+      <div id="splitRows"></div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn btn-secondary" style="height:36px;font-size:13px;flex:1" onclick="addSplitRow()">+ Lisää osa</button>
+      </div>
+      <div class="split-rem" id="splitRem"></div>
+      <div class="field-group" style="margin-top:10px"><div class="field-label">Maksettu tililtä / kortilta</div><select class="field-input" id="txEditAccountSplit"></select></div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);margin-top:10px;cursor:pointer">
+        <input type="checkbox" id="splitSaveRule" style="width:16px;height:16px;accent-color:var(--green)">
+        Tallenna toistuvana jakona (käytetään automaattisesti tulevia maksuja)
+      </label>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-secondary" id="txSplitToggleBtn" style="height:44px;flex:1;font-size:13px" onclick="toggleSplitEditor()">✂️ Jaa</button>
+      <button class="btn btn-primary" id="txSaveBtn" style="height:44px;flex:2" onclick="saveTxEdit()">Tallenna</button>
+    </div>
     <button class="btn btn-full" style="background:var(--red-light);color:var(--red);border:none;height:44px;border-radius:var(--radius);font-size:15px;font-weight:500;margin-top:6px" onclick="deleteTxEdit()">Poista tapahtuma</button>
     <button class="modal-cancel" onclick="closeModal('txEditModal')">Peruuta</button>
   </div>
@@ -898,11 +927,21 @@ function stripIcon(s) { return String(s||'').replace(/^[\p{Extended_Pictographic
 function catObj(name) { const n=stripIcon(name); return CATS.find(c=>c.name===n)||{name:name||'Muut',type:'wants',icon:'📦'}; }
 function typeColor(t) { return t==='needs'?'var(--green)':t==='wants'?'var(--gold)':t==='savings'||t==='income'?'var(--blue)':t==='financing'?'var(--purple)':'var(--muted)'; }
 function typeBadge(t) { return 'badge-'+(t||'neutral'); }
+// Palauttaa tapahtuman "efektiiviset rivit" laskentaan: jos split asetettu, käytetään osia
+function expandTx(tx) {
+  if (tx.splits && tx.splits.length) {
+    return tx.splits.map(s => ({...tx, cat:s.cat, type:s.type, amount:-Math.abs(s.amount)}));
+  }
+  return [tx];
+}
+function expandList(list) { return list.flatMap(t => expandTx(t)); }
+
 function monthSummary(list) {
-  const income = list.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
-  const needs  = list.filter(t=>t.type==='needs'&&t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0);
-  const wants  = list.filter(t=>t.type==='wants'&&t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0);
-  const sav    = list.filter(t=>t.type==='savings').reduce((s,t)=>s+Math.abs(t.amount),0);
+  const eff = expandList(list);
+  const income = eff.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+  const needs  = eff.filter(t=>t.type==='needs'&&t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0);
+  const wants  = eff.filter(t=>t.type==='wants'&&t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0);
+  const sav    = eff.filter(t=>t.type==='savings').reduce((s,t)=>s+Math.abs(t.amount),0);
   const surplus= income-needs-wants-sav;
   const rate   = income>0?Math.round(sav/income*100):0;
   return {income,needs,wants,sav,surplus,rate,
@@ -947,7 +986,24 @@ function budgetIncomeForMonth(month) {
 // ── CATEGORIZE ──────────────────────────────────────────────────────────────
 function categorizeTx(tx) {
   const txt = ((tx.payee||'')+' '+(tx.selitys||'')+' '+(tx.viesti||'')).toLowerCase();
-  for (const r of rules) if (txt.includes(r.kw.toLowerCase())) return {cat:r.cat, type:r.type};
+  for (const r of rules) {
+    if (txt.includes(r.kw.toLowerCase())) {
+      // Sääntöön tallennettu split → laske osuudet summasta
+      if (r.splits && r.splits.length && tx.amount < 0) {
+        const total = Math.abs(tx.amount);
+        let remaining = total;
+        const splits = r.splits.map((s,i) => {
+          const amt = i===r.splits.length-1
+            ? Math.round(remaining*100)/100   // viimeinen saa loput (pyöristys)
+            : Math.round(total*s.pct/100*100)/100;
+          remaining -= amt;
+          return {label:s.label||s.cat, cat:s.cat, type:s.type, amount:amt};
+        });
+        return {cat:r.cat, type:r.type, splits};
+      }
+      return {cat:r.cat, type:r.type};
+    }
+  }
   if (tx.amount > 0) return {cat:'Palkka ja tulot', type:'income'};
   return {cat:'— Kategorisoimatta', type:'flag'};
 }
@@ -1238,7 +1294,7 @@ function buildTips(month) {
     const wp = Math.round(s.wants/bInc*100);
     if (wp > 30) tips.push(`Wants ${wp}% tuloista (tavoite 30%) — karsi harkinnanvaraisia ${eur(s.wants - bInc*0.3)}.`);
   }
-  const catTot = mn => { const o={}; txsForMonth(mn).filter(t=>t.type==='wants'&&t.amount<0).forEach(t=>{o[t.cat]=(o[t.cat]||0)+Math.abs(t.amount);}); return o; };
+  const catTot = mn => { const o={}; expandList(txsForMonth(mn)).filter(t=>t.type==='wants'&&t.amount<0).forEach(t=>{o[t.cat]=(o[t.cat]||0)+Math.abs(t.amount);}); return o; };
   const cur = catTot(month), prev = catTot(prevMonthKey(month));
   let top = null; Object.entries(cur).forEach(([c,v])=>{ if(!top||v>top.v) top={c,v}; });
   if (top) { const pv = prev[top.c]||0; if (pv>0 && top.v>pv*1.2) tips.push(`${esc(top.c)} ${eur(top.v)} (viime kk ${eur(pv)}) — ${esigned(-(top.v-pv))}.`); }
@@ -1386,18 +1442,23 @@ function renderTapahtumat() {
 }
 
 function txItemHTML(t) {
-  const c = catObj(t.cat);
+  const hasSplit = t.splits && t.splits.length > 0;
+  const c = hasSplit ? {icon:'✂️'} : catObj(t.cat);
   const amtClass = t.amount>0?'pos':t.type==='flag'?'red':'neg';
   const amtSign = t.amount>0?'+':'−';
   const acct = accountByKey(t.account);
   const acctBadge = (acct && acct.key!=='Perus')
     ? `<span style="display:inline-block;font-size:10px;padding:0 4px;border-radius:3px;margin-left:5px;background:var(--surface2);color:var(--muted);font-weight:500;vertical-align:middle">${esc(acct.label)}</span>`
     : '';
+  const splitBlock = hasSplit ? `<div class="tx-splits">${t.splits.map(s=>
+    `<div class="tx-split-row"><span class="tx-split-label">${esc(s.label||s.cat)}</span><span class="tx-split-amt">${eur(s.amount)}</span></div>`
+  ).join('')}</div>` : '';
+  const meta = hasSplit ? `<div class="tx-meta">${t.date}</div>` : `<div class="tx-meta">${esc(t.cat||'— Kategorisoimatta')} · ${t.date}</div>`;
   return `<div class="tx-item" onclick="openTxEdit('${esc(t.id)}')">
     <div class="tx-icon">${c.icon}</div>
     <div class="tx-info">
       <div class="tx-merchant">${esc(t.payee)}${acctBadge}</div>
-      <div class="tx-meta">${esc(t.cat||'— Kategorisoimatta')} · ${t.date}</div>
+      ${splitBlock}${meta}
     </div>
     <div class="tx-amt ${amtClass}">${amtSign}${eur(t.amount)}</div>
   </div>`;
@@ -1443,7 +1504,8 @@ function renderKategoriat() {
   const bi = budgetIncomeForMonth(curMonth);
   const budgetInc = bi.income;
   const map = {};
-  list.forEach(tx => {
+  expandList(list).forEach(tx => {
+    if (tx.type==='neutral'||tx.type==='flag') return;
     if (!map[tx.cat]) map[tx.cat]={cat:tx.cat,type:tx.type,total:0};
     map[tx.cat].total += Math.abs(tx.amount);
   });
@@ -2064,6 +2126,7 @@ function saveManual() {
 }
 
 let txEditId = null;
+let splitMode = false;
 function openTxEdit(id) {
   const tx = txs.find(t=>t.id===id);
   if (!tx) return;
@@ -2074,34 +2137,132 @@ function openTxEdit(id) {
   document.getElementById('txEditAmt').textContent = amtSign + eur(tx.amount);
   renderChips('txEditChips', tx.cat || 'Muut');
   fillAccountSelect('txEditAccount', tx.account || 'Perus');
+  fillAccountSelect('txEditAccountSplit', tx.account || 'Perus');
+  // Jos splitattu jo, avaa split-tila suoraan
+  if (tx.splits && tx.splits.length) {
+    splitMode = true;
+    showSplitEditor(tx.splits);
+  } else {
+    splitMode = false;
+    hideSplitEditor();
+  }
   openModal('txEditModal');
+}
+function toggleSplitEditor() {
+  const tx = txs.find(t=>t.id===txEditId);
+  if (!tx) return;
+  splitMode = !splitMode;
+  if (splitMode) {
+    // Alusta kahdella rivillä, ensimmäinen koko summa
+    const amt = Math.abs(tx.amount);
+    showSplitEditor([
+      {label: tx.cat || 'Osa 1', cat: tx.cat||'Muut', type: tx.type||'needs', amount: amt},
+      {label: '', cat: 'Muut', type: 'needs', amount: 0}
+    ]);
+  } else {
+    hideSplitEditor();
+  }
+}
+function showSplitEditor(splits) {
+  document.getElementById('txEditNormal').style.display = 'none';
+  document.getElementById('txEditSplitSection').style.display = '';
+  document.getElementById('txSplitToggleBtn').textContent = '← Peruuta jako';
+  renderSplitRows(splits);
+}
+function hideSplitEditor() {
+  document.getElementById('txEditNormal').style.display = '';
+  document.getElementById('txEditSplitSection').style.display = 'none';
+  document.getElementById('txSplitToggleBtn').textContent = '✂️ Jaa';
+}
+function renderSplitRows(splits) {
+  const container = document.getElementById('splitRows');
+  container.innerHTML = splits.map((s,i) => `
+    <div class="split-row" id="splitRow_${i}">
+      <input class="split-lbl-in" placeholder="Kuvaus" value="${esc(s.label||s.cat||'')}" onchange="updateSplitRem()">
+      <select style="padding:6px 4px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;background:var(--surface);color:var(--text);max-width:110px" onchange="updateSplitRem()">
+        ${CATS.filter(c=>c.name!=='— Kategorisoimatta').map(c=>`<option value="${esc(c.name)}|${esc(c.type)}"${c.name===(s.cat||s.label)?` selected`:''}>${esc(c.name)}</option>`).join('')}
+      </select>
+      <input class="split-amt-in" type="number" step="0.01" min="0" value="${s.amount||''}" onchange="updateSplitRem()" oninput="updateSplitRem()">
+      <button onclick="removeSplitRow(${i})" style="background:none;border:none;color:var(--dim);font-size:18px;cursor:pointer;padding:0;line-height:1;flex-shrink:0">✕</button>
+    </div>`).join('');
+  updateSplitRem();
+}
+function addSplitRow() {
+  const rows = getSplitRows();
+  rows.push({label:'', cat:'Muut', type:'needs', amount:0});
+  renderSplitRows(rows);
+}
+function removeSplitRow(idx) {
+  const rows = getSplitRows();
+  rows.splice(idx,1);
+  renderSplitRows(rows);
+}
+function getSplitRows() {
+  return [...document.getElementById('splitRows').querySelectorAll('.split-row')].map(row => {
+    const [lbl, sel, amt] = row.querySelectorAll('input,select,input');
+    const [cat, type] = (sel.value||'Muut|needs').split('|');
+    return {label:lbl.value, cat, type, amount:parseFloat(amt.value)||0};
+  });
+}
+function updateSplitRem() {
+  const tx = txs.find(t=>t.id===txEditId); if(!tx) return;
+  const total = Math.abs(tx.amount);
+  const used = getSplitRows().reduce((s,r)=>s+r.amount,0);
+  const rem = Math.round((total-used)*100)/100;
+  const el = document.getElementById('splitRem');
+  if (Math.abs(rem)<0.01) { el.textContent='✓ Täsmää'; el.className='split-rem ok'; }
+  else { el.textContent=`Jäljellä: ${eur(rem)} (${eur(used)} / ${eur(total)})`; el.className='split-rem err'; }
 }
 function saveTxEdit() {
   const tx = txs.find(t=>t.id===txEditId);
   if (!tx) return;
-  const catName = getSelectedChip('txEditChips');
-  const c = catObj(catName);
-  tx.cat = c.name; tx.type = c.type;
-  const acct = document.getElementById('txEditAccount').value || 'Perus';
-  tx.account = acct;
-  const kw = (tx.payee||'').toLowerCase().substring(0,22).trim();
-  const isNewRule = kw && !rules.find(r=>r.kw===kw);
-  if (isNewRule) rules.unshift({kw, cat:c.name, type:c.type});
-  saveLocalState(); updateFlagBanner(); renderAll();
-  if (API_BASE) {
-    fetch(`${API_BASE}/transactions/${encodeURIComponent(txEditId)}`, {
-      method:'PUT', headers:apiHeaders(), body:JSON.stringify({cat:c.name, type:c.type, account:acct})
-    }).then(r => {
-      if (!r.ok) showToast('Tallennus epäonnistui — yritä uudelleen', 'err');
-    }).catch(()=> showToast('Tallennus epäonnistui — yritä uudelleen', 'err'));
-    if (isNewRule) {
-      fetch(`${API_BASE}/rules`, {
-        method:'POST', headers:apiHeaders(), body:JSON.stringify({kw, cat:c.name, type:c.type, priority:0})
-      }).catch(()=>{});
+
+  if (splitMode) {
+    // ── SPLIT-tallennus ──
+    const rows = getSplitRows();
+    const total = Math.abs(tx.amount);
+    const used  = rows.reduce((s,r)=>s+r.amount,0);
+    if (Math.abs(total-used)>0.02) { showToast('Jako ei täsmää — tarkista summat','err'); return; }
+    if (rows.length < 2) { showToast('Lisää vähintään kaksi osaa','err'); return; }
+    tx.splits = rows.map(r=>({label:r.label||r.cat, cat:r.cat, type:r.type, amount:Math.round(r.amount*100)/100}));
+    tx.account = document.getElementById('txEditAccountSplit').value || 'Perus';
+    // Tallenna sääntönä toistuvana?
+    if (document.getElementById('splitSaveRule').checked) {
+      const kw = (tx.payee||'').toLowerCase().substring(0,28).trim();
+      if (kw) {
+        const pcts = rows.map(r=>({label:r.label||r.cat, cat:r.cat, type:r.type, pct:Math.round(r.amount/total*10000)/100}));
+        // Ensimmäisen osan cat = pääkategoria säännöllä
+        const existing = rules.findIndex(r=>r.kw===kw);
+        const rule = {kw, cat:rows[0].cat, type:rows[0].type, splits:pcts};
+        if (existing>=0) rules[existing]=rule; else rules.unshift(rule);
+        showToast('✓ Tallennettu toistuvana jakona','ok');
+      }
     }
+  } else {
+    // ── Normaali kategoriatallennus ──
+    if (tx.splits) delete tx.splits; // poista vanha split jos oli
+    const catName = getSelectedChip('txEditChips');
+    const c = catObj(catName);
+    tx.cat = c.name; tx.type = c.type;
+    tx.account = document.getElementById('txEditAccount').value || 'Perus';
+    const kw = (tx.payee||'').toLowerCase().substring(0,22).trim();
+    const isNewRule = kw && !rules.find(r=>r.kw===kw);
+    if (isNewRule) rules.unshift({kw, cat:c.name, type:c.type});
+    if (API_BASE) {
+      fetch(`${API_BASE}/transactions/${encodeURIComponent(txEditId)}`, {
+        method:'PUT', headers:apiHeaders(), body:JSON.stringify({cat:c.name, type:c.type, account:tx.account})
+      }).then(r=>{ if (!r.ok) showToast('Tallennus epäonnistui — yritä uudelleen','err'); }).catch(()=>{});
+      if (isNewRule) {
+        fetch(`${API_BASE}/rules`, {
+          method:'POST', headers:apiHeaders(), body:JSON.stringify({kw, cat:c.name, type:c.type, priority:0})
+        }).catch(()=>{});
+      }
+    }
+    showToast('✓ Kategoria tallennettu','ok');
   }
+
+  saveLocalState(); updateFlagBanner(); renderAll();
   closeModal('txEditModal');
-  showToast('✓ Kategoria tallennettu', 'ok');
 }
 function deleteTxEdit() {
   if (txEditId) { closeModal('txEditModal'); deleteTx(txEditId); }

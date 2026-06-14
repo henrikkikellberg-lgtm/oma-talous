@@ -102,26 +102,40 @@ async function handleReceiptParse(req, env) {
     body: JSON.stringify({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
-      system: `Olet kuittien parsija. Ryhmittele kuitti kategorioittain.
+      system: `Olet suomalaisten kuittien ja laskujen parsija. Tunnista dokumenttityyppi ja ryhmittele kulut kategorioittain.
 Palauta AINOASTAAN tämä JSON-formaatti täsmälleen:
-{"merchant":"kauppiaannimi","date":"YYYY-MM-DD","total":57.50,"groups":[{"category":"ruoka","label":"Päivittäistavarat","amount":50.16},{"category":"alkoholi","label":"Alkoholi","amount":7.34}]}
+{"merchant":"kauppiaannimi","date":"YYYY-MM-DD","total":57.50,"groups":[{"category":"ruoka","label":"Päivittäistavarat","amount":50.16},{"category":"lyhennys","label":"Luotot — lyhennys","amount":7.34}]}
 
-Kategoriat:
-- ruoka → "Päivittäistavarat" (elintarvikkeet, hygienia, kotitavarat)
-- alkoholi → "Alkoholi" (alkoholi + sen panttipullot)
-- ravintola → "Ravintolat"
-- lounas → "Lounas"
-- liikenne → "Liikkuminen — arki"
-- koti → "Asuminen"
-- muut → "Muut"
+TALOYHTIÖLASKU (As Oy, taloyhtiö, yhtiövastike, hoitovastike):
+Tunnista nämä rivit erikseen — ÄLÄ yhdistä yhteen "Asuminen"-ryhmään:
+- hoitovastike → category:"koti", label:"Asuminen"
+- vesimaksu, vesi → category:"koti", label:"Asuminen" (lisää hoitovastikkeeseen TAI omana ryhmänä jos yli 20€)
+- rahoitusvastike, linjasaneeraus, putkiremontti, peruskorjaus → category:"lyhennys", label:"Luotot — lyhennys"
+- vastike yhteensä / hoito+rahoitus yhdistettynä → jaa arviolta: rahoitusvastike erikseen jos se näkyy laskulla
+
+MUUT LASKUT:
+- vuokra, vuokralasku → category:"koti", label:"Asuminen"
+- sähkö, lämpö, energia → category:"koti", label:"Asuminen"
+- vakuutus → category:"vakuutus", label:"Vakuutukset"
+- puhelin, netti, liittymä → category:"viihde", label:"Viihde & media"
+- laina, luotto, erä → category:"lyhennys", label:"Luotot — lyhennys"
+- korko, korkokulu → category:"korko", label:"Luotot — korko"
+
+KUITIT (kauppa, ravintola jne.):
+- ruoka → category:"ruoka", label:"Päivittäistavarat"
+- alkoholi → category:"alkoholi", label:"Alkoholi"
+- ravintola → category:"ravintola", label:"Ravintolat"
+- lounas → category:"lounas", label:"Lounas"
+- liikenne, bensa, polttoaine → category:"liikenne", label:"Liikkuminen — arki"
+- muut → category:"muut", label:"Muut"
 
 Säännöt:
-- Ryhmittele samankategoriset yhteen summaan
+- Ryhmittele samankategoriset yhteen summaan (pl. taloyhtiölasku jossa eri tyypit)
 - Panttipullot: lisää alkoholin hintaan jos alkoholijuomalle, muuten ruokaan
-- Alennukset (Lidl Plus, kanta-asiakas jne.) vähennetään oikeasta kategoriasta
+- Alennukset vähennetään oikeasta kategoriasta
 - Ohita terminaali-, maksupääte- ja kuittinumerotiedot
-- Palauta vain ne kategoriat joissa on ostoksia
-- Päivämäärä: eurooppalainen järjestys DD.MM.YYYY tai DD/MM/YYYY (päivä ensin, ei kuukausi). Esim. "08/05/2026" = 8. toukokuuta = 2026-05-08. Muunna aina ISO YYYY-MM-DD.
+- Palauta vain ne kategoriat joissa on kuluja
+- Päivämäärä: eurooppalainen DD.MM.YYYY tai DD/MM/YYYY (päivä ensin). Esim. "08/05/2026" = 2026-05-08. Muunna aina ISO YYYY-MM-DD.
 - Tänään jos ei näy: ${today}`,
       messages: [{
         role: 'user',
