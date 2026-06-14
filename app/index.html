@@ -497,7 +497,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.1.1';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 const API_SECRET = '8128f7da46a8a897b418f7f85a517bae788abeb3626d49a48840c232d2186248';
 
@@ -513,7 +513,6 @@ const CATS = [
   {name:'Päivittäistavarat',      type:'needs',   icon:'🛒'},
   {name:'Suoratoisto & liittymät',type:'needs',   icon:'📱'},
   {name:'Liikkuminen — arki',     type:'needs',   icon:'🚌'},
-  {name:'Polttoaine & auto',      type:'needs',   icon:'⛽'},
   {name:'Terveys',                type:'needs',   icon:'💊'},
   {name:'Vakuutukset',            type:'needs',   icon:'🛡️'},
   {name:'Lapset',                 type:'needs',   icon:'🧸'},
@@ -587,15 +586,15 @@ const DEF_RULES = [
   {kw:'netflix',cat:'Suoratoisto & liittymät',type:'needs'},
   {kw:'mob.pay*helsingin s',cat:'Liikkuminen — arki',type:'needs'},
   {kw:'mob.pay*vr',cat:'Liikkuminen — arki',type:'needs'},
-  {kw:'neste',cat:'Polttoaine & auto',type:'needs'},
-  {kw:'abc-',cat:'Polttoaine & auto',type:'needs'},
-  {kw:'st1',cat:'Polttoaine & auto',type:'needs'},
-  {kw:'teboil',cat:'Polttoaine & auto',type:'needs'},
-  {kw:'shell',cat:'Polttoaine & auto',type:'needs'},
-  {kw:'easypark',cat:'Polttoaine & auto',type:'needs'},
-  {kw:'q-park',cat:'Polttoaine & auto',type:'needs'},
-  {kw:'aimo park',cat:'Polttoaine & auto',type:'needs'},
-  {kw:'autohuolto',cat:'Polttoaine & auto',type:'needs'},
+  {kw:'neste',cat:'Liikkuminen — arki',type:'needs'},
+  {kw:'abc-',cat:'Liikkuminen — arki',type:'needs'},
+  {kw:'st1',cat:'Liikkuminen — arki',type:'needs'},
+  {kw:'teboil',cat:'Liikkuminen — arki',type:'needs'},
+  {kw:'shell',cat:'Liikkuminen — arki',type:'needs'},
+  {kw:'easypark',cat:'Liikkuminen — arki',type:'needs'},
+  {kw:'q-park',cat:'Liikkuminen — arki',type:'needs'},
+  {kw:'aimo park',cat:'Liikkuminen — arki',type:'needs'},
+  {kw:'autohuolto',cat:'Liikkuminen — arki',type:'needs'},
   {kw:'bolt',cat:'Liikkuminen — arki',type:'needs'},
   {kw:'espresso house',cat:'Kahvilat',type:'wants'},
   {kw:'cafes buondi',cat:'Kahvilat',type:'wants'},
@@ -1061,10 +1060,32 @@ async function parseQuickAI(text) {
 }
 
 // ── CHIP HELPERS ─────────────────────────────────────────────────────────────
+const TYPE_GROUPS = [
+  ['income',   'Tulot'],
+  ['needs',    'Välttämättömyydet · needs'],
+  ['wants',    'Huvit ja hyödyt · wants'],
+  ['savings',  'Säästöt ja sijoitukset · savings'],
+  ['financing','Rahoitus'],
+  ['neutral',  'Tilisiirrot · neutral'],
+];
+function catOptionsGrouped(selected) {
+  return TYPE_GROUPS.map(([t,label])=>{
+    const items = CATS.filter(c=>c.type===t);
+    if (!items.length) return '';
+    return `<optgroup label="${label}">`+items.map(c=>`<option value="${c.name}"${c.name===selected?' selected':''}>${c.icon} ${c.name}</option>`).join('')+`</optgroup>`;
+  }).join('');
+}
 function renderChips(containerId, selectedCat) {
-  document.getElementById(containerId).innerHTML = CATS.map(c =>
-    `<button class="cat-chip${c.name===selectedCat?' selected':''}" onclick="selectChip('${containerId}','${c.name.replace(/'/g,"\\'")}',this)">${c.icon} ${c.name}</button>`
-  ).join('');
+  let html = '';
+  TYPE_GROUPS.forEach(([t,label])=>{
+    const items = CATS.filter(c=>c.type===t);
+    if (!items.length) return;
+    html += `<div style="width:100%;font-size:10px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin:8px 0 2px">${label}</div>`;
+    items.forEach(c=>{
+      html += `<button class="cat-chip${c.name===selectedCat?' selected':''}" onclick="selectChip('${containerId}','${c.name.replace(/'/g,"\\'")}',this)">${c.icon} ${c.name}</button>`;
+    });
+  });
+  document.getElementById(containerId).innerHTML = html;
 }
 function selectChip(containerId, catName, btn) {
   document.querySelectorAll(`#${containerId} .cat-chip`).forEach(b=>b.classList.remove('selected'));
@@ -1242,7 +1263,7 @@ function renderYhteenveto() {
 // ── TAPAHTUMAT ────────────────────────────────────────────────────────────────
 function renderTapahtumat() {
   const isDesktop = window.innerWidth >= 768;
-  const catOpts = CATS.map(c=>`<option value="${c.name}">${c.icon} ${c.name}</option>`).join('');
+  const catOpts = catOptionsGrouped('');
 
   let list = [...txs].sort((a,b)=>b.date.localeCompare(a.date));
   if (curCatFilter) {
