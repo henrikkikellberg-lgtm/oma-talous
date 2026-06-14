@@ -23,6 +23,45 @@ Toteutettu suoriteperusteinen tilimalli. Ks. `SUUNNITELMA-analytiikka-velat.md`.
 
 ---
 
+## v1.2.0 — UX-korjaukset (toteutettu)
+- ✅ Hakukentän fokusbugi korjattu (kursori ei enää hyppää)
+- ✅ Välilehtien järjestys: Yhteenveto · Saldot · Kategoriat · Vertailu · Tapahtumat · Säännöt
+- ✅ Säännöt: hakusana/kategoria/luokitus + napit nostettu ylös
+- ✅ Saldot: "Varat yhteensä" -rivi näkyviin
+- ✅ Kategoriat: NWS%-label selvennetty ("X% needs-budjetista (€)") — vertaa oman luokan budjettiin (needs 50% / wants 30% / savings 20% tuloista)
+- ✅ Lounas-duplikaatti: emoji-etuliite riisutaan kategorianimistä (kertasiivous D1:een)
+
+---
+
+## Iso kuva — koontiraportti & OT/IT/Tuottokartta-synergia (SUUNNITTELUSSA)
+
+Tavoite: yksi koontinäkymä joka summaa koko nettovarallisuuden yli kolmen järjestelmän.
+
+| Lohko | Lähde |
+|-------|-------|
+| Tilivarat (käyttö-, säästötilit, lipas) | OT |
+| Sijoitusvarallisuus (rahastot, osakkeet, kryptot) | IT (Investment Tracker) |
+| Kiinteistöt — oma koti | OT |
+| Kiinteistöt — sijoituskohteet | IT / Tuottokartta |
+| Lainat — oma asuntolaina | OT |
+| Lainat — kulutusluotot & luottokortit | OT |
+| Lainat — sijoituslainat | IT |
+
+Avoimet suunnitteluasiat:
+- **Oma asunto + asuntolaina OT:hen** — mallinna Tuottokartan/IT:n D1:stä miten lainan lyhennys (lyhennys/korko/NV-vaikutus) käsitellään.
+- **OT↔IT-synergia:** säännöllinen rahastosäästö (SÄÄN.SÄÄST) kirjautuu molempiin — OT:ssa "Sijoittaminen", IT:ssä toistuvana per rahasto. Voisiko OT:n sijoitusmerkinnät uida IT:hen automaattisesti?
+- **Nordnet 300 € = sijoituslainan lyhennys** (velkavipu) — kuuluu IT:hen, ei OT:n kulutukseen/säästöön samalla tavalla.
+- **FIRE-kuukausisäästö osaksi budjettia:** näytä tavoite ja "nipistä kulutuksesta kohti säästöä" -mittari.
+- IT pysyy desktop-only sijoitustyökaluna; OT mobile+desktop. Koontiraportti voisi olla erillinen sivu joka lukee molempien D1:t (read-only).
+
+## Pienempiä parannuksia (jonossa)
+- Kategoriat: Harkinnanvaraiset-blokin swaippaus muihin kategorioihin / donitsikaavio kulutuksesta
+- Saldot: kk-valitsin hakee valitun kuukauden lopun tilisaldon (computeBalances(asOf) — ei vaadi historian tallennusta)
+- Kk-valitsin piiloon välilehdillä joilla se ei tee mitään (Säännöt)
+- Yhteenveto: yläkulman "käytetty"-summan integrointi selkeämmin
+
+---
+
 ## Kehitysjonossa (prioriteettijärjestyksessä)
 
 ### Luottokortti-kirjanpito: double-counting bugi (KRIITTINEN)

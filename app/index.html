@@ -268,11 +268,11 @@ tr:hover td{background:var(--surface2)}
   <div class="logo">oma<span class="dot">·</span>talous <span class="app-ver" style="font-size:10px;font-weight:400;color:var(--dim)"></span></div>
   <nav class="desk-nav">
     <button class="dnav-btn active" data-tab="yhteenveto" onclick="switchTab('yhteenveto')">Yhteenveto</button>
-    <button class="dnav-btn" data-tab="tapahtumat" onclick="switchTab('tapahtumat')">Tapahtumat</button>
+    <button class="dnav-btn" data-tab="saldot" onclick="switchTab('saldot')">Saldot</button>
     <button class="dnav-btn" data-tab="kategoriat" onclick="switchTab('kategoriat')">Kategoriat</button>
     <button class="dnav-btn" data-tab="vertailu" onclick="switchTab('vertailu')">Vertailu</button>
+    <button class="dnav-btn" data-tab="tapahtumat" onclick="switchTab('tapahtumat')">Tapahtumat</button>
     <button class="dnav-btn" data-tab="saannot" onclick="switchTab('saannot')">Säännöt</button>
-    <button class="dnav-btn" data-tab="saldot" onclick="switchTab('saldot')">Saldot</button>
   </nav>
   <div class="desk-actions">
     <label class="btn btn-secondary" style="cursor:pointer">↑ CSV<input type="file" accept=".csv" multiple hidden onchange="handleCSVInput(event)"></label>
@@ -497,7 +497,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.1.3';
+const APP_VERSION = '1.2.0';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 const API_SECRET = '8128f7da46a8a897b418f7f85a517bae788abeb3626d49a48840c232d2186248';
 
@@ -857,10 +857,27 @@ async function initState() {
 
     // Yhdistä: säilytä lokaalit kategorioinnit joita D1 ei vielä tiedä
     txs = [...(await mergeCats(apiTxs)), ...localOnly];
+    await normalizeStoredCats();   // siivoa emoji-etuliitteet vanhasta datasta
     saveLocalState();
     curMonth = allMonths()[0] || fmtMonthKey(new Date());
     renderAll();
   } catch(e) { /* offline — cache riittää */ }
+}
+
+// Kertaluonteinen siivous: poistaa kategorian nimen emoji-etuliitteen ja synkkaa D1:een
+async function normalizeStoredCats() {
+  const changed = [];
+  txs = txs.map(t => {
+    const n = stripIcon(t.cat);
+    if (n && n !== t.cat) { const nt = {...t, cat:n}; changed.push(nt); return nt; }
+    return t;
+  });
+  if (changed.length && API_BASE) {
+    for (const t of changed) {
+      try { await fetch(`${API_BASE}/transactions/${encodeURIComponent(t.id)}`, {method:'PUT', headers:apiHeaders(), body:JSON.stringify({cat:t.cat})}); } catch(e){}
+    }
+    showToast(`Siivottu ${changed.length} kategorianimeä`, 'ok');
+  }
 }
 
 // ── HELPERS ─────────────────────────────────────────────────────────────────
@@ -875,7 +892,9 @@ function fmtMonthLbl(key) {
   return MONTHS_FI[parseInt(m)-1] + ' ' + y;
 }
 function todayISO() { return new Date().toISOString().split('T')[0]; }
-function catObj(name) { return CATS.find(c=>c.name===name)||{name:name||'Muut',type:'wants',icon:'📦'}; }
+// Riisuu kategorian nimen edestä mahdollisen emoji-etuliitteen (vanha data: "🥗 Lounas" → "Lounas")
+function stripIcon(s) { return String(s||'').replace(/^[\p{Extended_Pictographic}☀-➿️‍]+\s*/u, '').trim(); }
+function catObj(name) { const n=stripIcon(name); return CATS.find(c=>c.name===n)||{name:name||'Muut',type:'wants',icon:'📦'}; }
 function typeColor(t) { return t==='needs'?'var(--green)':t==='wants'?'var(--gold)':t==='savings'||t==='income'?'var(--blue)':t==='financing'?'var(--purple)':'var(--muted)'; }
 function typeBadge(t) { return 'badge-'+(t||'neutral'); }
 function monthSummary(list) {
@@ -1304,7 +1323,7 @@ function renderTapahtumat() {
       <button class="filter-btn ${curFilter==='income'?'fi':''}" onclick="setCurFilter('income')">Tulot</button>
       <button class="filter-btn ${curFilter==='flag'?'ff':''}" onclick="setCurFilter('flag')">⚠️ Kategorisoimatta</button>
       <button class="filter-btn ${curFilter==='financing'?'ffi':''}" onclick="setCurFilter('financing')">🏦 Rahoitus</button>
-      <input class="search-in" placeholder="Hae..." value="${curSearch}" oninput="curSearch=this.value;renderTapahtumat()">
+      <input class="search-in" placeholder="Hae..." value="${curSearch}" oninput="onSearchInput(this)">
     </div>`;
 
   if (!list.length) {
@@ -1449,7 +1468,8 @@ function renderKategoriat() {
     const budget = c.type==='wants'?budgetInc*0.30:c.type==='needs'?budgetInc*0.50:c.type==='savings'?budgetInc*0.20:0;
     const pct = budget>0 ? Math.min(Math.round(c.total/budget*100),150) : Math.round(c.total/cats[0].total*100);
     const barColor = budget>0&&pct>100 ? 'var(--red)' : typeColor(c.type);
-    const barLabel = budget>0 ? `<div style="font-size:10px;color:var(--dim);margin-top:3px">${pct}% budjetista</div>` : '';
+    const classLbl = c.type==='needs'?'needs':c.type==='wants'?'wants':c.type==='savings'?'savings':'';
+    const barLabel = budget>0 ? `<div style="font-size:10px;color:var(--dim);margin-top:3px">${pct}% ${classLbl}-budjetista (${eur(budget)})</div>` : '';
     return `<div class="cat-card" onclick="setCatDrill('${c.cat.replace(/'/g,"\\'")}') " style="cursor:pointer">
       <div class="cat-icon">${co.icon}</div>
       <div class="cat-name">${esc(c.cat)}</div>
@@ -1550,19 +1570,19 @@ function renderSaannot() {
   }).join('');
 
   document.getElementById('saannotContent').innerHTML = `
-    <p style="font-size:13px;color:var(--muted);margin-bottom:14px">Hakusana etsitään saajan nimestä. Ensimmäinen osuma voittaa. Kategorisoidessa sääntö lisätään automaattisesti.</p>
-    <div>${rows||'<p style="color:var(--dim);font-size:13px">Ei sääntöjä.</p>'}</div>
     <div class="rule-add-row">
       <input class="rule-input" id="rKw" placeholder="Hakusana" style="width:160px">
       <input class="rule-input" id="rCat" placeholder="Kategoria" style="width:180px">
       <select class="rule-input" id="rType" style="cursor:pointer">${typeOpts}</select>
       <button class="btn btn-primary" onclick="addRule()">+ Lisää</button>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;margin-bottom:6px">
       <button class="btn btn-secondary" onclick="recategorize('missing')">🏷️ Kategorisoi puuttuvat</button>
       <button class="btn btn-secondary" onclick="recategorize('all')">🔁 Aja säännöt uudelleen kaikkiin</button>
     </div>
-    <p style="font-size:12px;color:var(--dim);margin-top:12px">Säännöt tallentuvat selaimen muistiin. Vie JSON varmuuskopioksi. "Aja uudelleen" päivittää myös käsin korjatut — käytä harkiten.</p>`;
+    <p style="font-size:12px;color:var(--muted);margin:10px 0 8px">Hakusana etsitään saajan nimestä. Ensimmäinen osuma voittaa. Kategorisoidessa sääntö lisätään automaattisesti. "Aja uudelleen" päivittää myös käsin korjatut — käytä harkiten.</p>
+    <div class="section-lbl">Säännöt (${rules.length})</div>
+    <div>${rows||'<p style="color:var(--dim);font-size:13px">Ei sääntöjä.</p>'}</div>`;
 }
 
 async function recategorize(mode) {
@@ -1641,20 +1661,24 @@ function renderSaldot() {
   };
 
   const netto = bals.reduce((s,b)=>s+b.balance,0);
+  const assetsTotal = assets.reduce((s,b)=>s+b.balance,0);
   const totalDebt = credits.reduce((s,b)=>s+b.balance,0);
   const netBorrow = netBorrowingForMonth(curMonth);
+  const lblRow = (txt,val,color) => `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:16px">
+      <div class="section-lbl" style="margin:0">${txt}</div>
+      <div style="font-size:13px;font-weight:500;color:${color}">${val}</div></div>`;
 
   document.getElementById('saldotContent').innerHTML = `
-    <div class="section-lbl">Varat</div>
+    ${lblRow('Varat · yhteensä', eur(assetsTotal), 'var(--text)')}
     <div class="saldo-grid">${assets.map(assetCard).join('')}</div>
-    <div class="section-lbl" style="margin-top:16px">Luotot</div>
+    ${lblRow('Luotot · velkaa', eur(totalDebt), 'var(--red)')}
     <div class="saldo-grid">${credits.map(creditCard).join('')}</div>
 
     <div class="netto-card" style="margin-top:16px">
       <div><div class="netto-lbl">Nettovarallisuus</div>
         <div class="netto-val" style="color:${netto>=0?'var(--blue)':'var(--red)'}">${esigned(netto)}</div></div>
       <div style="text-align:right;font-size:12px;color:var(--muted)">
-        Velkaa yhteensä<br><span style="color:var(--red)">${eur(totalDebt)}</span>
+        Varat ${eur(assetsTotal)}<br>− velat ${eur(totalDebt)}
       </div>
     </div>
 
@@ -1794,6 +1818,14 @@ function renderCatDetail() {
 }
 
 // ── NAVIGATION ────────────────────────────────────────────────────────────────
+function onSearchInput(el) {
+  curSearch = el.value;
+  const pos = el.selectionStart;
+  renderTapahtumat();
+  const ns = document.querySelector('#txContent .search-in');
+  if (ns) { ns.focus(); try { ns.setSelectionRange(pos, pos); } catch(e){} }
+}
+
 function switchTab(tab) {
   if (tab !== 'tapahtumat') curCatFilter = '';
   if (tab !== 'kategoriat') curCatDrill = null;
