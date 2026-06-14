@@ -497,7 +497,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.2.1';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 const API_SECRET = '8128f7da46a8a897b418f7f85a517bae788abeb3626d49a48840c232d2186248';
 
@@ -1625,7 +1625,7 @@ function deleteRule(i) { rules.splice(i,1); saveLocalState(); renderSaannot(); }
 
 // ── SALDOT ────────────────────────────────────────────────────────────────────
 let saldotEditMode = false;
-function renderSaldot() {
+function saldotSummaryHTML() {
   const bals = computeBalances();
   const assets = bals.filter(b=>b.kind!=='credit');
   const credits = bals.filter(b=>b.kind==='credit');
@@ -1668,7 +1668,7 @@ function renderSaldot() {
       <div class="section-lbl" style="margin:0">${txt}</div>
       <div style="font-size:13px;font-weight:500;color:${color}">${val}</div></div>`;
 
-  document.getElementById('saldotContent').innerHTML = `
+  return `
     ${lblRow('Varat · yhteensä', eur(assetsTotal), 'var(--text)')}
     <div class="saldo-grid">${assets.map(assetCard).join('')}</div>
     ${lblRow('Luotot · velkaa', eur(totalDebt), 'var(--red)')}
@@ -1688,11 +1688,20 @@ function renderSaldot() {
       <div style="text-align:right;font-size:12px;color:var(--muted);max-width:160px">
         ${netBorrow>0?'Velka kasvoi tässä kuussa':netBorrow<0?'Lyhensit velkaa':'Ei muutosta'}
       </div>
-    </div>
+    </div>`;
+}
 
+function renderSaldot() {
+  document.getElementById('saldotContent').innerHTML = `
+    <div id="saldotSummary">${saldotSummaryHTML()}</div>
     <button class="btn btn-secondary" style="margin-top:16px" onclick="toggleSaldotEdit()">${saldotEditMode?'Sulje asetukset':'⚙️ Tilien asetukset (alkusaldo, limiitti, korko)'}</button>
-    <div id="acctEdit">${saldotEditMode?renderAcctEdit(bals):''}</div>
+    <div id="acctEdit">${saldotEditMode?renderAcctEdit(computeBalances()):''}</div>
     <p style="font-size:11px;color:var(--dim);margin-top:10px">Saldot lasketaan: alkusaldo + tilin tapahtumat alkupäivän jälkeen. Tuoreus = viimeisin tuonti.</p>`;
+}
+// Päivittää vain saldot-yhteenvedon, ei muokkauspaneelia (säilyttää kentän fokuksen)
+function refreshSaldotSummary() {
+  const el = document.getElementById('saldotSummary');
+  if (el) el.innerHTML = saldotSummaryHTML();
 }
 
 function renderAcctEdit(bals) {
@@ -1726,7 +1735,7 @@ function saveSetting(key, value) {
   if (API_BASE) {
     fetch(`${API_BASE}/settings`, {method:'PUT', headers:apiHeaders(), body:JSON.stringify({[key]:settings[key]})}).catch(()=>{});
   }
-  renderSaldot();
+  refreshSaldotSummary();
 }
 
 function saveAcctField(key, field, value) {
@@ -1737,7 +1746,7 @@ function saveAcctField(key, field, value) {
   if (API_BASE) {
     fetch(`${API_BASE}/accounts`, {method:'PUT', headers:apiHeaders(), body:JSON.stringify(a)}).catch(()=>{});
   }
-  renderSaldot();
+  refreshSaldotSummary();   // ei renderSaldot() → muokkauskenttä säilyy fokuksessa
 }
 
 // ── LISÄÄ (mobile "more") ─────────────────────────────────────────────────────
