@@ -911,10 +911,29 @@ function monthSummary(list) {
     sp:income>0?Math.round(sav/income*100):0};
 }
 
-// Palauttaa tulot budjettilaskentaan: jos kuukaudella ei tuloja, käytetään edellisen kk:n palkkaa
+// Palauttaa tulot budjettilaskentaan: hakee palkkajakson (edell. palkkapäivä → tämän kk:n palkkapäivä)
+// Esim. kesäkuu 2026 salary_day=27: jakso 27.5.–26.6. → sisältää toukokuun palkan
 function budgetIncomeForMonth(month) {
-  const inc = txsForMonth(month).filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
-  if (inc > 0) return {income:inc, note:null};
+  const [y, m] = month.split('-').map(Number);
+  // effectivePayday käyttää 0-indeksoitua kuukautta
+  const currPay  = effectivePayday(y, m-1);
+  const prevYear = m===1 ? y-1 : y;
+  const prevMon0 = m===1 ? 11 : m-2;
+  const prevPay  = effectivePayday(prevYear, prevMon0);
+  const startISO = isoLocal(prevPay);
+  const endISO   = isoLocal(currPay);
+
+  const periodInc = txs
+    .filter(t => t.type==='income' && t.date >= startISO && t.date <= endISO)
+    .reduce((s,t) => s+t.amount, 0);
+
+  if (periodInc > 0) {
+    const crossMonth = startISO.substring(0,7) !== month;
+    const note = crossMonth ? `palkkajakso ${startISO.slice(5)} – ${endISO.slice(5)}` : null;
+    return {income: periodInc, note};
+  }
+
+  // Fallback: edellisen kuukauden tulot
   const months = allMonths();
   const idx = months.indexOf(month);
   if (idx >= 0 && idx+1 < months.length) {
@@ -1246,13 +1265,13 @@ function renderYhteenveto() {
   const np = bInc>0?Math.round(s.needs/bInc*100):0;
   const wp = bInc>0?Math.round(s.wants/bInc*100):0;
   const sp = bInc>0?Math.round(s.sav/bInc*100):0;
-  const budgetNote = bi.note ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">Budjetti: ${bi.note}n palkka</div>` : '';
+  const budgetNote = bi.note ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${bi.note}</div>` : '';
   const recent = [...list].filter(t=>t.type!=='neutral').sort((a,b)=>b.date.localeCompare(a.date)).slice(0,20);
 
   document.getElementById('sumGrid').innerHTML = `
     <div class="sum-card sum-income">
       <div class="sum-label">Tulot</div>
-      <div class="sum-value">${s.income>0?eur(s.income):eur(bInc)}</div>
+      <div class="sum-value">${eur(bInc||s.income)}</div>
       ${budgetNote}
       <div class="sum-bar"><div class="sum-bar-fill" style="width:100%"></div></div>
     </div>
@@ -1370,10 +1389,14 @@ function txItemHTML(t) {
   const c = catObj(t.cat);
   const amtClass = t.amount>0?'pos':t.type==='flag'?'red':'neg';
   const amtSign = t.amount>0?'+':'−';
+  const acct = accountByKey(t.account);
+  const acctBadge = (acct && acct.key!=='Perus')
+    ? `<span style="display:inline-block;font-size:10px;padding:0 4px;border-radius:3px;margin-left:5px;background:var(--surface2);color:var(--muted);font-weight:500;vertical-align:middle">${esc(acct.label)}</span>`
+    : '';
   return `<div class="tx-item" onclick="openTxEdit('${esc(t.id)}')">
     <div class="tx-icon">${c.icon}</div>
     <div class="tx-info">
-      <div class="tx-merchant">${esc(t.payee)}</div>
+      <div class="tx-merchant">${esc(t.payee)}${acctBadge}</div>
       <div class="tx-meta">${esc(t.cat||'— Kategorisoimatta')} · ${t.date}</div>
     </div>
     <div class="tx-amt ${amtClass}">${amtSign}${eur(t.amount)}</div>
