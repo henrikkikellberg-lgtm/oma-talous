@@ -471,6 +471,17 @@ function splitCSV(line, sep) {
 
 function categorize(tx, rules) {
   const txt = ((tx.payee||'')+' '+(tx.selitys||'')+' '+(tx.viesti||'')).toLowerCase();
+
+  // Luottokorttitilille tuleva positiivinen = maksu kortille → neutral
+  if (tx.amount > 0 && (tx.account === 'Finnair' || tx.account === 'OPCredit')) {
+    return {cat:'MobilePay & siirrot', type:'neutral'};
+  }
+
+  // KELLBERG tulona Perustilillä = oma raha säästötililtä/lippaasta takaisin → neutral
+  if (tx.amount > 0 && tx.account === 'Perus' && /kellberg/i.test(tx.payee)) {
+    return {cat:'MobilePay & siirrot', type:'neutral'};
+  }
+
   for (const r of rules) if (txt.includes(r.kw.toLowerCase())) return {cat:r.cat, type:r.type};
   if (tx.amount>0) return {cat:'Palkka ja tulot', type:'income'};
   return {cat:'— Kategorisoimatta', type:'flag'};
