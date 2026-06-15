@@ -563,7 +563,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.4.2';
+const APP_VERSION = '1.4.3';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 const API_SECRET = '8128f7da46a8a897b418f7f85a517bae788abeb3626d49a48840c232d2186248';
 
@@ -1888,20 +1888,70 @@ function renderLoansSection() {
     ${summaryRow}`;
 }
 
+function avgNeedsMonthly(nMonths = 3) {
+  const curMk = fmtMonthKey(new Date());
+  const completed = [...new Set(txs.map(t => t.month))].sort().reverse().filter(m => m < curMk).slice(0, nMonths);
+  if (!completed.length) return null;
+  const total = txs.filter(t => completed.includes(t.month) && t.type === 'needs' && t.amount < 0)
+    .reduce((s, t) => s + Math.abs(t.amount), 0);
+  return { avg: total / completed.length, months: completed.length };
+}
+
+function expiringLoans(withinMonths = 12) {
+  const curMk = fmtMonthKey(new Date());
+  const [y, m] = curMk.split('-').map(Number);
+  const limitMk = fmtMonthKey(new Date(y, m - 1 + withinMonths, 1));
+  return loans.filter(l => l.end_month && l.end_month >= curMk && l.end_month <= limitMk)
+    .sort((a, b) => a.end_month.localeCompare(b.end_month));
+}
+
 function budgetFitCardHTML() {
-  const nm = (settings.monthly_salary || 0) * 0.5;
+  const needsBudget = (settings.monthly_salary || 0) * 0.5;
   const totalM = totalBurdenMonthly();
-  const p = nm > 0 ? Math.round(totalM / nm * 100) : 0;
-  const c = p > 50 ? 'var(--red)' : p > 30 ? 'var(--gold)' : 'var(--green)';
+  const loansP = needsBudget > 0 ? Math.round(totalM / needsBudget * 100) : 0;
+  const loansC = loansP > 50 ? 'var(--red)' : loansP > 30 ? 'var(--gold)' : 'var(--green)';
+
+  const needsAvg = avgNeedsMonthly(3);
+  const headroom = needsAvg ? needsBudget - needsAvg.avg : null;
+  const headroomC = headroom !== null ? (headroom < 0 ? 'var(--red)' : headroom < totalM ? 'var(--gold)' : 'var(--green)') : 'var(--muted)';
+
+  const expiring = expiringLoans(12);
+  const expiringHTML = expiring.length ? `
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+      <div style="font-size:11px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;color:var(--dim);margin-bottom:6px">Vapautuu seuraavan vuoden aikana</div>
+      ${expiring.map(l => `
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:3px">
+          <span>${esc(l.name)}</span>
+          <span style="color:var(--green);font-weight:500">+${eur(l.monthly_payment)}/kk · ${fmtMonthLbl(l.end_month)}</span>
+        </div>`).join('')}
+      <div style="font-size:12px;color:var(--green);font-weight:500;margin-top:4px">
+        Yhteensä vapautuu: +${eur(expiring.reduce((s,l)=>s+l.monthly_payment,0))}/kk
+      </div>
+    </div>` : '';
+
   return `
     <div class="saldo-card" style="margin-top:8px;border-top:2.5px solid var(--blue)">
       <div class="saldo-lbl" style="margin-bottom:8px">Mahtuuko budjettiin?</div>
-      ${nm > 0 ? `<div style="font-size:12px;color:var(--muted);margin-bottom:10px">Kaikki kiinteät erät nyt: <strong style="color:var(--text)">${eur(totalM)}/kk</strong> = <strong style="color:${c}">${p}%</strong> needs-budjetista (${eur(nm)}/kk)</div>` : ''}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
+        <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:8px 10px">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);font-weight:500;margin-bottom:2px">Needs-budjetti</div>
+          <div style="font-size:15px;font-weight:300;color:var(--text)">${eur(needsBudget)}/kk</div>
+          <div style="font-size:11px;color:${loansC}">Kiinteät erät ${loansP}%</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:8px 10px">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);font-weight:500;margin-bottom:2px">Liikkumavara${needsAvg ? ` (${needsAvg.months} kk avg)` : ''}</div>
+          ${headroom !== null
+            ? `<div style="font-size:15px;font-weight:300;color:${headroomC}">${eur(headroom)}/kk</div>
+               <div style="font-size:11px;color:var(--dim)">Avg kulutus ${eur(needsAvg.avg)}</div>`
+            : `<div style="font-size:13px;color:var(--dim)">Ei tarpeeksi dataa</div>`}
+        </div>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
         <label style="font-size:12px;color:var(--muted)">Uusi kuukausierä €<input class="saldo-in" type="number" step="1" min="0" id="fitPayment" placeholder="esim. 300" oninput="calcBudgetFit()"></label>
         <label style="font-size:12px;color:var(--muted)">Kesto (kk)<input class="saldo-in" type="number" step="1" min="1" id="fitMonths" placeholder="esim. 36" oninput="calcBudgetFit()"></label>
       </div>
       <div id="fitResult" style="font-size:13px;color:var(--muted)">Syötä kuukausierä ja kesto laskelmaa varten</div>
+      ${expiringHTML}
     </div>`;
 }
 
@@ -1911,17 +1961,30 @@ function calcBudgetFit() {
   const resEl = document.getElementById('fitResult');
   if (!resEl) return;
   if (!pay) { resEl.textContent = 'Syötä kuukausierä ja kesto laskelmaa varten'; return; }
-  const existingMonthly = totalBurdenMonthly();
-  const totalMonthly = existingMonthly + pay;
+
   const needsBudget = (settings.monthly_salary || 0) * 0.5;
-  const pct = needsBudget > 0 ? Math.round(totalMonthly / needsBudget * 100) : 0;
-  const color = pct > 50 ? 'var(--red)' : pct > 30 ? 'var(--gold)' : 'var(--green)';
+  const totalFixed = totalBurdenMonthly() + pay;
+  const needsAvg = avgNeedsMonthly(3);
+  const headroom = needsAvg ? needsBudget - needsAvg.avg : null;
+
+  const fixedPct = needsBudget > 0 ? Math.round(totalFixed / needsBudget * 100) : 0;
+  const fixedC = fixedPct > 50 ? 'var(--red)' : fixedPct > 30 ? 'var(--gold)' : 'var(--green)';
+
   const totalCost = pay * months;
   const endDate = new Date(); endDate.setMonth(endDate.getMonth() + months);
   const endMonthKey = fmtMonthKey(endDate);
-  resEl.innerHTML = `Erät nousisivat <strong style="color:var(--text)">${eur(totalMonthly)}/kk</strong>`
-    + (needsBudget > 0 ? ` = <strong style="color:${color}">${pct}%</strong> needs-budjetista` : '')
-    + (months ? ` · kokonaiskustannus ${eur(totalCost)} · vapautuu ${fmtMonthLbl(endMonthKey)}` : '');
+
+  let html = `Kiinteät erät nousisivat <strong style="color:var(--text)">${eur(totalFixed)}/kk</strong> = <strong style="color:${fixedC}">${fixedPct}%</strong> needs-budjetista`;
+
+  if (headroom !== null) {
+    const fits = pay <= headroom;
+    const fitC = fits ? 'var(--green)' : 'var(--red)';
+    const fitTxt = fits ? 'mahtuu liikkumavaraan' : 'ylittää liikkumavaran';
+    html += `<br><span style="color:${fitC};font-weight:500">${fitTxt}</span> (${eur(headroom)}/kk headroom)`;
+  }
+  if (months) html += `<br>Kokonaiskustannus ${eur(totalCost)} · vapautuu ${fmtMonthLbl(endMonthKey)}`;
+
+  resEl.innerHTML = html;
 }
 
 function openLoanModal(id) {
