@@ -6,6 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#1B6B3A">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <title>oma·talous</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/svg+xml" href="icon.svg">
@@ -282,6 +283,7 @@ tr:hover td{background:var(--surface2)}
     <button class="dnav-btn" data-tab="saldot" onclick="switchTab('saldot')">Saldot</button>
     <button class="dnav-btn" data-tab="kategoriat" onclick="switchTab('kategoriat')">Kategoriat</button>
     <button class="dnav-btn" data-tab="vertailu" onclick="switchTab('vertailu')">Vertailu</button>
+    <button class="dnav-btn" data-tab="analytiikka" onclick="switchTab('analytiikka')">Analytiikka</button>
     <button class="dnav-btn" data-tab="tapahtumat" onclick="switchTab('tapahtumat')">Tapahtumat</button>
     <button class="dnav-btn" data-tab="saannot" onclick="switchTab('saannot')">Säännöt</button>
   </nav>
@@ -371,6 +373,11 @@ tr:hover td{background:var(--surface2)}
   <!-- SALDOT -->
   <div class="tab-panel" id="tab-saldot">
     <div id="saldotContent"></div>
+  </div>
+
+  <!-- ANALYTIIKKA -->
+  <div class="tab-panel" id="tab-analytiikka">
+    <div id="analytiikkaContent"></div>
   </div>
 
   <!-- LISÄÄ (mobile) -->
@@ -564,7 +571,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.4.5';
+const APP_VERSION = '1.4.6';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 const API_SECRET = '8128f7da46a8a897b418f7f85a517bae788abeb3626d49a48840c232d2186248';
 
@@ -1291,6 +1298,7 @@ function renderTab(tab) {
   else if (tab==='saannot') renderSaannot();
   else if (tab==='saldot') renderSaldot();
   else if (tab==='lisaa') renderLisaa();
+  else if (tab==='analytiikka') renderAnalytiikka();
 }
 
 // ── YHTEENVETO ────────────────────────────────────────────────────────────────
@@ -2288,10 +2296,210 @@ function saveAcctField(key, field, value) {
 }
 
 // ── LISÄÄ (mobile "more") ─────────────────────────────────────────────────────
+// ── ANALYTIIKKA ───────────────────────────────────────────────────────────────
+let analytCharts = {};
+
+function renderAnalytiikka() {
+  Object.values(analytCharts).forEach(c => { try { c.destroy(); } catch(e){} });
+  analytCharts = {};
+
+  const el = document.getElementById('analytiikkaContent');
+  if (!el) return;
+
+  if (!window.Chart) {
+    el.innerHTML = '<div class="empty" style="padding:40px 0"><div class="empty-text">Ladataan kaavioita…</div></div>';
+    return;
+  }
+
+  const allM = allMonths().slice().reverse(); // vanhimmasta uusimpaan
+  const curM  = fmtMonthKey(new Date());
+  const curYear = new Date().getFullYear().toString();
+
+  const MONTH_ABBR = ['tam','hel','maa','huh','tou','kes','hei','elo','syy','lok','mar','jou'];
+  function shortMonth(m) {
+    const [y, mo] = m.split('-');
+    return MONTH_ABBR[parseInt(mo)-1] + (y !== curYear ? ` '${y.slice(2)}` : '');
+  }
+
+  // Kuukausidata
+  const monthData = allM.map(m => {
+    const list = txsForMonth(m);
+    const s    = monthSummary(list);
+    const bInc = budgetIncomeForMonth(m).income || s.income;
+    const kv   = bInc - s.needs - s.wants;
+    return {
+      m, isCurrent: m === curM, bInc, kv,
+      needs: s.needs, wants: s.wants, sav: s.sav,
+      np: bInc > 0 ? Math.round(s.needs / bInc * 100) : 0,
+      wp: bInc > 0 ? Math.round(s.wants / bInc * 100) : 0,
+      sp: bInc > 0 ? Math.round(s.sav   / bInc * 100) : 0,
+      savRate: bInc > 0 ? s.sav / bInc * 100 : 0,
+    };
+  });
+
+  const kv12  = monthData.slice(-12);
+  const nws6  = monthData.slice(-6);
+  const past  = monthData.filter(d => !d.isCurrent);
+
+  // YTD top kategoriat (needs + wants)
+  const ytdTxs = txs.filter(t => t.date.startsWith(curYear) && t.amount < 0 && t.type !== 'neutral' && t.type !== 'financing');
+  const catTotals = {};
+  ytdTxs.forEach(tx => expandTx(tx).forEach(e => {
+    catTotals[e.cat] = (catTotals[e.cat] || 0) + Math.abs(e.amount);
+  }));
+  const topCats = Object.entries(catTotals).sort((a, b) => b[1] - a[1]).slice(0, 10);
+
+  // Trendivaroitukset
+  const alerts = [];
+  let consNeg = 0;
+  for (let i = past.length - 1; i >= 0; i--) {
+    if (past[i].kv < 0) consNeg++; else break;
+  }
+  if (consNeg >= 2) alerts.push({ type: 'red', msg: `Pohja vuotaa: kassavirta on ollut miinuksella ${consNeg} kuukautta peräkkäin.` });
+
+  const last3 = past.slice(-3);
+  if (last3.length >= 2) {
+    const avg3 = last3.reduce((s, d) => s + d.savRate, 0) / last3.length;
+    if (avg3 < 10)  alerts.push({ type: 'gold',  msg: `Säästöaste 3 kk ka: ${Math.round(avg3)}% — alle 10%. Tavoite 20%.` });
+    else if (avg3 >= 20) alerts.push({ type: 'green', msg: `Säästöaste 3 kk ka: ${Math.round(avg3)}% — tavoite (20%) täyttyy.` });
+  }
+  const negCount = past.slice(-6).filter(d => d.kv < 0).length;
+  if (negCount >= 4 && consNeg < 2) alerts.push({ type: 'gold', msg: `${negCount}/6 viimeisestä kuukaudesta kassavirta on ollut miinuksella.` });
+
+  const alertIcon = t => t === 'red' ? '⚠️' : t === 'gold' ? '⚡' : '✓';
+  const alertBg   = t => t === 'red' ? 'var(--red-light)' : t === 'gold' ? 'var(--gold-light)' : 'var(--green-light)';
+  const alertClr  = t => t === 'red' ? 'var(--red)' : t === 'gold' ? 'var(--gold)' : 'var(--green)';
+
+  el.innerHTML = `
+    ${alerts.length ? `<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+      ${alerts.map(a => `<div style="border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;font-weight:500;background:${alertBg(a.type)};color:${alertClr(a.type)}">${alertIcon(a.type)} ${a.msg}</div>`).join('')}
+    </div>` : ''}
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+
+      <div class="sum-card">
+        <div style="font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin-bottom:12px">Kassavirta kuukausittain · tulot − (needs + wants)</div>
+        <div style="position:relative;height:180px"><canvas id="chartKV"></canvas></div>
+        <div style="font-size:11px;color:var(--dim);margin-top:8px">* = kuukausi kesken</div>
+      </div>
+
+      <div class="sum-card">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
+          <div style="font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)">N/W/S %-jakauma</div>
+          <div style="font-size:11px;color:var(--dim)">tavoite 50 / 30 / 20</div>
+        </div>
+        <div style="position:relative;height:200px"><canvas id="chartNWS"></canvas></div>
+      </div>
+
+      ${topCats.length ? `<div class="sum-card">
+        <div style="font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin-bottom:12px">Top kulukategoriat ${curYear}</div>
+        <div style="position:relative;height:${topCats.length * 30 + 20}px"><canvas id="chartCats"></canvas></div>
+      </div>` : ''}
+
+    </div>`;
+
+  requestAnimationFrame(() => {
+    const baseOpts = {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+    };
+    const gridColor = '#EAF0F6';
+    const tickFont  = { size: 11 };
+    const tickColor = '#5A6E82';
+
+    // Chart 1: Kassavirta
+    const kvEl = document.getElementById('chartKV');
+    if (kvEl) {
+      analytCharts.kv = new Chart(kvEl, {
+        type: 'bar',
+        data: {
+          labels: kv12.map(d => shortMonth(d.m) + (d.isCurrent ? ' *' : '')),
+          datasets: [{
+            data: kv12.map(d => Math.round(d.kv)),
+            backgroundColor: kv12.map(d => {
+              const alpha = d.isCurrent ? '0.4)' : '0.85)';
+              return d.kv >= 0 ? `rgba(27,107,58,${alpha}` : `rgba(192,50,42,${alpha}`;
+            }),
+            borderRadius: 4,
+          }],
+        },
+        options: {
+          ...baseOpts,
+          scales: {
+            x: { grid: { display: false }, ticks: { font: tickFont, color: tickColor } },
+            y: { grid: { color: gridColor }, ticks: { font: tickFont, color: tickColor, callback: v => v.toLocaleString('fi-FI') + ' €' } },
+          },
+          plugins: {
+            ...baseOpts.plugins,
+            tooltip: { callbacks: { label: ctx => `${ctx.raw >= 0 ? '+' : ''}${Math.round(ctx.raw).toLocaleString('fi-FI')} €` } },
+          },
+        },
+      });
+    }
+
+    // Chart 2: N/W/S %
+    const nwsEl = document.getElementById('chartNWS');
+    if (nwsEl) {
+      analytCharts.nws = new Chart(nwsEl, {
+        type: 'bar',
+        data: {
+          labels: nws6.map(d => shortMonth(d.m) + (d.isCurrent ? ' *' : '')),
+          datasets: [
+            { label: 'Needs (50%)',   data: nws6.map(d => d.np), backgroundColor: 'rgba(27,107,58,0.8)',  borderRadius: 3 },
+            { label: 'Wants (30%)',   data: nws6.map(d => d.wp), backgroundColor: 'rgba(181,136,62,0.8)', borderRadius: 3 },
+            { label: 'Savings (20%)', data: nws6.map(d => d.sp), backgroundColor: 'rgba(26,91,171,0.8)',  borderRadius: 3 },
+          ],
+        },
+        options: {
+          ...baseOpts,
+          scales: {
+            x: { grid: { display: false }, ticks: { font: tickFont, color: tickColor } },
+            y: { grid: { color: gridColor }, max: 100, ticks: { font: tickFont, color: tickColor, callback: v => v + '%' } },
+          },
+          plugins: {
+            legend: { display: true, position: 'bottom', labels: { font: tickFont, color: tickColor, boxWidth: 10, padding: 12 } },
+            tooltip: { mode: 'index', intersect: false },
+          },
+        },
+      });
+    }
+
+    // Chart 3: Top kategoriat (vaakasuora)
+    const catsEl = document.getElementById('chartCats');
+    if (catsEl && topCats.length) {
+      analytCharts.cats = new Chart(catsEl, {
+        type: 'bar',
+        data: {
+          labels: topCats.map(([name]) => name.length > 24 ? name.slice(0, 24) + '…' : name),
+          datasets: [{
+            data: topCats.map(([, v]) => Math.round(v)),
+            backgroundColor: 'rgba(26,91,171,0.75)',
+            borderRadius: 3,
+          }],
+        },
+        options: {
+          ...baseOpts,
+          indexAxis: 'y',
+          scales: {
+            x: { grid: { color: gridColor }, ticks: { font: tickFont, color: tickColor, callback: v => v.toLocaleString('fi-FI') + ' €' } },
+            y: { grid: { display: false }, ticks: { font: tickFont, color: tickColor } },
+          },
+          plugins: {
+            ...baseOpts.plugins,
+            tooltip: { callbacks: { label: ctx => Math.round(ctx.raw).toLocaleString('fi-FI') + ' €' } },
+          },
+        },
+      });
+    }
+  });
+}
+
 function renderLisaa() {
   document.getElementById('lisaaContent').innerHTML = `
     <div style="display:flex;flex-direction:column;gap:8px">
       <label class="add-option" style="cursor:pointer">📂 Tuo CSV<input type="file" accept=".csv" multiple hidden onchange="handleCSVInput(event)"></label>
+      <button class="add-option" onclick="switchTab('analytiikka')">📊 Analytiikka &amp; trendit</button>
       <button class="add-option" onclick="switchTab('vertailu')">📅 Kuukausivertailu</button>
       <button class="add-option" onclick="switchTab('saannot')">⚙️ Kategorisointisäännöt</button>
       <button class="add-option" onclick="switchTab('saldot')">🏦 Saldot &amp; nettovarallisuus</button>
@@ -2382,7 +2590,7 @@ function switchTab(tab) {
   if (panel) panel.classList.add('active');
   document.querySelectorAll('.dnav-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   document.querySelectorAll('.mob-nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
-  const hideMonth = tab === 'saannot';
+  const hideMonth = tab === 'saannot' || tab === 'analytiikka';
   const mobBar = document.querySelector('.month-bar');
   const deskRow = document.getElementById('deskMonthRow');
   if (mobBar) mobBar.style.display = hideMonth ? 'none' : '';
