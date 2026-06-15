@@ -571,7 +571,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.4.6';
+const APP_VERSION = '1.4.7';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 const API_SECRET = '8128f7da46a8a897b418f7f85a517bae788abeb3626d49a48840c232d2186248';
 
@@ -1006,7 +1006,6 @@ function monthSummary(list) {
 // Esim. kesäkuu 2026 salary_day=27: jakso 27.5.–26.6. → sisältää toukokuun palkan
 function budgetIncomeForMonth(month) {
   const [y, m] = month.split('-').map(Number);
-  // effectivePayday käyttää 0-indeksoitua kuukautta
   const currPay  = effectivePayday(y, m-1);
   const prevYear = m===1 ? y-1 : y;
   const prevMon0 = m===1 ? 11 : m-2;
@@ -1018,13 +1017,22 @@ function budgetIncomeForMonth(month) {
     .filter(t => t.type==='income' && t.date > startISO && t.date <= endISO)
     .reduce((s,t) => s+t.amount, 0);
 
-  if (periodInc > 0) {
+  // Hyväksytään jaksotulo vain jos se on järkevä (≥ 40% kuukausipalkasta)
+  // — estää pienten tulojen (65€ Revolut) tulkitsemisen palkaksi
+  const minSal = (settings.monthly_salary || 0) * 0.4;
+  if (periodInc > 0 && (minSal === 0 || periodInc >= minSal)) {
     const crossMonth = startISO.substring(0,7) !== month;
     const note = crossMonth ? `palkkajakso ${startISO.slice(5)} – ${endISO.slice(5)}` : null;
     return {income: periodInc, note};
   }
 
-  // Fallback: edellisen kuukauden tulot
+  // Nykyinen kuukausi ja palkka ei vielä saapunut → käytä monthly_salary ennusteena
+  if (month === fmtMonthKey(new Date()) && endISO > todayISO()) {
+    const sal = settings.monthly_salary || 0;
+    if (sal > 0) return { income: sal, note: `ennuste · palkka ${endISO.slice(5)}`, isEstimate: true };
+  }
+
+  // Fallback: edellisen kuukauden tulot (jos riittävän suuri)
   const months = allMonths();
   const idx = months.indexOf(month);
   if (idx >= 0 && idx+1 < months.length) {
@@ -1032,6 +1040,10 @@ function budgetIncomeForMonth(month) {
     const prevInc = txsForMonth(prev).filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
     if (prevInc > 0) return {income:prevInc, note:fmtMonthLbl(prev)};
   }
+
+  // Viimesijainen fallback: palkka-asetus
+  const sal = settings.monthly_salary || 0;
+  if (sal > 0) return { income: sal, note: 'palkka-asetus (oletus)', isEstimate: true };
   return {income:0, note:null};
 }
 
@@ -1383,7 +1395,7 @@ function renderTipsCard() {
     </ul></div>`;
 }
 
-function kassavirtaCardHTML(s, bInc) {
+function kassavirtaCardHTML(s, bInc, isEstimate) {
   if (!bInc) return '';
   const kulutus = s.needs + s.wants;
   const kv = bInc - kulutus;                    // kassavirta ennen säästöjä
@@ -1402,7 +1414,7 @@ function kassavirtaCardHTML(s, bInc) {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
         <div>
           <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);font-weight:500;margin-bottom:3px">Tulot</div>
-          <div style="font-size:20px;font-weight:300;color:var(--blue)">+${eur(bInc)}</div>
+          <div style="font-size:20px;font-weight:300;color:${isEstimate ? 'var(--gold)' : 'var(--blue)'}">${isEstimate ? '~ ' : '+'}${eur(bInc)}</div>
         </div>
         <div>
           <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);font-weight:500;margin-bottom:3px">Kulutus (needs + wants)</div>
@@ -1437,14 +1449,14 @@ function renderYhteenveto() {
   const np = bInc>0?Math.round(s.needs/bInc*100):0;
   const wp = bInc>0?Math.round(s.wants/bInc*100):0;
   const sp = bInc>0?Math.round(s.sav/bInc*100):0;
-  const budgetNote = bi.note ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${bi.note}</div>` : '';
+  const budgetNote = bi.note ? `<div style="font-size:11px;color:${bi.isEstimate ? 'var(--gold)' : 'var(--muted)'};margin-top:2px">${bi.note}</div>` : '';
   const recent = [...list].filter(t=>t.type!=='neutral').sort((a,b)=>b.date.localeCompare(a.date)).slice(0,20);
 
-  document.getElementById('kassavirtaCard').innerHTML = kassavirtaCardHTML(s, bInc);
+  document.getElementById('kassavirtaCard').innerHTML = kassavirtaCardHTML(s, bInc, bi.isEstimate);
   document.getElementById('sumGrid').innerHTML = `
     <div class="sum-card sum-income">
       <div class="sum-label">Tulot</div>
-      <div class="sum-value">${eur(bInc||s.income)}</div>
+      <div class="sum-value" style="${bi.isEstimate ? 'color:var(--gold)' : ''}">${bi.isEstimate ? '~ ' : ''}${eur(bInc||s.income)}</div>
       ${budgetNote}
       <div class="sum-bar"><div class="sum-bar-fill" style="width:100%"></div></div>
     </div>
