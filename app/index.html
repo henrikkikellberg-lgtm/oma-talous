@@ -563,7 +563,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.4.1';
+const APP_VERSION = '1.4.2';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 const API_SECRET = '8128f7da46a8a897b418f7f85a517bae788abeb3626d49a48840c232d2186248';
 
@@ -1777,7 +1777,14 @@ function saveLoanSnapshot() {
   } catch(e) {}
 }
 
+function totalBurdenMonthly() {
+  return loans.reduce((s, l) => s + l.monthly_payment, 0)
+    + accounts.filter(a => a.kind === 'credit' && (a.monthly_target || 0) > 0).reduce((s, a) => s + a.monthly_target, 0);
+}
+
 function realBurdenMonthly() {
+  // Käytetään "mahtuuko budjettiin?" -laskurissa: ei sisällä included_in_tx-lainoja
+  // (ne näkyvät jo kululajeissa tapahtumina, joten ne on jo budjetissa)
   return loans.filter(l => !l.included_in_tx).reduce((s, l) => s + l.monthly_payment, 0)
     + accounts.filter(a => a.kind === 'credit' && (a.monthly_target || 0) > 0).reduce((s, a) => s + a.monthly_target, 0);
 }
@@ -1845,10 +1852,29 @@ function renderLoansSection() {
   const empty = !loans.length && !creditTargets.length;
   const total = loans.length + creditTargets.length;
 
-  const summaryRow = total > 1 ? `
-    <div style="font-size:12px;color:var(--muted);margin-top:6px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px">
-      <span>Kiinteä rasite: <strong style="color:var(--text)">${eur(realBurden)}/kk</strong>${hiddenBurden > 0 ? `<span style="color:var(--dim)"> · piilo-osamaksut ${eur(hiddenBurden)}/kk (jo kuluissa)</span>` : ''}</span>
-      ${lastEnd ? `<span>viimeinen ${fmtMonthLbl(lastEnd)}</span>` : ''}
+  const totalBurden = realBurden + hiddenBurden;
+  const needsBudgetTotal = (settings.monthly_salary || 0) * 0.5;
+  const needsPct = needsBudgetTotal > 0 ? Math.round(totalBurden / needsBudgetTotal * 100) : 0;
+  const pctColor = needsPct > 50 ? 'var(--red)' : needsPct > 30 ? 'var(--gold)' : 'var(--green)';
+
+  const summaryRow = total > 0 ? `
+    <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px 12px;margin-top:8px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px">
+        <span style="font-size:13px;color:var(--muted)">Kiinteät erät yhteensä</span>
+        <span style="font-size:16px;font-weight:300;color:var(--text)">${eur(totalBurden)}/kk</span>
+      </div>
+      ${needsBudgetTotal > 0 ? `
+      <div style="margin-top:4px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+          <span style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;font-weight:500">Osuus needs-budjetista (${eur(needsBudgetTotal)}/kk)</span>
+          <span style="font-size:13px;font-weight:500;color:${pctColor}">${needsPct}%</span>
+        </div>
+        <div class="sum-bar"><div class="sum-bar-fill" style="width:${Math.min(needsPct,100)}%;background:${pctColor}"></div></div>
+      </div>` : ''}
+      <div style="font-size:11px;color:var(--dim);margin-top:6px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:2px">
+        ${hiddenBurden > 0 ? `<span>Piilo-osamaksut (jo kuluissa): ${eur(hiddenBurden)}/kk · Muut kiinteät: ${eur(realBurden)}/kk</span>` : ''}
+        ${lastEnd ? `<span>Viimeinen erä: ${fmtMonthLbl(lastEnd)}</span>` : ''}
+      </div>
     </div>` : '';
 
   return `
@@ -1864,13 +1890,13 @@ function renderLoansSection() {
 
 function budgetFitCardHTML() {
   const nm = (settings.monthly_salary || 0) * 0.5;
-  const tm = realBurdenMonthly();
-  const p = nm > 0 ? Math.round(tm / nm * 100) : 0;
+  const totalM = totalBurdenMonthly();
+  const p = nm > 0 ? Math.round(totalM / nm * 100) : 0;
   const c = p > 50 ? 'var(--red)' : p > 30 ? 'var(--gold)' : 'var(--green)';
   return `
     <div class="saldo-card" style="margin-top:8px;border-top:2.5px solid var(--blue)">
       <div class="saldo-lbl" style="margin-bottom:8px">Mahtuuko budjettiin?</div>
-      ${nm > 0 ? `<div style="font-size:12px;color:var(--muted);margin-bottom:10px">Kiinteät lainaerät nyt: <strong style="color:var(--text)">${eur(tm)}/kk</strong> = <strong style="color:${c}">${p}%</strong> needs-budjetista (${eur(nm)}/kk)</div>` : ''}
+      ${nm > 0 ? `<div style="font-size:12px;color:var(--muted);margin-bottom:10px">Kaikki kiinteät erät nyt: <strong style="color:var(--text)">${eur(totalM)}/kk</strong> = <strong style="color:${c}">${p}%</strong> needs-budjetista (${eur(nm)}/kk)</div>` : ''}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
         <label style="font-size:12px;color:var(--muted)">Uusi kuukausierä €<input class="saldo-in" type="number" step="1" min="0" id="fitPayment" placeholder="esim. 300" oninput="calcBudgetFit()"></label>
         <label style="font-size:12px;color:var(--muted)">Kesto (kk)<input class="saldo-in" type="number" step="1" min="1" id="fitMonths" placeholder="esim. 36" oninput="calcBudgetFit()"></label>
@@ -1885,7 +1911,7 @@ function calcBudgetFit() {
   const resEl = document.getElementById('fitResult');
   if (!resEl) return;
   if (!pay) { resEl.textContent = 'Syötä kuukausierä ja kesto laskelmaa varten'; return; }
-  const existingMonthly = realBurdenMonthly();
+  const existingMonthly = totalBurdenMonthly();
   const totalMonthly = existingMonthly + pay;
   const needsBudget = (settings.monthly_salary || 0) * 0.5;
   const pct = needsBudget > 0 ? Math.round(totalMonthly / needsBudget * 100) : 0;
