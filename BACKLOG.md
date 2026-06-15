@@ -2,6 +2,20 @@
 
 ---
 
+## v1.4.x — Toteutettu (kesäkuu 2026)
+
+- ✅ `/loans` D1-endpoint Workers API:hin (GET/POST/PUT/DELETE) — data synkkaa laitteiden välillä
+- ✅ D1-datafixaukset: asuntokauppa → `financing`, luottokorttien palautuskirjaukset → `neutral`, omat tilisiirrot → `neutral`
+- ✅ `categorize()` parannukset: positiiviset luottokorttikirjaukset ja KELLBERG-siirrot Perustilillä → automaattisesti `neutral`
+- ✅ Palkkabudjetti: double-counting-bugi korjattu (`>` eikä `>=` startISO)
+- ✅ `budgetIncomeForMonth`: kynnys 40% (pienet tulot ohitetaan), ennuste nykyiselle kuukaudelle jos palkkapäivä tulevaisuudessa, viimesijainen fallback monthly_salary-asetukseen
+- ✅ Kassavirta-kortti Yhteenveto-välilehdelle: tulot vs kulutus, "pohja vuotaa" -varoitus, netto säästöjen jälkeen
+- ✅ Runway-kortti uudelleensuunniteltu: ennuste hero-lukuna (34px), kolme mini-korttia (tili nyt / kulutustahti / budjettitahti), skenaario-rivi
+- ✅ Analytiikka-välilehti (Chart.js CDN): kassavirta 12 kk, N/W/S% 6 kk, top 10 kulukategoriat YTD, trendivaroitukset tekstinä
+- ✅ Ennuste-tulo näytetään `~`-merkillä ja kultaisena (isEstimate-lippu kautta koko UI)
+
+---
+
 ## v1.1.0 — Analytiikka & elävät luottokorttisaldot (toteutettu, odottaa deployta)
 
 Toteutettu suoriteperusteinen tilimalli. Ks. `SUUNNITELMA-analytiikka-velat.md`.
@@ -73,7 +87,8 @@ Avoimet suunnitteluasiat:
 
 ## Kehitysjonossa (prioriteettijärjestyksessä)
 
-### "Vuotava pohja" — todellinen kassavirta-mittari
+### "Vuotava pohja" — todellinen kassavirta-mittari ✅ TOTEUTETTU (v1.4.x)
+Kassavirta-kortti lisätty Yhteenveto-välilehdelle. Analytiikka-välilehdellä kassavirta 12 kk -kaavio trendivaroituksineen.
 
 **Oivallus:** Säästöaste tai luottojen lyhennykset eivät kerro taloudellisesta terveydestä tarpeeksi, jos samaan aikaan käyttää luottokorttia tai nostaa säästöistä kattamaan arjen kuluja. Pohja vuotaa — velka syö sen minkä säästää.
 
@@ -146,8 +161,17 @@ Avoimet suunnitteluasiat:
 ### Toistuvat kiinteät menot
 Tällä hetkellä esim. 635,90€ asumistransaktio sisältää: hoitovastike + yhtiölainan lyhennys + korko + vesimaksu — kaikki yhdessä rivissä. Tavoite: split-toiminto jolla yhden tapahtuman voi jakaa useampaan kategoriaan manuaalisesti. Esim. 635,90€ → Asuminen 250€ + Luotot—lyhennys 300€ + Luotot—korko 85,90€.
 
+### Analytiikka-välilehti — jatkokehitys
+Nykyinen: kassavirta 12 kk + N/W/S% 6 kk + top 10 kategoriat YTD.
+Seuraavat askeleet:
+- Säästöaste-trendiviiva (line chart) 12 kk, 20% tavoiteviiva
+- Kulukasvun tunnistus: mikä kategoria kasvanut eniten vs. edellinen kk / 3 kk ka
+- Interaktiivisuus: klikkaa kuukausipalkkia → suodattaa Tapahtumat-välilehteen kyseiselle kuukaudelle
+- Muistutus: importtaa kesäkuun CSV kun palkka on tullut (26.6.) jotta analytiikka täsmentyy
+
 ### Palkkatiming — budjettikuukausi salary_day:stä
-Nykyinen fallback (edellinen kk jos ei tuloja) toimii ok, mutta oikea ratkaisu: budjettikuukausi alkaa palkkapäivästä (esim. 27.). Kesäkuun budjetti = touko 27. — kesä 26. Vaatii settings-sivulle salary_day-kentän ja koko kuukausilogiikan uusimisen.
+✅ Osittain toteutettu: ennuste (monthly_salary) kun palkkapäivä tulevaisuudessa, 40% kynnys pienille tuloille.
+Jäljellä: täydellinen palkkajakso-logiikka (budget month = payday to payday) vaatii koko kuukausilogiikan uusimisen — iso refaktorointi, ei prioriteettina.
 
 ### Kategorian tarkempi drill-down
 "Harkinnanvaraiset"-blokin kategoriat voi jo klikata → tapahtumat suodatettuna. Seuraava askel: sivutettava/swipeable kategorianäkymä jossa vasemmalla/oikealla nuolella selaa eri kategorioita ja näkee niiden tapahtumat suoraan ilman välilehteä.

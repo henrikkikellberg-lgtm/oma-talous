@@ -571,7 +571,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.4.7';
+const APP_VERSION = '1.4.8';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 const API_SECRET = '8128f7da46a8a897b418f7f85a517bae788abeb3626d49a48840c232d2186248';
 
@@ -834,8 +834,10 @@ function computeRunway() {
   const checking = balanceOf('Perus');
   const startISO = isoLocal(prevPay);
   const todayISOv = isoLocal(today);
+  // Vain käteistilit (Perus, Revolut) — luottokorttiostot eivät veloita käyttötiliä nyt
   const spentSoFar = txs
-    .filter(t => (t.type==='needs'||t.type==='wants') && t.amount<0 && t.date>=startISO && t.date<=todayISOv)
+    .filter(t => (t.type==='needs'||t.type==='wants') && t.amount<0 && t.date>=startISO && t.date<=todayISOv
+      && (accountByKey(t.account)?.kind ?? 'checking') !== 'credit')
     .reduce((s,t)=>s+Math.abs(t.amount), 0);
   const avgDaily = spentSoFar / daysElapsed;
   const dailyAllowance = daysLeft>0 ? checking/daysLeft : checking;
@@ -1395,16 +1397,20 @@ function renderTipsCard() {
     </ul></div>`;
 }
 
-function kassavirtaCardHTML(s, bInc, isEstimate) {
+function kassavirtaCardHTML(s, bInc, isEstimate, list) {
   if (!bInc) return '';
   const kulutus = s.needs + s.wants;
-  const kv = bInc - kulutus;                    // kassavirta ennen säästöjä
-  const netto = kv - s.sav;                      // todellinen käteismuutos
-  const kvColor = kv >= 0 ? 'var(--green)' : 'var(--red)';
+  const kv     = bInc - kulutus;
+  const netto  = kv - s.sav;
+  const kvColor    = kv >= 0 ? 'var(--green)' : 'var(--red)';
   const nettoColor = netto >= 0 ? 'var(--green)' : 'var(--red)';
-  const kvPct = Math.round(Math.abs(kv) / bInc * 100);
-  const barW = Math.min(kulutus / bInc * 100, 100);
+  const kvPct  = Math.round(Math.abs(kv) / bInc * 100);
+  const barW   = Math.min(kulutus / bInc * 100, 100);
   const barColor = kulutus > bInc ? 'var(--red)' : kulutus > bInc * 0.8 ? 'var(--gold)' : 'var(--green)';
+  const creditKulutus = list ? expandList(list)
+    .filter(t => t.amount < 0 && (t.type==='needs'||t.type==='wants') && accountByKey(t.account)?.kind === 'credit')
+    .reduce((s,t) => s + Math.abs(t.amount), 0) : 0;
+  const cashKV = bInc - (kulutus - creditKulutus);
   return `
     <div class="sum-card" style="border-top:2.5px solid ${kvColor};margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
@@ -1419,6 +1425,7 @@ function kassavirtaCardHTML(s, bInc, isEstimate) {
         <div>
           <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);font-weight:500;margin-bottom:3px">Kulutus (needs + wants)</div>
           <div style="font-size:20px;font-weight:300;color:var(--text)">−${eur(kulutus)}</div>
+          ${creditKulutus > 0 ? `<div style="font-size:11px;color:var(--dim);margin-top:3px">josta luotolla −${eur(creditKulutus)}</div>` : ''}
         </div>
       </div>
       <div class="sum-bar" style="margin-bottom:10px">
@@ -1426,9 +1433,10 @@ function kassavirtaCardHTML(s, bInc, isEstimate) {
       </div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:8px;border-top:1px solid var(--border)">
         <div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:2px">Kassavirta (ennen säästöjä)</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:2px">Kassavirta (budjetti)</div>
           <div style="font-size:24px;font-weight:300;color:${kvColor}">${kv>=0?'+':''}${eur(kv)}</div>
           ${kv < 0 ? `<div style="font-size:11px;color:var(--red);font-weight:500;margin-top:2px">Pohja vuotaa — ${kvPct}% tuloista katetaan muualta</div>` : `<div style="font-size:11px;color:var(--muted);margin-top:2px">${kvPct}% tuloista jää säästöön/lyhennyksiin</div>`}
+          ${creditKulutus > 0 ? `<div style="font-size:11px;color:var(--blue);margin-top:5px">Käteinen kassavirta (ilman luottoa): <strong>${cashKV>=0?'+':''}${eur(cashKV)}</strong></div>` : ''}
         </div>
         ${s.sav > 0 ? `<div style="text-align:right">
           <div style="font-size:11px;color:var(--muted);margin-bottom:2px">− Säästöt/lyhennykset</div>
@@ -1452,7 +1460,7 @@ function renderYhteenveto() {
   const budgetNote = bi.note ? `<div style="font-size:11px;color:${bi.isEstimate ? 'var(--gold)' : 'var(--muted)'};margin-top:2px">${bi.note}</div>` : '';
   const recent = [...list].filter(t=>t.type!=='neutral').sort((a,b)=>b.date.localeCompare(a.date)).slice(0,20);
 
-  document.getElementById('kassavirtaCard').innerHTML = kassavirtaCardHTML(s, bInc, bi.isEstimate);
+  document.getElementById('kassavirtaCard').innerHTML = kassavirtaCardHTML(s, bInc, bi.isEstimate, list);
   document.getElementById('sumGrid').innerHTML = `
     <div class="sum-card sum-income">
       <div class="sum-label">Tulot</div>
