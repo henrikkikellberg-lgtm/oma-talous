@@ -534,7 +534,18 @@ tr:hover td{background:var(--surface2)}
       <div class="field-group" style="flex:1"><div class="field-label">Kuukausierä €</div><input class="field-input" id="loanPayment" type="number" step="0.01" placeholder="0.00"></div>
     </div>
     <div style="display:flex;gap:10px">
-      <div class="field-group" style="flex:1"><div class="field-label">Päättyy (kk / vuosi)</div><input class="field-input" id="loanEndMonth" type="month"></div>
+      <div class="field-group" style="flex:2"><div class="field-label">Päättyy</div>
+        <div style="display:flex;gap:6px">
+          <select class="field-select" id="loanEndMM" style="flex:1">
+            <option value="">Kk</option>
+            <option value="01">Tammi</option><option value="02">Helmi</option><option value="03">Maalis</option>
+            <option value="04">Huhti</option><option value="05">Touko</option><option value="06">Kesä</option>
+            <option value="07">Heinä</option><option value="08">Elo</option><option value="09">Syys</option>
+            <option value="10">Loka</option><option value="11">Marras</option><option value="12">Joulu</option>
+          </select>
+          <input class="field-input" id="loanEndYY" type="number" min="2024" max="2040" placeholder="2027" style="flex:1;width:72px">
+        </div>
+      </div>
       <div class="field-group" style="flex:1"><div class="field-label">Korko % (valinnainen)</div><input class="field-input" id="loanApr" type="number" step="0.01" placeholder="—"></div>
     </div>
     <div class="field-group"><div class="field-label">Muistiinpano (valinnainen)</div><input class="field-input" id="loanNote" placeholder="esim. auto, kodin remontti"></div>
@@ -1849,7 +1860,14 @@ function openLoanModal(id) {
   document.getElementById('loanName').value = loan ? loan.name : '';
   document.getElementById('loanBalance').value = loan ? loan.balance : '';
   document.getElementById('loanPayment').value = loan ? loan.monthly_payment : '';
-  document.getElementById('loanEndMonth').value = loan ? loan.end_month : '';
+  if (loan && loan.end_month) {
+    const [yy, mm] = loan.end_month.split('-');
+    document.getElementById('loanEndMM').value = mm || '';
+    document.getElementById('loanEndYY').value = yy || '';
+  } else {
+    document.getElementById('loanEndMM').value = '';
+    document.getElementById('loanEndYY').value = '';
+  }
   document.getElementById('loanApr').value = (loan && loan.apr) ? loan.apr : '';
   document.getElementById('loanNote').value = loan ? (loan.note || '') : '';
   document.getElementById('loanDeleteBtn').style.display = loan ? 'block' : 'none';
@@ -1861,7 +1879,9 @@ function saveLoan() {
   const name = document.getElementById('loanName').value.trim();
   const balance = parseFloat(document.getElementById('loanBalance').value);
   const monthly = parseFloat(document.getElementById('loanPayment').value);
-  const endMonth = document.getElementById('loanEndMonth').value;
+  const mm = document.getElementById('loanEndMM').value;
+  const yy = document.getElementById('loanEndYY').value;
+  const endMonth = (mm && yy) ? `${yy}-${mm}` : '';
   if (!name || isNaN(balance) || isNaN(monthly) || !endMonth) {
     showToast('Täytä nimi, saldo, kuukausierä ja päättyy', 'err'); return;
   }
