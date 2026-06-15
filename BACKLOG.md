@@ -73,6 +73,37 @@ Avoimet suunnitteluasiat:
 
 ## Kehitysjonossa (prioriteettijärjestyksessä)
 
+### "Vuotava pohja" — todellinen kassavirta-mittari
+
+**Oivallus:** Säästöaste tai luottojen lyhennykset eivät kerro taloudellisesta terveydestä tarpeeksi, jos samaan aikaan käyttää luottokorttia tai nostaa säästöistä kattamaan arjen kuluja. Pohja vuotaa — velka syö sen minkä säästää.
+
+**Mittari:** Todellinen kuukausittainen kassavirta = tulot − (needs + wants) − korkokulut
+- Positiivinen → talous kannattelee itse itsensä, säästäminen ja lyhennykset ovat aitoa ylijäämää
+- Negatiivinen → "pohja vuotaa": jokin väline (luottokortti, säästöt, laina) paikkaa aukon
+
+**Näkyvyys jota ei vielä ole:**
+- Jos kassavirta on −500€/kk mutta sijoitat 300€/kk rahastoon, netto on −800€ — tämä ei näy nykyisessä säästöaste-mittarissa
+- Luottokortin saldo kasvaa → luottorajan käyttöaste nousee → merkki josta pitäisi hälyttää
+- Säästötilin saldo laskee ilman että budjetti selittää miksi
+
+**Toteutus (ehdotus):**
+- Yhteenveto-välilehdelle uusi mittari: "Kassavirta" = ylijäämä ilman savings-tyyppisiä tapahtumia
+- Luottokorttien saldotrendi: jos käyttöaste kasvaa kuukaudesta toiseen → keltainen/punainen varoitus
+- Saldot-välilehdelle: "Nettovarallisuuden muutos tässä kuussa" laskettuna tilinpäätösarvoista
+
+---
+
+### Säästötilin CSV-tuonti — arkkitehtuurimuutos
+
+**Ongelma nykyisessä mallissa:** Säästötilin/Lipas saldo lasketaan vain sisääntulevista siirroista Perustililtä (CAT\_DEST). Nostot säästöistä eivät laske saldoa — nettovarallisuus yläkanttiin.
+
+**Oikea ratkaisu:** Poistetaan CAT\_DEST ja siirrytään puhtaaseen tilikohtaiseen malliin:
+- Kaikki inter-tilitapahtumat `neutral` molemmilla puolilla
+- Säästöaste lasketaan saldojen muutoksesta (Säästötili loppu − alku), ei `savings`-tapahtumista
+- Vaatii muutokset: `computeBalances`, `monthSummary`, budjettilaskenta
+
+**Väliaikainen ratkaisu:** Päivitä Säästötilin Alkusaldo manuaalisesti kerran kuussa OP:n saldon mukaan.
+
 ### Luottokortti-kirjanpito: double-counting bugi (KRIITTINEN)
 
 **Ongelma:** Jos seuraat sekä luottokorttiostoksia (Finnair/OP Visa CSV) että luottolaskun maksua käyttötililtä, sama meno kirjataan kahdesti — kerran ostoksena ja kerran laskun maksuna.
