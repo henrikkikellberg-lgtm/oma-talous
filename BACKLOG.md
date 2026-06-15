@@ -54,10 +54,19 @@ Avoimet suunnitteluasiat:
 - **FIRE-kuukausisäästö osaksi budjettia:** näytä tavoite ja "nipistä kulutuksesta kohti säästöä" -mittari.
 - IT pysyy desktop-only sijoitustyökaluna; OT mobile+desktop. Koontiraportti voisi olla erillinen sivu joka lukee molempien D1:t (read-only).
 
+## v1.4.0 — Kulutusluotot + Saldot-parannukset (toteutettu)
+- ✅ Kk-valitsin piiloon Säännöt-välilehdellä (hideMonth-logiikka switchTab:issa)
+- ✅ Saldot: kk-valitsin hakee valitun kuukauden lopun tilisaldon (computeBalances(asOf) — lastDayOfMonth)
+- ✅ Kulutusluotot-osio Saldot-välilehdessä: nimi, jäljellä €, kk-erä, päättyy kk/vuosi, korko%, edistymispalkki
+- ✅ "Mahtuuko budjettiin?" -laskuri: syötä uusi erä + kesto → näyttää % needs-budjetista + kokonaiskustannus + vapautumispvm
+- ✅ AI-datapisteet: lainasnapshot tallennetaan automaattisesti muutoksilla (max 24 kk, `ot_loan_snapshots`)
+- ✅ Lainat mukana JSON-viennissä/tuonnissa
+
+**Deploy-toimet (sinä):**
+1. Pushaa repo → CF Pages deployaa
+
 ## Pienempiä parannuksia (jonossa)
 - Kategoriat: Harkinnanvaraiset-blokin swaippaus muihin kategorioihin / donitsikaavio kulutuksesta
-- Saldot: kk-valitsin hakee valitun kuukauden lopun tilisaldon (computeBalances(asOf) — ei vaadi historian tallennusta)
-- Kk-valitsin piiloon välilehdillä joilla se ei tee mitään (Säännöt)
 - Yhteenveto: yläkulman "käytetty"-summan integrointi selkeämmin
 
 ---

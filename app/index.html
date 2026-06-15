@@ -522,11 +522,33 @@ tr:hover td{background:var(--surface2)}
   </div>
 </div>
 
+<!-- ── MODAL: LOAN ─────────────────────────────────────────── -->
+<div class="modal-overlay" id="loanModal" onclick="if(event.target===this)closeModal('loanModal')">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="loanModalTitle">Lisää laina / erämaksu</div>
+    <input type="hidden" id="loanEditId">
+    <div class="field-group"><div class="field-label">Nimi</div><input class="field-input" id="loanName" placeholder="esim. Auto Nordea, Kulutusluotto OP"></div>
+    <div style="display:flex;gap:10px">
+      <div class="field-group" style="flex:1"><div class="field-label">Jäljellä €</div><input class="field-input" id="loanBalance" type="number" step="0.01" placeholder="0.00"></div>
+      <div class="field-group" style="flex:1"><div class="field-label">Kuukausierä €</div><input class="field-input" id="loanPayment" type="number" step="0.01" placeholder="0.00"></div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <div class="field-group" style="flex:1"><div class="field-label">Päättyy (kk / vuosi)</div><input class="field-input" id="loanEndMonth" type="month"></div>
+      <div class="field-group" style="flex:1"><div class="field-label">Korko % (valinnainen)</div><input class="field-input" id="loanApr" type="number" step="0.01" placeholder="—"></div>
+    </div>
+    <div class="field-group"><div class="field-label">Muistiinpano (valinnainen)</div><input class="field-input" id="loanNote" placeholder="esim. auto, kodin remontti"></div>
+    <button class="btn btn-primary btn-full" onclick="saveLoan()">Tallenna</button>
+    <button id="loanDeleteBtn" class="btn btn-full" style="background:var(--red-light);color:var(--red);border:none;height:44px;border-radius:var(--radius);font-size:15px;font-weight:500;margin-top:6px;display:none" onclick="deleteLoan()">Poista laina</button>
+    <button class="modal-cancel" onclick="closeModal('loanModal')">Peruuta</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.4.0';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 const API_SECRET = '8128f7da46a8a897b418f7f85a517bae788abeb3626d49a48840c232d2186248';
 
@@ -712,7 +734,7 @@ const DEF_ACCOUNTS = [
 ];
 
 // ── STATE ───────────────────────────────────────────────────────────────────
-let txs = [], rules = [], saldot = {}, selMonths = [];
+let txs = [], rules = [], saldot = {}, selMonths = [], loans = [];
 let accounts = [], settings = {salary_day:27, monthly_salary:3267}, actualBalances = {};
 let curMonth = '', curFilter = 'all', curSearch = '', curTab = 'yhteenveto', curCatFilter = '', curCatDrill = null;
 
@@ -748,6 +770,7 @@ function computeBalances(asOf) {
   });
 }
 function balanceOf(key, asOf) { const b = computeBalances(asOf).find(x=>x.key===key); return b ? b.balance : 0; }
+function lastDayOfMonth(mk) { const [y,m]=mk.split('-').map(Number); return new Date(y,m,0).toISOString().split('T')[0]; }
 
 // ── PALKKAPÄIVÄ & RUNWAY ──────────────────────────────────────────────────────
 const FIXED_HOLIDAYS = ['01-01','01-06','05-01','12-06','12-24','12-25','12-26'];
@@ -815,6 +838,7 @@ function saveLocalState() {
     localStorage.setItem('ot_sal',   JSON.stringify(saldot));
     localStorage.setItem('ot_accounts', JSON.stringify(accounts));
     localStorage.setItem('ot_settings', JSON.stringify(settings));
+    localStorage.setItem('ot_loans', JSON.stringify(loans));
   } catch(e) { showToast('Tallennusvirhe — vie JSON!', 'err'); }
 }
 
@@ -851,6 +875,7 @@ async function initState() {
     accounts = JSON.parse(localStorage.getItem('ot_accounts') || 'null') || DEF_ACCOUNTS.map(a=>({...a}));
     settings = Object.assign({salary_day:27, monthly_salary:3267}, JSON.parse(localStorage.getItem('ot_settings') || '{}'));
     actualBalances = JSON.parse(localStorage.getItem('ot_actualbal') || '{}');
+    loans = JSON.parse(localStorage.getItem('ot_loans') || '[]');
   } catch(e) { rules = [...DEF_RULES]; saldot = {}; txs = []; accounts = DEF_ACCOUNTS.map(a=>({...a})); }
   if (!accounts.length) accounts = DEF_ACCOUNTS.map(a=>({...a}));
   curMonth = allMonths()[0] || fmtMonthKey(new Date());
@@ -1709,10 +1734,168 @@ function addRule() {
 }
 function deleteRule(i) { rules.splice(i,1); saveLocalState(); renderSaannot(); }
 
+// ── LOANS ────────────────────────────────────────────────────────────────────
+function monthsUntil(endMonth) {
+  if (!endMonth) return null;
+  const [ey, em] = endMonth.split('-').map(Number);
+  const now = new Date();
+  return Math.max(0, (ey - now.getFullYear()) * 12 + (em - (now.getMonth() + 1)));
+}
+
+function saveLoanSnapshot() {
+  try {
+    const snaps = JSON.parse(localStorage.getItem('ot_loan_snapshots') || '[]');
+    const thisMonth = todayISO().substring(0, 7);
+    const snap = {
+      date: todayISO(),
+      loans: loans.map(l => ({name: l.name, balance: l.balance, monthly: l.monthly_payment, end_month: l.end_month})),
+      total_monthly: loans.reduce((s, l) => s + l.monthly_payment, 0),
+      total_balance: loans.reduce((s, l) => s + l.balance, 0)
+    };
+    const filtered = snaps.filter(s => s.date.substring(0, 7) !== thisMonth);
+    filtered.push(snap);
+    localStorage.setItem('ot_loan_snapshots', JSON.stringify(filtered.slice(-24)));
+  } catch(e) {}
+}
+
+function renderLoansSection() {
+  const totalMonthly = loans.reduce((s, l) => s + l.monthly_payment, 0);
+  const totalBalance = loans.reduce((s, l) => s + l.balance, 0);
+  const lastEnd = loans.reduce((m, l) => (!m || l.end_month > m) ? l.end_month : m, '');
+
+  const loanCards = loans.length ? loans.map(l => {
+    const rem = monthsUntil(l.end_month);
+    const approxTotal = l.monthly_payment > 0 ? Math.ceil(l.balance / l.monthly_payment) : 0;
+    const pct = approxTotal > 0 && rem !== null ? Math.max(0, Math.min(100, (1 - rem / (rem + (approxTotal - rem))) * 100)) : 0;
+    const barColor = (rem || 0) > 24 ? 'var(--gold)' : (rem || 0) > 0 ? 'var(--green)' : 'var(--dim)';
+    return `
+      <div class="saldo-card" style="border-top:2.5px solid var(--gold)">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:14px;font-weight:500;color:var(--text)">${esc(l.name)}</div>
+            ${l.apr ? `<div style="font-size:11px;color:var(--dim)">Korko ${l.apr}% · ~${eur(l.balance * l.apr / 100 / 12)}/kk</div>` : ''}
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:18px;font-weight:300;color:var(--red)">${eur(l.balance)}</span>
+            <button onclick="openLoanModal('${l.id}')" style="width:28px;height:28px;border:none;background:var(--surface2);border-radius:6px;cursor:pointer;font-size:13px;color:var(--muted);display:flex;align-items:center;justify-content:center">✎</button>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:6px">
+          <span style="font-weight:500;color:var(--text)">${eur(l.monthly_payment)}/kk</span>
+          <span>${rem !== null ? `${rem} kk jäljellä · valmis ${fmtMonthLbl(l.end_month)}` : '—'}</span>
+        </div>
+        <div class="sum-bar" style="margin-top:6px"><div class="sum-bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
+        ${l.note ? `<div style="font-size:11px;color:var(--dim);margin-top:4px">${esc(l.note)}</div>` : ''}
+      </div>`;
+  }).join('') : `<div style="font-size:13px;color:var(--muted);text-align:center;padding:12px 0">Ei tallennettuja lainoja. Lisää esim. autolaina tai osamaksu.</div>`;
+
+  const summaryRow = loans.length > 1 ? `
+    <div style="font-size:12px;color:var(--muted);margin-top:6px;display:flex;justify-content:space-between">
+      <span>Yhteensä <strong style="color:var(--text)">${eur(totalMonthly)}/kk</strong> · ${eur(totalBalance)} jäljellä</span>
+      ${lastEnd ? `<span>viimeinen ${fmtMonthLbl(lastEnd)}</span>` : ''}
+    </div>` : '';
+
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:20px">
+      <div class="section-lbl" style="margin:0">Kulutusluotot · erämaksut</div>
+      <button class="btn btn-secondary" style="height:28px;padding:0 10px;font-size:12px" onclick="openLoanModal(null)">+ Lisää</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+      ${loanCards}
+    </div>
+    ${summaryRow}`;
+}
+
+function budgetFitCardHTML() {
+  const nm = (settings.monthly_salary || 0) * 0.5;
+  const tm = loans.reduce((s, l) => s + l.monthly_payment, 0);
+  const p = nm > 0 ? Math.round(tm / nm * 100) : 0;
+  const c = p > 50 ? 'var(--red)' : p > 30 ? 'var(--gold)' : 'var(--green)';
+  return `
+    <div class="saldo-card" style="margin-top:8px;border-top:2.5px solid var(--blue)">
+      <div class="saldo-lbl" style="margin-bottom:8px">Mahtuuko budjettiin?</div>
+      ${nm > 0 ? `<div style="font-size:12px;color:var(--muted);margin-bottom:10px">Kiinteät lainaerät nyt: <strong style="color:var(--text)">${eur(tm)}/kk</strong> = <strong style="color:${c}">${p}%</strong> needs-budjetista (${eur(nm)}/kk)</div>` : ''}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <label style="font-size:12px;color:var(--muted)">Uusi kuukausierä €<input class="saldo-in" type="number" step="1" min="0" id="fitPayment" placeholder="esim. 300" oninput="calcBudgetFit()"></label>
+        <label style="font-size:12px;color:var(--muted)">Kesto (kk)<input class="saldo-in" type="number" step="1" min="1" id="fitMonths" placeholder="esim. 36" oninput="calcBudgetFit()"></label>
+      </div>
+      <div id="fitResult" style="font-size:13px;color:var(--muted)">Syötä kuukausierä ja kesto laskelmaa varten</div>
+    </div>`;
+}
+
+function calcBudgetFit() {
+  const pay = parseFloat(document.getElementById('fitPayment')?.value) || 0;
+  const months = parseInt(document.getElementById('fitMonths')?.value) || 0;
+  const resEl = document.getElementById('fitResult');
+  if (!resEl) return;
+  if (!pay) { resEl.textContent = 'Syötä kuukausierä ja kesto laskelmaa varten'; return; }
+  const existingMonthly = loans.reduce((s, l) => s + l.monthly_payment, 0);
+  const totalMonthly = existingMonthly + pay;
+  const needsBudget = (settings.monthly_salary || 0) * 0.5;
+  const pct = needsBudget > 0 ? Math.round(totalMonthly / needsBudget * 100) : 0;
+  const color = pct > 50 ? 'var(--red)' : pct > 30 ? 'var(--gold)' : 'var(--green)';
+  const totalCost = pay * months;
+  const endDate = new Date(); endDate.setMonth(endDate.getMonth() + months);
+  const endMonthKey = fmtMonthKey(endDate);
+  resEl.innerHTML = `Erät nousisivat <strong style="color:var(--text)">${eur(totalMonthly)}/kk</strong>`
+    + (needsBudget > 0 ? ` = <strong style="color:${color}">${pct}%</strong> needs-budjetista` : '')
+    + (months ? ` · kokonaiskustannus ${eur(totalCost)} · vapautuu ${fmtMonthLbl(endMonthKey)}` : '');
+}
+
+function openLoanModal(id) {
+  const loan = id ? loans.find(l => l.id === id) : null;
+  document.getElementById('loanModalTitle').textContent = loan ? 'Muokkaa lainaa' : 'Lisää laina / erämaksu';
+  document.getElementById('loanEditId').value = id || '';
+  document.getElementById('loanName').value = loan ? loan.name : '';
+  document.getElementById('loanBalance').value = loan ? loan.balance : '';
+  document.getElementById('loanPayment').value = loan ? loan.monthly_payment : '';
+  document.getElementById('loanEndMonth').value = loan ? loan.end_month : '';
+  document.getElementById('loanApr').value = (loan && loan.apr) ? loan.apr : '';
+  document.getElementById('loanNote').value = loan ? (loan.note || '') : '';
+  document.getElementById('loanDeleteBtn').style.display = loan ? 'block' : 'none';
+  openModal('loanModal');
+}
+
+function saveLoan() {
+  const id = document.getElementById('loanEditId').value;
+  const name = document.getElementById('loanName').value.trim();
+  const balance = parseFloat(document.getElementById('loanBalance').value);
+  const monthly = parseFloat(document.getElementById('loanPayment').value);
+  const endMonth = document.getElementById('loanEndMonth').value;
+  if (!name || isNaN(balance) || isNaN(monthly) || !endMonth) {
+    showToast('Täytä nimi, saldo, kuukausierä ja päättyy', 'err'); return;
+  }
+  const apr = parseFloat(document.getElementById('loanApr').value) || null;
+  const note = document.getElementById('loanNote').value.trim();
+  if (id) {
+    const idx = loans.findIndex(l => l.id === id);
+    if (idx >= 0) loans[idx] = {...loans[idx], name, balance, monthly_payment: monthly, end_month: endMonth, apr, note};
+  } else {
+    loans.push({id: 'lp_' + Date.now(), name, balance, monthly_payment: monthly, end_month: endMonth, apr, note});
+  }
+  saveLoanSnapshot();
+  saveLocalState();
+  closeModal('loanModal');
+  renderSaldot();
+  showToast(id ? 'Laina päivitetty' : 'Laina lisätty', 'ok');
+}
+
+function deleteLoan() {
+  const id = document.getElementById('loanEditId').value;
+  loans = loans.filter(l => l.id !== id);
+  saveLoanSnapshot();
+  saveLocalState();
+  closeModal('loanModal');
+  renderSaldot();
+  showToast('Laina poistettu', 'ok');
+}
+
 // ── SALDOT ────────────────────────────────────────────────────────────────────
 let saldotEditMode = false;
 function saldotSummaryHTML() {
-  const bals = computeBalances();
+  const todayMk = fmtMonthKey(new Date());
+  const asOf = curMonth === todayMk ? todayISO() : lastDayOfMonth(curMonth);
+  const bals = computeBalances(asOf);
   const assets = bals.filter(b=>b.kind!=='credit');
   const credits = bals.filter(b=>b.kind==='credit');
 
@@ -1753,12 +1936,16 @@ function saldotSummaryHTML() {
   const lblRow = (txt,val,color) => `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:16px">
       <div class="section-lbl" style="margin:0">${txt}</div>
       <div style="font-size:13px;font-weight:500;color:${color}">${val}</div></div>`;
+  const asOfNote = curMonth !== todayMk
+    ? `<div style="font-size:11px;color:var(--blue);background:var(--blue-light);border-radius:var(--radius-sm);padding:4px 10px;margin-bottom:8px;display:inline-block">Saldo ${fmtMonthLbl(curMonth)} lopussa</div>` : '';
 
   return `
+    ${asOfNote}
     ${lblRow('Varat · yhteensä', eur(assetsTotal), 'var(--text)')}
     <div class="saldo-grid">${assets.map(assetCard).join('')}</div>
     ${lblRow('Luotot · velkaa', eur(totalDebt), 'var(--red)')}
     <div class="saldo-grid">${credits.map(creditCard).join('')}</div>
+    ${renderLoansSection()}
 
     <div class="netto-card" style="margin-top:16px">
       <div><div class="netto-lbl">Nettovarallisuus</div>
@@ -1780,6 +1967,7 @@ function saldotSummaryHTML() {
 function renderSaldot() {
   document.getElementById('saldotContent').innerHTML = `
     <div id="saldotSummary">${saldotSummaryHTML()}</div>
+    ${budgetFitCardHTML()}
     <button class="btn btn-secondary" style="margin-top:16px" onclick="toggleSaldotEdit()">${saldotEditMode?'Sulje asetukset':'⚙️ Tilien asetukset (alkusaldo, limiitti, korko)'}</button>
     <div id="acctEdit">${saldotEditMode?renderAcctEdit(computeBalances()):''}</div>
     <p style="font-size:11px;color:var(--dim);margin-top:10px">Saldot lasketaan: alkusaldo + tilin tapahtumat alkupäivän jälkeen. Tuoreus = viimeisin tuonti.</p>`;
@@ -1959,6 +2147,11 @@ function switchTab(tab) {
   if (panel) panel.classList.add('active');
   document.querySelectorAll('.dnav-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   document.querySelectorAll('.mob-nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+  const hideMonth = tab === 'saannot';
+  const mobBar = document.querySelector('.month-bar');
+  const deskRow = document.getElementById('deskMonthRow');
+  if (mobBar) mobBar.style.display = hideMonth ? 'none' : '';
+  if (deskRow) deskRow.style.display = hideMonth ? 'none' : '';
   renderTab(tab);
 }
 
@@ -2297,7 +2490,7 @@ function addTx(tx) {
 
 // ── IMPORT / EXPORT ───────────────────────────────────────────────────────────
 function exportJSON() {
-  const blob = new Blob([JSON.stringify({txs,rules,saldot,accounts,settings,actualBalances,exported:new Date().toISOString()},null,2)],{type:'application/json'});
+  const blob = new Blob([JSON.stringify({txs,rules,saldot,accounts,settings,actualBalances,loans,loanSnapshots:JSON.parse(localStorage.getItem('ot_loan_snapshots')||'[]'),exported:new Date().toISOString()},null,2)],{type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `omattalous-${todayISO()}.json`;
@@ -2315,6 +2508,8 @@ function handleJSONInput(event) {
       if (d.accounts && d.accounts.length) accounts = d.accounts;
       if (d.settings) settings = Object.assign(settings, d.settings);
       if (d.actualBalances) actualBalances = d.actualBalances;
+      if (d.loans) loans = d.loans;
+      if (d.loanSnapshots) { try { localStorage.setItem('ot_loan_snapshots', JSON.stringify(d.loanSnapshots)); } catch(e){} }
       if (d.txs) {
         if (API_BASE) {
           // Lähetä tapahtumat D1:een erissä
