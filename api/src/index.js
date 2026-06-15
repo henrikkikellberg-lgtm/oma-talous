@@ -78,6 +78,17 @@ export default {
         if (method === 'PUT') return handleSettingsPut(req, env);
       }
 
+      // Loans
+      if (path === '/loans') {
+        if (method === 'GET')  return handleLoansList(env);
+        if (method === 'POST') return handleLoansCreate(req, env);
+      }
+      const loanMatch = path.match(/^\/loans\/(.+)$/);
+      if (loanMatch) {
+        if (method === 'PUT')    return handleLoansUpdate(req, env, loanMatch[1]);
+        if (method === 'DELETE') return handleLoansDelete(env, loanMatch[1]);
+      }
+
       return err('Not found', 404);
     } catch (e) {
       console.error(e);
@@ -256,15 +267,17 @@ async function handleAccountsPut(req, env) {
   for (const a of list) {
     if (!a.key) continue;
     await env.DB.prepare(
-      `INSERT INTO accounts (key,label,kind,opening_balance,opening_date,credit_limit,apr,sort)
-       VALUES (?,?,?,?,?,?,?,?)
+      `INSERT INTO accounts (key,label,kind,opening_balance,opening_date,credit_limit,apr,sort,monthly_target)
+       VALUES (?,?,?,?,?,?,?,?,?)
        ON CONFLICT(key) DO UPDATE SET
          label=excluded.label, kind=excluded.kind,
          opening_balance=excluded.opening_balance, opening_date=excluded.opening_date,
-         credit_limit=excluded.credit_limit, apr=excluded.apr, sort=excluded.sort`
+         credit_limit=excluded.credit_limit, apr=excluded.apr, sort=excluded.sort,
+         monthly_target=excluded.monthly_target`
     ).bind(a.key, a.label||a.key, a.kind||'checking',
            a.opening_balance||0, a.opening_date||'2026-01-01',
-           a.credit_limit??null, a.apr??null, a.sort||0).run();
+           a.credit_limit??null, a.apr??null, a.sort||0,
+           a.monthly_target??null).run();
   }
   return ok({ ok: true });
 }
@@ -288,6 +301,7 @@ async function handleBalances(env, url) {
     if (a.kind === 'credit') {
       r.credit_limit = a.credit_limit;
       r.apr = a.apr;
+      r.monthly_target = a.monthly_target ?? null;
       r.available = (a.credit_limit || 0) + balance;             // balance on negatiivinen
       r.utilization = a.credit_limit ? Math.min(Math.abs(balance)/a.credit_limit, 1) : 0;
       r.est_monthly_interest = a.apr ? Math.abs(balance) * (a.apr/100) / 12 : null;
@@ -349,6 +363,43 @@ async function handleSettingsPut(req, env) {
   for (const [k,v] of Object.entries(data)) {
     await env.DB.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)').bind(k,String(v)).run();
   }
+  return ok({ ok: true });
+}
+
+// ── LOANS ─────────────────────────────────────────────────────────────────────
+async function handleLoansList(env) {
+  const { results } = await env.DB.prepare('SELECT * FROM loans ORDER BY created_at ASC').all();
+  return ok(results.map(r => ({ ...r, included_in_tx: !!r.included_in_tx })));
+}
+
+async function handleLoansCreate(req, env) {
+  const loan = await req.json();
+  if (!loan.name) return err('Missing name');
+  loan.id = loan.id || `loan_${Date.now()}_${Math.random().toString(36).substr(2,5)}`;
+  await env.DB.prepare(
+    `INSERT INTO loans (id,name,balance,monthly_payment,end_month,apr,included_in_tx)
+     VALUES (?,?,?,?,?,?,?)`
+  ).bind(
+    loan.id, loan.name, loan.balance||0, loan.monthly_payment||0,
+    loan.end_month||null, loan.apr||null,
+    loan.included_in_tx ? 1 : 0
+  ).run();
+  return ok({ id: loan.id });
+}
+
+async function handleLoansUpdate(req, env, id) {
+  const loan = await req.json();
+  const fields = ['name','balance','monthly_payment','end_month','apr','included_in_tx'].filter(f=>loan[f]!==undefined);
+  if (!fields.length) return err('Nothing to update');
+  const sets = fields.map(f=>`${f}=?`).join(',') + ',updated_at=datetime(\'now\')';
+  const vals = fields.map(f => f==='included_in_tx' ? (loan[f] ? 1 : 0) : loan[f]);
+  const result = await env.DB.prepare(`UPDATE loans SET ${sets} WHERE id=?`).bind(...vals, id).run();
+  if (result.meta?.changes === 0) return err('Loan not found', 404);
+  return ok({ ok: true });
+}
+
+async function handleLoansDelete(env, id) {
+  await env.DB.prepare('DELETE FROM loans WHERE id=?').bind(id).run();
   return ok({ ok: true });
 }
 

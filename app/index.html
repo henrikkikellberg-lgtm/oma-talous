@@ -563,7 +563,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.4.1';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 const API_SECRET = '8128f7da46a8a897b418f7f85a517bae788abeb3626d49a48840c232d2186248';
 
@@ -902,6 +902,10 @@ async function initState() {
   fetch(`${API_BASE}/accounts`, { headers: apiHeaders() })
     .then(r=>r.ok?r.json():null)
     .then(rows=>{ if(Array.isArray(rows)&&rows.length){ accounts = rows; saveLocalState(); renderTab(curTab); } })
+    .catch(()=>{});
+  fetch(`${API_BASE}/loans`, { headers: apiHeaders() })
+    .then(r=>r.ok?r.json():null)
+    .then(rows=>{ if(Array.isArray(rows)){ loans = rows; saveLocalState(); renderTab(curTab); } })
     .catch(()=>{});
   fetch(`${API_BASE}/settings`, { headers: apiHeaders() })
     .then(r=>r.ok?r.json():null)
@@ -1916,7 +1920,7 @@ function openLoanModal(id) {
   openModal('loanModal');
 }
 
-function saveLoan() {
+async function saveLoan() {
   const id = document.getElementById('loanEditId').value;
   const name = document.getElementById('loanName').value.trim();
   const balance = parseFloat(document.getElementById('loanBalance').value);
@@ -1930,11 +1934,20 @@ function saveLoan() {
   const apr = parseFloat(document.getElementById('loanApr').value) || null;
   const note = document.getElementById('loanNote').value.trim();
   const included_in_tx = document.getElementById('loanIncluded').checked;
+  const loanData = { name, balance, monthly_payment: monthly, end_month: endMonth, apr, note, included_in_tx };
   if (id) {
     const idx = loans.findIndex(l => l.id === id);
-    if (idx >= 0) loans[idx] = {...loans[idx], name, balance, monthly_payment: monthly, end_month: endMonth, apr, note, included_in_tx};
+    if (idx >= 0) loans[idx] = {...loans[idx], ...loanData};
+    if (API_BASE) fetch(`${API_BASE}/loans/${encodeURIComponent(id)}`, {
+      method:'PUT', headers:apiHeaders(), body:JSON.stringify(loanData)
+    }).catch(()=>{});
   } else {
-    loans.push({id: 'lp_' + Date.now(), name, balance, monthly_payment: monthly, end_month: endMonth, apr, note, included_in_tx});
+    const newId = 'lp_' + Date.now();
+    const newLoan = {id: newId, ...loanData};
+    loans.push(newLoan);
+    if (API_BASE) fetch(`${API_BASE}/loans`, {
+      method:'POST', headers:apiHeaders(), body:JSON.stringify(newLoan)
+    }).catch(()=>{});
   }
   saveLoanSnapshot();
   saveLocalState();
@@ -1946,6 +1959,9 @@ function saveLoan() {
 function deleteLoan() {
   const id = document.getElementById('loanEditId').value;
   loans = loans.filter(l => l.id !== id);
+  if (API_BASE) fetch(`${API_BASE}/loans/${encodeURIComponent(id)}`, {
+    method:'DELETE', headers:apiHeaders()
+  }).catch(()=>{});
   saveLoanSnapshot();
   saveLocalState();
   closeModal('loanModal');
