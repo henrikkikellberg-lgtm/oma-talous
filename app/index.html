@@ -343,6 +343,7 @@ tr:hover td{background:var(--surface2)}
     </div>
     <div id="runwayCard"></div>
     <div class="sum-grid" id="sumGrid"></div>
+    <div id="kassavirtaCard"></div>
     <div id="tipsCard"></div>
     <div id="recentTxs"></div>
   </div>
@@ -563,7 +564,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.4.3';
+const APP_VERSION = '1.4.4';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 const API_SECRET = '8128f7da46a8a897b418f7f85a517bae788abeb3626d49a48840c232d2186248';
 
@@ -1302,23 +1303,42 @@ function renderRunwayCard() {
   const light = r.projection > 200 ? 'var(--green)' : r.projection >= 0 ? 'var(--gold)' : 'var(--red)';
   const lightTxt = r.projection > 200 ? 'Hyvin menee' : r.projection >= 0 ? 'Tarkkana' : 'Varoitus';
   const overPace = r.avgDaily > r.targetDaily;
-  const paceExpected = r.targetDaily * r.daysElapsed;
-  const pacePct = paceExpected > 0 ? Math.min(r.spentSoFar/paceExpected*100, 100) : 0;
+  // Skenaario: jos kuluttaa tavoitetahdissa, paljonko jää?
+  const targetProjection = r.checking - r.targetDaily * r.daysLeft;
+  const tpColor = targetProjection >= 0 ? 'var(--green)' : 'var(--red)';
   el.innerHTML = `
     <div class="sum-card" style="border-top:2.5px solid ${light};margin-bottom:12px">
-      <div style="display:flex;justify-content:space-between;align-items:baseline">
-        <div class="sum-label">Käytettävissä / päivä · ${r.daysLeft} pv palkkaan</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)">Palkkapäiväennuste · ${r.daysLeft} pv · ${fmtDateLbl(isoLocal(r.nextPay))}</div>
         <span style="font-size:11px;font-weight:500;color:${light}">● ${lightTxt}</span>
       </div>
-      <div class="sum-value" style="color:${light}">${eur(Math.max(r.dailyAllowance,0))}<span style="font-size:13px;color:var(--muted);font-weight:400"> /pv</span></div>
-      <div class="sum-sub">Käyttötili nyt ${eur(r.checking)} · palkka ${fmtDateLbl(isoLocal(r.nextPay))}</div>
-      <div style="margin-top:8px;display:flex;justify-content:space-between;font-size:12px">
-        <span style="color:var(--muted)">Kulutus ${eur(r.avgDaily)}/pv · tahti ${eur(r.targetDaily)}/pv</span>
-        <span style="color:${overPace?'var(--red)':'var(--green)'}">${overPace?'yli tahdin':'tahdissa'}</span>
+      <div style="font-size:34px;font-weight:300;color:${light};letter-spacing:-0.5px;line-height:1">${esigned(Math.round(r.projection))}</div>
+      <div style="font-size:12px;color:${r.projection<0?'var(--red)':'var(--muted)'};margin-top:3px;margin-bottom:10px">
+        ${r.projection < 0 ? `Käyttötili menee miinukselle ennen palkkaa · vaje ${eur(Math.abs(r.projection))}` : `Käyttötilillä palkkapäivänä`}
       </div>
-      <div class="sum-bar" style="margin-top:4px"><div class="sum-bar-fill" style="width:${pacePct}%;background:${overPace?'var(--red)':'var(--green)'}"></div></div>
-      <div class="sum-sub" style="margin-top:6px;color:${r.projection<0?'var(--red)':'var(--muted)'}">
-        Ennuste palkkapäivänä: ${esigned(r.projection)}${r.projection<0?' — vaje ennen palkkaa':''}
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:10px">
+        <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:7px 9px">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);font-weight:500;margin-bottom:3px">Tili nyt</div>
+          <div style="font-size:15px;font-weight:400;color:var(--text)">${eur(r.checking)}</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:7px 9px">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);font-weight:500;margin-bottom:3px">Kulutustahti</div>
+          <div style="font-size:15px;font-weight:400;color:${overPace?'var(--red)':'var(--green)'}">
+            ${eur(r.avgDaily)}<span style="font-size:11px">/pv</span>
+          </div>
+          <div style="font-size:10px;color:${overPace?'var(--red)':'var(--muted)'}">nyk. tahti</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:7px 9px">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);font-weight:500;margin-bottom:3px">Budjettitahti</div>
+          <div style="font-size:15px;font-weight:400;color:var(--muted)">
+            ${eur(r.targetDaily)}<span style="font-size:11px">/pv</span>
+          </div>
+          <div style="font-size:10px;color:var(--dim)">tavoite (80%)</div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--muted);display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px">
+        <span>Jos ${eur(r.targetDaily)}/pv → ennuste <strong style="color:${tpColor}">${esigned(Math.round(targetProjection))}</strong></span>
+        <span>Saldo riittää max <strong style="color:var(--text)">${eur(r.dailyAllowance)}/pv</strong></span>
       </div>
     </div>`;
 }
@@ -1355,6 +1375,50 @@ function renderTipsCard() {
     </ul></div>`;
 }
 
+function kassavirtaCardHTML(s, bInc) {
+  if (!bInc) return '';
+  const kulutus = s.needs + s.wants;
+  const kv = bInc - kulutus;                    // kassavirta ennen säästöjä
+  const netto = kv - s.sav;                      // todellinen käteismuutos
+  const kvColor = kv >= 0 ? 'var(--green)' : 'var(--red)';
+  const nettoColor = netto >= 0 ? 'var(--green)' : 'var(--red)';
+  const kvPct = Math.round(Math.abs(kv) / bInc * 100);
+  const barW = Math.min(kulutus / bInc * 100, 100);
+  const barColor = kulutus > bInc ? 'var(--red)' : kulutus > bInc * 0.8 ? 'var(--gold)' : 'var(--green)';
+  return `
+    <div class="sum-card" style="border-top:2.5px solid ${kvColor};margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+        <div class="sum-label">Kassavirta</div>
+        <span style="font-size:11px;color:var(--dim)">Kulutatko enemmän kuin tienaat?</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div>
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);font-weight:500;margin-bottom:3px">Tulot</div>
+          <div style="font-size:20px;font-weight:300;color:var(--blue)">+${eur(bInc)}</div>
+        </div>
+        <div>
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);font-weight:500;margin-bottom:3px">Kulutus (needs + wants)</div>
+          <div style="font-size:20px;font-weight:300;color:var(--text)">−${eur(kulutus)}</div>
+        </div>
+      </div>
+      <div class="sum-bar" style="margin-bottom:10px">
+        <div class="sum-bar-fill" style="width:${barW}%;background:${barColor}"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:8px;border-top:1px solid var(--border)">
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:2px">Kassavirta (ennen säästöjä)</div>
+          <div style="font-size:24px;font-weight:300;color:${kvColor}">${kv>=0?'+':''}${eur(kv)}</div>
+          ${kv < 0 ? `<div style="font-size:11px;color:var(--red);font-weight:500;margin-top:2px">Pohja vuotaa — ${kvPct}% tuloista katetaan muualta</div>` : `<div style="font-size:11px;color:var(--muted);margin-top:2px">${kvPct}% tuloista jää säästöön/lyhennyksiin</div>`}
+        </div>
+        ${s.sav > 0 ? `<div style="text-align:right">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:2px">− Säästöt/lyhennykset</div>
+          <div style="font-size:13px;color:var(--muted)">−${eur(s.sav)}</div>
+          <div style="font-size:15px;font-weight:500;color:${nettoColor};margin-top:2px">Netto ${netto>=0?'+':''}${eur(netto)}</div>
+        </div>` : ''}
+      </div>
+    </div>`;
+}
+
 function renderYhteenveto() {
   renderRunwayCard();
   renderTipsCard();
@@ -1368,6 +1432,7 @@ function renderYhteenveto() {
   const budgetNote = bi.note ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${bi.note}</div>` : '';
   const recent = [...list].filter(t=>t.type!=='neutral').sort((a,b)=>b.date.localeCompare(a.date)).slice(0,20);
 
+  document.getElementById('kassavirtaCard').innerHTML = kassavirtaCardHTML(s, bInc);
   document.getElementById('sumGrid').innerHTML = `
     <div class="sum-card sum-income">
       <div class="sum-label">Tulot</div>
