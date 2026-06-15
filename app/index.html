@@ -564,7 +564,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.4.4';
+const APP_VERSION = '1.4.5';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 const API_SECRET = '8128f7da46a8a897b418f7f85a517bae788abeb3626d49a48840c232d2186248';
 
@@ -1008,7 +1008,7 @@ function budgetIncomeForMonth(month) {
   const endISO   = isoLocal(currPay);
 
   const periodInc = txs
-    .filter(t => t.type==='income' && t.date >= startISO && t.date <= endISO)
+    .filter(t => t.type==='income' && t.date > startISO && t.date <= endISO)
     .reduce((s,t) => s+t.amount, 0);
 
   if (periodInc > 0) {
