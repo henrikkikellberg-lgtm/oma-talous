@@ -549,6 +549,10 @@ tr:hover td{background:var(--surface2)}
       <div class="field-group" style="flex:1"><div class="field-label">Korko % (valinnainen)</div><input class="field-input" id="loanApr" type="number" step="0.01" placeholder="—"></div>
     </div>
     <div class="field-group"><div class="field-label">Muistiinpano (valinnainen)</div><input class="field-input" id="loanNote" placeholder="esim. auto, kodin remontti"></div>
+    <label style="display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--text);margin-bottom:16px;cursor:pointer;line-height:1.4">
+      <input type="checkbox" id="loanIncluded" style="width:16px;height:16px;accent-color:var(--green);margin-top:2px;flex-shrink:0">
+      <span>Sisältyy jo kuluihin <span style="color:var(--muted)">(esim. puhelinlasku sisältää laiteosamaksun — ei lasketa uutena rasitteena budjettiin)</span></span>
+    </label>
     <button class="btn btn-primary btn-full" onclick="saveLoan()">Tallenna</button>
     <button id="loanDeleteBtn" class="btn btn-full" style="background:var(--red-light);color:var(--red);border:none;height:44px;border-radius:var(--radius);font-size:15px;font-weight:500;margin-top:6px;display:none" onclick="deleteLoan()">Poista laina</button>
     <button class="modal-cancel" onclick="closeModal('loanModal')">Peruuta</button>
@@ -1769,24 +1773,38 @@ function saveLoanSnapshot() {
   } catch(e) {}
 }
 
+function realBurdenMonthly() {
+  return loans.filter(l => !l.included_in_tx).reduce((s, l) => s + l.monthly_payment, 0)
+    + accounts.filter(a => a.kind === 'credit' && (a.monthly_target || 0) > 0).reduce((s, a) => s + a.monthly_target, 0);
+}
+
 function renderLoansSection() {
-  const totalMonthly = loans.reduce((s, l) => s + l.monthly_payment, 0);
-  const totalBalance = loans.reduce((s, l) => s + l.balance, 0);
+  const creditTargets = accounts.filter(a => a.kind === 'credit' && (a.monthly_target || 0) > 0);
+  const realLoans = loans.filter(l => !l.included_in_tx);
+  const hiddenLoans = loans.filter(l => l.included_in_tx);
+  const realBurden = realLoans.reduce((s, l) => s + l.monthly_payment, 0)
+    + creditTargets.reduce((s, a) => s + (a.monthly_target || 0), 0);
+  const hiddenBurden = hiddenLoans.reduce((s, l) => s + l.monthly_payment, 0);
   const lastEnd = loans.reduce((m, l) => (!m || l.end_month > m) ? l.end_month : m, '');
 
-  const loanCards = loans.length ? loans.map(l => {
+  const loanCard = l => {
     const rem = monthsUntil(l.end_month);
     const approxTotal = l.monthly_payment > 0 ? Math.ceil(l.balance / l.monthly_payment) : 0;
-    const pct = approxTotal > 0 && rem !== null ? Math.max(0, Math.min(100, (1 - rem / (rem + (approxTotal - rem))) * 100)) : 0;
+    const pct = approxTotal > 0 && rem !== null ? Math.max(0, Math.min(100, (1 - rem / Math.max(rem, approxTotal)) * 100)) : 0;
     const barColor = (rem || 0) > 24 ? 'var(--gold)' : (rem || 0) > 0 ? 'var(--green)' : 'var(--dim)';
+    const badge = l.included_in_tx
+      ? `<span style="font-size:10px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;background:var(--surface2);color:var(--muted);border-radius:4px;padding:2px 5px;margin-left:6px;flex-shrink:0">sisältyy kuluihin</span>` : '';
     return `
-      <div class="saldo-card" style="border-top:2.5px solid var(--gold)">
+      <div class="saldo-card" style="border-top:2.5px solid ${l.included_in_tx ? 'var(--dim)' : 'var(--gold)'}">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <div>
-            <div style="font-size:14px;font-weight:500;color:var(--text)">${esc(l.name)}</div>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:0;flex-wrap:wrap">
+              <div style="font-size:14px;font-weight:500;color:${l.included_in_tx ? 'var(--muted)' : 'var(--text)'}">${esc(l.name)}</div>
+              ${badge}
+            </div>
             ${l.apr ? `<div style="font-size:11px;color:var(--dim)">Korko ${l.apr}% · ~${eur(l.balance * l.apr / 100 / 12)}/kk</div>` : ''}
           </div>
-          <div style="display:flex;align-items:center;gap:8px">
+          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
             <span style="font-size:18px;font-weight:300;color:var(--red)">${eur(l.balance)}</span>
             <button onclick="openLoanModal('${l.id}')" style="width:28px;height:28px;border:none;background:var(--surface2);border-radius:6px;cursor:pointer;font-size:13px;color:var(--muted);display:flex;align-items:center;justify-content:center">✎</button>
           </div>
@@ -1798,11 +1816,34 @@ function renderLoansSection() {
         <div class="sum-bar" style="margin-top:6px"><div class="sum-bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
         ${l.note ? `<div style="font-size:11px;color:var(--dim);margin-top:4px">${esc(l.note)}</div>` : ''}
       </div>`;
-  }).join('') : `<div style="font-size:13px;color:var(--muted);text-align:center;padding:12px 0">Ei tallennettuja lainoja. Lisää esim. autolaina tai osamaksu.</div>`;
+  };
 
-  const summaryRow = loans.length > 1 ? `
-    <div style="font-size:12px;color:var(--muted);margin-top:6px;display:flex;justify-content:space-between">
-      <span>Yhteensä <strong style="color:var(--text)">${eur(totalMonthly)}/kk</strong> · ${eur(totalBalance)} jäljellä</span>
+  const creditTargetCard = a => {
+    const bal = Math.abs(balanceOf(a.key));
+    const remMonths = (a.monthly_target > 0 && bal > 0) ? Math.ceil(bal / a.monthly_target) : null;
+    return `
+      <div class="saldo-card" style="border-top:2.5px solid var(--blue)">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:14px;font-weight:500;color:var(--text)">${esc(a.label)}</div>
+            <div style="font-size:11px;color:var(--dim)">Tavoitelyhennys</div>
+          </div>
+          <span style="font-size:18px;font-weight:300;color:var(--red)">${eur(bal)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:6px">
+          <span style="font-weight:500;color:var(--text)">${eur(a.monthly_target)}/kk</span>
+          <span>${bal <= 0 ? 'Velaton' : remMonths ? `~${remMonths} kk nykyisellä saldolla` : '—'}</span>
+        </div>
+      </div>`;
+  };
+
+  const allCards = [...loans.map(loanCard), ...creditTargets.map(creditTargetCard)].join('');
+  const empty = !loans.length && !creditTargets.length;
+  const total = loans.length + creditTargets.length;
+
+  const summaryRow = total > 1 ? `
+    <div style="font-size:12px;color:var(--muted);margin-top:6px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px">
+      <span>Kiinteä rasite: <strong style="color:var(--text)">${eur(realBurden)}/kk</strong>${hiddenBurden > 0 ? `<span style="color:var(--dim)"> · piilo-osamaksut ${eur(hiddenBurden)}/kk (jo kuluissa)</span>` : ''}</span>
       ${lastEnd ? `<span>viimeinen ${fmtMonthLbl(lastEnd)}</span>` : ''}
     </div>` : '';
 
@@ -1812,14 +1853,14 @@ function renderLoansSection() {
       <button class="btn btn-secondary" style="height:28px;padding:0 10px;font-size:12px" onclick="openLoanModal(null)">+ Lisää</button>
     </div>
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
-      ${loanCards}
+      ${empty ? `<div style="font-size:13px;color:var(--muted);text-align:center;padding:12px 0">Ei tallennettuja lainoja tai tavoitelyhennysksiä.</div>` : allCards}
     </div>
     ${summaryRow}`;
 }
 
 function budgetFitCardHTML() {
   const nm = (settings.monthly_salary || 0) * 0.5;
-  const tm = loans.reduce((s, l) => s + l.monthly_payment, 0);
+  const tm = realBurdenMonthly();
   const p = nm > 0 ? Math.round(tm / nm * 100) : 0;
   const c = p > 50 ? 'var(--red)' : p > 30 ? 'var(--gold)' : 'var(--green)';
   return `
@@ -1840,7 +1881,7 @@ function calcBudgetFit() {
   const resEl = document.getElementById('fitResult');
   if (!resEl) return;
   if (!pay) { resEl.textContent = 'Syötä kuukausierä ja kesto laskelmaa varten'; return; }
-  const existingMonthly = loans.reduce((s, l) => s + l.monthly_payment, 0);
+  const existingMonthly = realBurdenMonthly();
   const totalMonthly = existingMonthly + pay;
   const needsBudget = (settings.monthly_salary || 0) * 0.5;
   const pct = needsBudget > 0 ? Math.round(totalMonthly / needsBudget * 100) : 0;
@@ -1870,6 +1911,7 @@ function openLoanModal(id) {
   }
   document.getElementById('loanApr').value = (loan && loan.apr) ? loan.apr : '';
   document.getElementById('loanNote').value = loan ? (loan.note || '') : '';
+  document.getElementById('loanIncluded').checked = loan ? !!loan.included_in_tx : false;
   document.getElementById('loanDeleteBtn').style.display = loan ? 'block' : 'none';
   openModal('loanModal');
 }
@@ -1887,11 +1929,12 @@ function saveLoan() {
   }
   const apr = parseFloat(document.getElementById('loanApr').value) || null;
   const note = document.getElementById('loanNote').value.trim();
+  const included_in_tx = document.getElementById('loanIncluded').checked;
   if (id) {
     const idx = loans.findIndex(l => l.id === id);
-    if (idx >= 0) loans[idx] = {...loans[idx], name, balance, monthly_payment: monthly, end_month: endMonth, apr, note};
+    if (idx >= 0) loans[idx] = {...loans[idx], name, balance, monthly_payment: monthly, end_month: endMonth, apr, note, included_in_tx};
   } else {
-    loans.push({id: 'lp_' + Date.now(), name, balance, monthly_payment: monthly, end_month: endMonth, apr, note});
+    loans.push({id: 'lp_' + Date.now(), name, balance, monthly_payment: monthly, end_month: endMonth, apr, note, included_in_tx});
   }
   saveLoanSnapshot();
   saveLocalState();
@@ -1946,6 +1989,7 @@ function saldotSummaryHTML() {
         <span>Käyttöaste ${pct}%</span>
         <span>${b.apr?('Korko '+b.apr.toLocaleString('fi-FI')+'% · ~'+eur(b.est_monthly_interest)+'/kk'):''}</span>
       </div>
+      ${b.monthly_target ? `<div style="font-size:11px;color:var(--blue);font-weight:500;margin-top:4px">Tavoitelyhennys ${eur(b.monthly_target)}/kk</div>` : ''}
     </div>`;
   };
 
@@ -2033,7 +2077,8 @@ function renderAcctEdit(bals) {
         <label>Alkupäivä<input class="saldo-in" type="date" value="${b.opening_date}" onchange="saveAcctField('${b.key}','opening_date',this.value)"></label>
         ${b.kind==='credit'?`
         <label>Limiitti<input class="saldo-in" type="number" step="1" value="${b.credit_limit||0}" onchange="saveAcctField('${b.key}','credit_limit',this.value)"></label>
-        <label>Korko % (APR)<input class="saldo-in" type="number" step="0.001" value="${b.apr||0}" onchange="saveAcctField('${b.key}','apr',this.value)"></label>`:''}
+        <label>Korko % (APR)<input class="saldo-in" type="number" step="0.001" value="${b.apr||0}" onchange="saveAcctField('${b.key}','apr',this.value)"></label>
+        <label style="grid-column:1/-1">Tavoitelyhennys €/kk <span style="color:var(--dim);font-weight:400">(näkyy Kulutusluotot-osiossa)</span><input class="saldo-in" type="number" step="1" value="${b.monthly_target||''}" placeholder="—" onchange="saveAcctField('${b.key}','monthly_target',this.value)"></label>`:''}
       </div>
     </div>`).join('') + '</div>';
 }
