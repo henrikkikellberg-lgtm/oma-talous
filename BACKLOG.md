@@ -63,7 +63,7 @@ Tavoite: yksi koontinäkymä joka summaa koko nettovarallisuuden yli kolmen jär
 
 Avoimet suunnitteluasiat:
 - **Oma asunto + asuntolaina OT:hen** — mallinna Tuottokartan/IT:n D1:stä miten lainan lyhennys (lyhennys/korko/NV-vaikutus) käsitellään.
-- **OT↔IT-synergia:** säännöllinen rahastosäästö (SÄÄN.SÄÄST) kirjautuu molempiin — OT:ssa "Sijoittaminen", IT:ssä toistuvana per rahasto. Voisiko OT:n sijoitusmerkinnät uida IT:hen automaattisesti?
+- **OT↔IT-synergia:** säännöllinen rahastosäästö (SÄÄN.SÄÄST) kirjautuu molempiin — OT:ssa "Sijoittaminen", IT:ssä toistuvana per rahasto (esim. kuun 15. päivä). Voisiko OT:n sijoitusmerkinnät uida IT:hen automaattisesti? Huomioi myös kertasijoitukset (ei vain toistuvat) — IT laskee osuuden Yahoo Finance -päiväarvosta.
 - **Nordnet 300 € = sijoituslainan lyhennys** (velkavipu) — kuuluu IT:hen, ei OT:n kulutukseen/säästöön samalla tavalla.
 - **FIRE-kuukausisäästö osaksi budjettia:** näytä tavoite ja "nipistä kulutuksesta kohti säästöä" -mittari.
 - IT pysyy desktop-only sijoitustyökaluna; OT mobile+desktop. Koontiraportti voisi olla erillinen sivu joka lukee molempien D1:t (read-only).
@@ -119,47 +119,25 @@ Kassavirta-kortti lisätty Yhteenveto-välilehdelle. Analytiikka-välilehdellä 
 
 **Väliaikainen ratkaisu:** Päivitä Säästötilin Alkusaldo manuaalisesti kerran kuussa OP:n saldon mukaan.
 
-### Luottokortti-kirjanpito: double-counting bugi (KRIITTINEN)
+### Luottokortti-kirjanpito: double-counting bugi — OSITTAIN KORJATTU
 
 **Ongelma:** Jos seuraat sekä luottokorttiostoksia (Finnair/OP Visa CSV) että luottolaskun maksua käyttötililtä, sama meno kirjataan kahdesti — kerran ostoksena ja kerran laskun maksuna.
 
-**Kirjanpidon oikea logiikka (suoriteperuste):**
-- Ostos korttimaksulla → kirjataan heti oikeaan kategoriaan (meno kohdistuu oikealle kuukaudelle)
-- Luottolaskun maksu käyttötililtä → **tilisiirto** (neutral), ei meno. Velka kuittautuu, raha siirtyy tililtä korttiyhtiölle.
+✅ **Korjattu (`3e8c61c`):** positiivinen summa Finnair/OPCredit-tilillä → `neutral` (maksu kortille). KELLBERG-tulo Perustilillä → `neutral` (oma raha takaisin). 17 vanhaa väärää kirjausta korjattu D1:ssä samalla.
 
-**Nykyinen bugi:** `visa credit suoritus` ja korttiyhtiöiden maksut on kategorisoitu `Luotot — lyhennys` tyypillä `needs`. Tämä on väärin — ne lasketaan kaksoismeno. Niiden pitäisi olla `neutral`/tilisiirto.
+⚠️ **Yhä auki:** sääntöjen `kaarlo henri` / `kellberg hen` (taulu `rules`) **negatiivinen** puoli Perustilillä on yhä `Luotot — lyhennys` / `needs`. Nämä osuvat kaikkiin ulosmeneviin siirtoihin näillä nimillä — myös Finnair-kortin saldonmaksuihin, joiden pitäisi olla `neutral` (koska ostot lasketaan jo erikseen Finnair-CSV:n kautta). Riski: sama nimi voi osua myös aitoihin ei-kortti-siirtoihin, joten tarkistus vaatii käyttäjän silmäilyä rivi riviltä ennen automaattikorjausta.
 
-**Korjaustoimenpiteet:**
-1. Muuta säännöt: `visa credit suoritus` → tyyppi `neutral`, kategoria `MobilePay & siirrot` (tai uusi "Tilisiirto")
-2. Tuo Finnair Visa ja OP Visa Credit CSV:t — niiden ostodata kuvaa oikean menon
-3. Varmista ettei laskun maksu + ostos molemmat laske samaan kuukauteen menoina
+**Seuraava askel:** käy läpi `Luotot — lyhennys`-kategorian rivit Perustilillä, tunnista mitkä ovat Finnair/OPCredit-kortin saldonmaksuja (→ `neutral`) vs. aitoja lainanlyhennyksiä (esim. `OP Yrityspankki Oyj`, `OP Vähittäisasiakkaat Oyj` -toistuvat erät vaikuttavat aidoilta lainoilta, ei kortinmaksuilta — vahvista).
 
-**Vaihtoehto jos et tuo luottokortti-CSV:tä (kassaperuste):**
-- Seuraa vain käyttötiliä
-- Luottolaskun maksu ON meno — kategorisoi se silloin manuaalisesti (se pitää jakaa ostoksiin)
-- Yksinkertaisempi mutta kategorisointi jälkikäteistä
+### Rahoitustapahtumat — lainan nosto ja muut tasemuutokset ✅ TOTEUTETTU
 
-### Rahoitustapahtumat — lainan nosto ja muut tasemuutokset
+`financing`-transaktiotyyppi lisätty (`77e9919`) — ei vaikuta needs/wants/savings/income-%:iin, näkyy omana suodattimena Tapahtumat-välilehdellä ("🏦 Rahoitus").
 
-**Ongelma:** Lainan nosto (+50 000 €) näkyy tulona ja vääristää koko kuukauden budjetti-%-laskentaa (needs/wants/savings %-osuudet menevät pieleen kun pohja on 50k eikä palkka).
+### Toistuvat kiinteät menot — split-tapahtuma ✅ TOTEUTETTU, persistenssi korjattu
 
-**Ratkaisu:** Uusi transaktiotyyppi `financing`:
-- Kirjataan ja näkyy transaktiolistassa (läpinäkyvyys)
-- **Ei laske mukaan income-pohjaan** budjettilaskennassa
-- Ei vaikuta 50/30/20-prosentteihin
-- Kategoriat: "Lainan nosto", "Arvopaperimyynti", "Vakuutuskorvaus" jne.
+Split-tapahtuma + "tallenna toistuvana jakona" toteutettu (`351598f`) + taloyhtiölasku-parseri AI-kuittiparsintaan. Esim. 635,90€ asumistapahtuma voidaan jakaa: Asuminen 250€ + Luotot—lyhennys 300€ + Luotot—korko 85,90€.
 
-**Toteutus:**
-- Lisää `financing` CATS-listaan + DEF_RULES-säännöt (esim. `asuntolainaerä`, `lainan nosto`)
-- `budgetIncomeForMonth`-funktio: suodattaa pois `financing`-tyyppiset tapahtumat income-laskennasta
-- `monthSummary`-funktio: `financing` ei laske needs/wants/savings/income-summiin
-
-**Esimerkkisääntöjä:**
-- "lainan nosto" → financing
-- "asuntolaina" → financing (jos kyse nostosta, ei lyhennyksestä)
-
-### Toistuvat kiinteät menot
-Tällä hetkellä esim. 635,90€ asumistransaktio sisältää: hoitovastike + yhtiölainan lyhennys + korko + vesimaksu — kaikki yhdessä rivissä. Tavoite: split-toiminto jolla yhden tapahtuman voi jakaa useampaan kategoriaan manuaalisesti. Esim. 635,90€ → Asuminen 250€ + Luotot—lyhennys 300€ + Luotot—korko 85,90€.
+✅ **Persistenssibugi korjattu (`7388f55`):** toistuva jako tallentui aiemmin vain selaimen localStorageen, ei D1:een (puuttui `splits`-sarake tauluista + API-kutsut), joten jako katosi seuraavassa CSV-tuonnissa. Nyt `transactions`/`rules`-tauluissa on `splits`-sarake, ja `categorize()` soveltaa tallennettua prosenttijakoa automaattisesti uusiin CSV-riveihin (pyöristys täsmää aina tarkalleen, vaikka kk-summa vaihtelisi).
 
 ### Analytiikka-välilehti — jatkokehitys
 Nykyinen: kassavirta 12 kk + N/W/S% 6 kk + top 10 kategoriat YTD.
@@ -185,8 +163,8 @@ Koodissa on Finnair Visa CSV-parseri ja OP Visa Credit -tunnistus, mutta data pu
 
 Huom: OP Visa Credit CSV-formaatti eroaa OP Debit-formaatista — varmista että parseri tunnistaa oikein.
 
-### Sijoittaminen — mitä hankittu
-Sijoittaminen-kategorian tapahtumat näyttävät vain summat. Lisäys: klikattaessa näkee mitä rahastoa/osaketta on ostettu (payee-kentästä).
+### Sijoittaminen — mitä hankittu (siirretty "Iso kuva" -osioon)
+Tarkennettu: tämä ei ole pieni UI-lisäys, vaan OT↔IT-synergia (ks. ylempänä) — rahaston/osakkeen näkeminen riittää jo nykyisestä kategoria-klikkauksesta (Kategoriat-välilehti → drill-down näyttää payee-nimet). Varsinainen tarve on OT:n sijoitustapahtuman automaattinen vienti IT:hen (Investment Trackeriin), joka hakee Yahoo Financella päivän arvon ja laskee tuoton. Huomioi kertasijoitukset erikseen IT:n toistuvien (kuun 15. päivä per rahasto) lisäksi.
 
 ### Toistuvat menot — tunnistus ja visualisointi
 Merkitse säännöllisesti toistuvat tapahtumat (vuokra, lainat, tilaukset) ja näytä ne erikseen "kiinteät menot" -osiona. Helpottaa kulutusjouston arviointia — kuinka paljon menosta on oikeasti vaikutettavissa.
