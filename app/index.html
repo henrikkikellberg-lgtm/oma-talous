@@ -1134,6 +1134,7 @@ function parseRevAmount(s) {
 function loadCSVFiles(files) {
   let done = 0;
   let totalAdded = 0;
+  let totalSkippedDuplicates = 0;
   files.forEach(f => {
     const rd = new FileReader();
     rd.onload = async ev => {
@@ -1146,6 +1147,7 @@ function loadCSVFiles(files) {
           if (res.ok) {
             const data = await res.json();
             totalAdded += data.added || 0;
+            totalSkippedDuplicates += data.skippedDuplicates || 0;
           }
         } catch(e) {}
       } else {
@@ -1168,7 +1170,8 @@ function loadCSVFiles(files) {
         }
         curMonth = allMonths()[0] || fmtMonthKey(new Date());
         renderAll();
-        showToast(`Tuotu ${totalAdded} uutta tapahtumaa`, 'ok');
+        const dupMsg = totalSkippedDuplicates > 0 ? ` (${totalSkippedDuplicates} tuplaa ohitettu)` : '';
+        showToast(`Tuotu ${totalAdded} uutta tapahtumaa${dupMsg}`, 'ok');
       }
     };
     rd.readAsText(f, 'UTF-8');

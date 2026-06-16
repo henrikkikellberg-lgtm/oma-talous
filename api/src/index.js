@@ -318,12 +318,14 @@ async function handleCSVImport(req, env) {
   const { csv, filename } = await req.json();
   if (!csv) return err('Missing csv');
   const rows = parseCSV(csv, filename || '');
-  const { results: existing } = await env.DB.prepare('SELECT id FROM transactions').all();
+  const { results: existing } = await env.DB.prepare('SELECT id,date,amount,payee FROM transactions').all();
   const ids = new Set(existing.map(r=>r.id));
   const { results: rulesRows } = await env.DB.prepare('SELECT kw,cat,type FROM rules ORDER BY priority DESC').all();
   let added = 0;
+  let skippedDuplicates = 0;
   for (const row of rows) {
     if (ids.has(row.id)) continue;
+    if (findExistingDuplicate(row, existing)) { skippedDuplicates++; continue; }
     const cat = categorize(row, rulesRows);
     row.month = row.date.substring(0,7);
     await env.DB.prepare(
@@ -331,7 +333,36 @@ async function handleCSVImport(req, env) {
     ).bind(row.id,row.date,row.payee,row.selitys,row.viesti,row.amount,cat.cat,cat.type,row.source,row.account||'Perus',row.month).run();
     added++;
   }
-  return ok({ added, total: rows.length });
+  return ok({ added, total: rows.length, skippedDuplicates });
+}
+
+// Tunnistaa sen, että samasta reaalimaailman tapahtumasta on jo rivi tietokannassa
+// eri lähteestä (esim. käsin syötetty tai kuitilta skannattu) ennen CSV-tuontia.
+// Id-vertailu ei riitä, koska manuaalisten tapahtumien id ei koskaan täsmää pankin
+// CSV:n id-muotoon. Saajan nimeä EI vaadita täsmäämään: pankin tilitysmerkintä
+// ("VFI*NOLIVA OY HELSINKI") voi olla täysin eri kuin kuitin brändinimi ("US Unisex").
+// Pelkkä sama päivä + sama summa riittää, kunhan päivä on korjattu oikeaksi
+// ostopäiväksi (ks. extractOstopvm) — kahden eri ostoksen osuminen samaan
+// päivään ja täsmälleen samaan summaan on käytännössä harvinaista.
+function findExistingDuplicate(row, existing) {
+  for (const e of existing) {
+    if (e.date !== row.date) continue;
+    if (Math.abs(e.amount - row.amount) > 0.005) continue;
+    return true;
+  }
+  return false;
+}
+
+// Korttiostoissa Kirjauspäivä on pankin veloituspäivä (voi olla 1-3 pv ostopäivää
+// myöhempi), mutta Viesti-kentässä on todellinen ostopäivä OSTOPVM-tunnisteena,
+// muodossa YYMMDD (esim. "OSTOPVM 260613MF" = 2026-06-13).
+function extractOstopvm(viesti) {
+  if (!viesti) return null;
+  const m = viesti.match(/OSTOPVM\s*(\d{2})(\d{2})(\d{2})/);
+  if (!m) return null;
+  const [, yy, mm, dd] = m;
+  const century = parseInt(yy, 10) <= 79 ? '20' : '19';
+  return `${century}${yy}-${mm}-${dd}`;
 }
 
 // ── RULES ─────────────────────────────────────────────────────────────────────
@@ -426,7 +457,12 @@ function parseCSV(text, fname) {
       const amt = parseFloat((c[2]||'').replace(',','.'));
       if (isNaN(amt)) continue;
       const viesti = ((c[9]||'') + (c[6] ? ' ' + c[6] : '')).trim();   // sis. saajan tilinumero
-      rows.push({id:c[10]||`OP_${c[0]}_${c[5]}_${amt}`, date:c[0], payee:c[5]||'', selitys:c[4]||'', viesti, amount:amt, source:fname||'OP', account:'Perus'});
+      // Korttiostoissa Kirjauspäivä (c[0]) on pankin veloituspäivä, joka voi olla
+      // 1-3 pv ostopäivää myöhempi (viikonloppu/pyhä venyttää). Viesti-kentässä on
+      // todellinen ostopäivä OSTOPVM-tunnisteena (YYMMDD) — käytetään sitä kun löytyy,
+      // jotta päivä täsmää kuitilta/käsin syötettyyn tapahtumaan eikä synny tuplaa.
+      const ostopvm = extractOstopvm(c[9]);
+      rows.push({id:c[10]||`OP_${c[0]}_${c[5]}_${amt}`, date:ostopvm||c[0], payee:c[5]||'', selitys:c[4]||'', viesti, amount:amt, source:fname||'OP', account:'Perus'});
     }
   }
   return rows;
