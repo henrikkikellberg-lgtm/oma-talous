@@ -571,7 +571,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.4.8';
+const APP_VERSION = '1.4.9';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 const API_SECRET = '8128f7da46a8a897b418f7f85a517bae788abeb3626d49a48840c232d2186248';
 
@@ -759,6 +759,7 @@ const DEF_ACCOUNTS = [
 // ── STATE ───────────────────────────────────────────────────────────────────
 let txs = [], rules = [], saldot = {}, selMonths = [], loans = [];
 let accounts = [], settings = {salary_day:27, monthly_salary:3267}, actualBalances = {};
+let pendingSync = []; // offline-luodut tapahtumat jotka odottavat D1-synkkausta
 let curMonth = '', curFilter = 'all', curSearch = '', curTab = 'yhteenveto', curCatFilter = '', curCatDrill = null;
 
 // ── TILILASKENTA ──────────────────────────────────────────────────────────────
@@ -864,6 +865,7 @@ function saveLocalState() {
     localStorage.setItem('ot_accounts', JSON.stringify(accounts));
     localStorage.setItem('ot_settings', JSON.stringify(settings));
     localStorage.setItem('ot_loans', JSON.stringify(loans));
+    localStorage.setItem('ot_pending', JSON.stringify(pendingSync));
   } catch(e) { showToast('Tallennusvirhe — vie JSON!', 'err'); }
 }
 
@@ -901,6 +903,7 @@ async function initState() {
     settings = Object.assign({salary_day:27, monthly_salary:3267}, JSON.parse(localStorage.getItem('ot_settings') || '{}'));
     actualBalances = JSON.parse(localStorage.getItem('ot_actualbal') || '{}');
     loans = JSON.parse(localStorage.getItem('ot_loans') || '[]');
+    pendingSync = JSON.parse(localStorage.getItem('ot_pending') || '[]');
   } catch(e) { rules = [...DEF_RULES]; saldot = {}; txs = []; accounts = DEF_ACCOUNTS.map(a=>({...a})); }
   if (!accounts.length) accounts = DEF_ACCOUNTS.map(a=>({...a}));
   curMonth = allMonths()[0] || fmtMonthKey(new Date());
@@ -928,19 +931,28 @@ async function initState() {
     const apiTxs = await res.json();
     const apiIds = new Set(apiTxs.map(t => t.id));
 
-    // Tapahtumat jotka ovat vain localissa (esim. skannatut ennen synkiä)
-    const localOnly = txs.filter(t => !apiIds.has(t.id));
-    if (localOnly.length > 0) {
-      await Promise.all(localOnly.map(tx =>
-        fetch(`${API_BASE}/transactions`, {
-          method: 'POST', headers: apiHeaders(), body: JSON.stringify(tx)
-        }).catch(() => {})
-      ));
-      showToast(`Synkattu ${localOnly.length} tapahtumaa`, 'ok');
+    // Synkkaa VAIN eksplisiittisesti jonossa olevat (offline-luodut) tapahtumat.
+    // EI verrata koko paikallista listaa D1:n listaan — jos joku on poistanut
+    // tapahtuman toisella laitteella, vanha välimuisti ei saa elvyttää sitä takaisin.
+    if (pendingSync.length > 0) {
+      const stillPending = [];
+      await Promise.all(pendingSync.map(async tx => {
+        if (apiIds.has(tx.id)) return; // synkkasi onnistuneesti jo aiemmin
+        try {
+          const r = await fetch(`${API_BASE}/transactions`, {
+            method: 'POST', headers: apiHeaders(), body: JSON.stringify(tx)
+          });
+          if (r.ok) { apiTxs.push(tx); apiIds.add(tx.id); }
+          else stillPending.push(tx);
+        } catch(e) { stillPending.push(tx); }
+      }));
+      const syncedCount = pendingSync.length - stillPending.length;
+      pendingSync = stillPending;
+      if (syncedCount > 0) showToast(`Synkattu ${syncedCount} tapahtumaa`, 'ok');
     }
 
     // Yhdistä: säilytä lokaalit kategorioinnit joita D1 ei vielä tiedä
-    txs = [...(await mergeCats(apiTxs)), ...localOnly];
+    txs = [...(await mergeCats(apiTxs)), ...pendingSync];
     await normalizeStoredCats();   // siivoa emoji-etuliitteet vanhasta datasta
     saveLocalState();
     curMonth = allMonths()[0] || fmtMonthKey(new Date());
@@ -2965,7 +2977,16 @@ function addTx(tx) {
     fetch(`${API_BASE}/transactions`, {
       method: 'POST', headers: apiHeaders(),
       body: JSON.stringify(newTx)
-    }).catch(() => {});
+    }).then(r => {
+      if (!r.ok) throw new Error('POST failed');
+    }).catch(() => {
+      // Offline tai virhe — merkitään odottamaan synkkausta initState()/fetchFresh()-kutsulla
+      pendingSync.push(newTx);
+      saveLocalState();
+    });
+  } else {
+    pendingSync.push(newTx);
+    saveLocalState();
   }
 }
 
@@ -3094,7 +3115,7 @@ async function fetchFresh() {
     const res = await fetch(`${API_BASE}/transactions`, { headers: apiHeaders() });
     if (!res.ok) return;
     const apiTxs = await res.json();
-    txs = await mergeCats(apiTxs); // säilytä lokaalit kategorioinnit
+    txs = [...(await mergeCats(apiTxs)), ...pendingSync]; // säilytä lokaalit kategorioinnit + odottavat
     saveLocalState();
     curMonth = allMonths()[0] || fmtMonthKey(new Date());
     renderAll();
