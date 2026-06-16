@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   source      TEXT NOT NULL DEFAULT 'manual',
   account     TEXT,                          -- tili jolla maksettu: Perus|Saasto|Lipas|OPCredit|Finnair|Revolut
   month       TEXT NOT NULL,
+  splits      TEXT,                          -- JSON [{label,cat,type,amount}] jos tapahtuma jaettu useaan kategoriaan
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -49,6 +50,7 @@ CREATE TABLE IF NOT EXISTS rules (
   cat         TEXT NOT NULL,
   type        TEXT NOT NULL,
   priority    INTEGER NOT NULL DEFAULT 0,
+  splits      TEXT,                          -- JSON [{label,cat,type,pct}] jos toistuva jako tallennettu
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

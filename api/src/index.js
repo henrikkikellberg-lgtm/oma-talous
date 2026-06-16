@@ -210,7 +210,7 @@ async function handleTxList(req, env, url) {
   if (type)  { query += ' AND type = ?';  params.push(type); }
   query += ' ORDER BY date DESC, created_at DESC LIMIT 1000';
   const { results } = await env.DB.prepare(query).bind(...params).all();
-  return ok(results);
+  return ok(results.map(r => ({ ...r, splits: safeParse(r.splits) })));
 }
 
 async function handleTxCreate(req, env) {
@@ -219,22 +219,24 @@ async function handleTxCreate(req, env) {
   tx.id = tx.id || `manual_${Date.now()}_${Math.random().toString(36).substr(2,5)}`;
   tx.month = tx.date.substring(0,7);
   await env.DB.prepare(
-    'INSERT OR REPLACE INTO transactions (id,date,payee,selitys,viesti,amount,cat,type,source,account,month) VALUES (?,?,?,?,?,?,?,?,?,?,?)'
-  ).bind(tx.id,tx.date,tx.payee||'',tx.selitys||'',tx.viesti||'',tx.amount,tx.cat||null,tx.type||null,tx.source||'manual',tx.account||'Perus',tx.month).run();
+    'INSERT OR REPLACE INTO transactions (id,date,payee,selitys,viesti,amount,cat,type,source,account,month,splits) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
+  ).bind(tx.id,tx.date,tx.payee||'',tx.selitys||'',tx.viesti||'',tx.amount,tx.cat||null,tx.type||null,tx.source||'manual',tx.account||'Perus',tx.month,tx.splits?JSON.stringify(tx.splits):null).run();
   return ok({ id: tx.id });
 }
 
 async function handleTxUpdate(req, env, id) {
   const decodedId = decodeURIComponent(id);
   const updates = await req.json();
-  const fields = ['cat','type','payee','amount','date','account'].filter(f=>updates[f]!==undefined);
+  const fields = ['cat','type','payee','amount','date','account','splits'].filter(f=>updates[f]!==undefined);
   if (!fields.length) return err('Nothing to update');
   const sets = fields.map(f=>`${f}=?`).join(',');
-  const vals = fields.map(f=>updates[f]);
+  const vals = fields.map(f => f==='splits' ? (updates[f]?JSON.stringify(updates[f]):null) : updates[f]);
   const result = await env.DB.prepare(`UPDATE transactions SET ${sets} WHERE id=?`).bind(...vals, decodedId).run();
   if (result.meta?.changes === 0) return err('Transaction not found', 404);
   return ok({ ok: true });
 }
+
+function safeParse(s) { if (!s) return null; try { return JSON.parse(s); } catch(_) { return null; } }
 
 async function handleTxDelete(req, env, id) {
   const decodedId = decodeURIComponent(id);
@@ -320,7 +322,7 @@ async function handleCSVImport(req, env) {
   const rows = parseCSV(csv, filename || '');
   const { results: existing } = await env.DB.prepare('SELECT id,date,amount,payee,source FROM transactions').all();
   const ids = new Set(existing.map(r=>r.id));
-  const { results: rulesRows } = await env.DB.prepare('SELECT kw,cat,type FROM rules ORDER BY priority DESC').all();
+  const { results: rulesRows } = await env.DB.prepare('SELECT kw,cat,type,splits FROM rules ORDER BY priority DESC').all();
   let added = 0;
   let skippedDuplicates = 0;
   for (const row of rows) {
@@ -329,8 +331,8 @@ async function handleCSVImport(req, env) {
     const cat = categorize(row, rulesRows);
     row.month = row.date.substring(0,7);
     await env.DB.prepare(
-      'INSERT INTO transactions (id,date,payee,selitys,viesti,amount,cat,type,source,account,month) VALUES (?,?,?,?,?,?,?,?,?,?,?)'
-    ).bind(row.id,row.date,row.payee,row.selitys,row.viesti,row.amount,cat.cat,cat.type,row.source,row.account||'Perus',row.month).run();
+      'INSERT INTO transactions (id,date,payee,selitys,viesti,amount,cat,type,source,account,month,splits) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
+    ).bind(row.id,row.date,row.payee,row.selitys,row.viesti,row.amount,cat.cat,cat.type,row.source,row.account||'Perus',row.month,cat.splits?JSON.stringify(cat.splits):null).run();
     added++;
   }
   return ok({ added, total: rows.length, skippedDuplicates });
@@ -386,13 +388,22 @@ function extractOstopvm(viesti) {
 // ── RULES ─────────────────────────────────────────────────────────────────────
 async function handleRulesList(env) {
   const { results } = await env.DB.prepare('SELECT * FROM rules ORDER BY priority DESC, id ASC').all();
-  return ok(results);
+  return ok(results.map(r => ({ ...r, splits: safeParse(r.splits) })));
 }
 
+// Upsert kw:n perusteella: jos sama avainsana on jo säännöissä, päivitetään se
+// (mm. jako-säännöt syntyvät tästä kun käyttäjä muokkaa olemassa olevaa splittiä).
 async function handleRulesCreate(req, env) {
-  const { kw, cat, type, priority=0 } = await req.json();
+  const { kw, cat, type, priority=0, splits } = await req.json();
   if (!kw||!cat||!type) return err('Missing fields');
-  const { meta } = await env.DB.prepare('INSERT INTO rules (kw,cat,type,priority) VALUES (?,?,?,?)').bind(kw,cat,type,priority).run();
+  const splitsJson = splits ? JSON.stringify(splits) : null;
+  const existing = await env.DB.prepare('SELECT id FROM rules WHERE kw=?').bind(kw).first();
+  if (existing) {
+    await env.DB.prepare('UPDATE rules SET cat=?,type=?,priority=?,splits=? WHERE id=?')
+      .bind(cat,type,priority,splitsJson,existing.id).run();
+    return ok({ id: existing.id, updated: true });
+  }
+  const { meta } = await env.DB.prepare('INSERT INTO rules (kw,cat,type,priority,splits) VALUES (?,?,?,?,?)').bind(kw,cat,type,priority,splitsJson).run();
   return ok({ id: meta.last_row_id });
 }
 
@@ -536,9 +547,28 @@ function categorize(tx, rules) {
     return {cat:'MobilePay & siirrot', type:'neutral'};
   }
 
-  for (const r of rules) if (txt.includes(r.kw.toLowerCase())) return {cat:r.cat, type:r.type};
+  for (const r of rules) {
+    if (!txt.includes(r.kw.toLowerCase())) continue;
+    if (r.splits) {
+      const pcts = safeParse(r.splits);
+      if (Array.isArray(pcts) && pcts.length) {
+        return {cat:r.cat, type:r.type, splits: applySplitPercents(pcts, Math.abs(tx.amount))};
+      }
+    }
+    return {cat:r.cat, type:r.type};
+  }
   if (tx.amount>0) return {cat:'Palkka ja tulot', type:'income'};
   return {cat:'— Kategorisoimatta', type:'flag'};
+}
+
+// Laskee jako-säännön prosenttiosuudet (esim. taloyhtiölaskun hoito-/rahoitusvastike/vesi)
+// todelliseksi euromääräiseksi jaoksi tämän tapahtuman summalle. Pyöristyserotus
+// kohdistetaan viimeiseen osaan, jotta osien summa täsmää aina tarkalleen kokonaissummaan.
+function applySplitPercents(pcts, totalAbs) {
+  const out = pcts.map(s => ({ label: s.label, cat: s.cat, type: s.type, amount: Math.round(totalAbs * s.pct / 100 * 100) / 100 }));
+  const usedExceptLast = out.slice(0, -1).reduce((s, o) => s + o.amount, 0);
+  if (out.length) out[out.length - 1].amount = Math.round((totalAbs - usedExceptLast) * 100) / 100;
+  return out;
 }
 
 // ── JSON EXTRACT ─────────────────────────────────────────────────────────────

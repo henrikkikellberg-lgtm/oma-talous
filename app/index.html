@@ -2884,21 +2884,35 @@ function saveTxEdit() {
     if (Math.abs(total-used)>0.02) { showToast('Jako ei täsmää — tarkista summat','err'); return; }
     if (rows.length < 2) { showToast('Lisää vähintään kaksi osaa','err'); return; }
     tx.splits = rows.map(r=>({label:r.label||r.cat, cat:r.cat, type:r.type, amount:Math.round(r.amount*100)/100}));
+    tx.cat = rows[0].cat; tx.type = rows[0].type; // pääkategoria näkyviin myös paikoissa joita ei expandata
     tx.account = document.getElementById('txEditAccountSplit').value || 'Perus';
     // Tallenna sääntönä toistuvana?
-    if (document.getElementById('splitSaveRule').checked) {
-      const kw = (tx.payee||'').toLowerCase().substring(0,28).trim();
-      if (kw) {
-        const pcts = rows.map(r=>({label:r.label||r.cat, cat:r.cat, type:r.type, pct:Math.round(r.amount/total*10000)/100}));
-        // Ensimmäisen osan cat = pääkategoria säännöllä
-        const existing = rules.findIndex(r=>r.kw===kw);
-        const rule = {kw, cat:rows[0].cat, type:rows[0].type, splits:pcts};
-        if (existing>=0) rules[existing]=rule; else rules.unshift(rule);
-        showToast('✓ Tallennettu toistuvana jakona','ok');
+    const saveAsRule = document.getElementById('splitSaveRule').checked;
+    const kw = (tx.payee||'').toLowerCase().substring(0,28).trim();
+    let pcts = null;
+    if (saveAsRule && kw) {
+      pcts = rows.map(r=>({label:r.label||r.cat, cat:r.cat, type:r.type, pct:Math.round(r.amount/total*10000)/100}));
+      // Ensimmäisen osan cat = pääkategoria säännöllä
+      const existing = rules.findIndex(r=>r.kw===kw);
+      const rule = {kw, cat:rows[0].cat, type:rows[0].type, splits:pcts};
+      if (existing>=0) rules[existing]=rule; else rules.unshift(rule);
+    }
+    if (API_BASE) {
+      fetch(`${API_BASE}/transactions/${encodeURIComponent(txEditId)}`, {
+        method:'PUT', headers:apiHeaders(),
+        body:JSON.stringify({splits:tx.splits, cat:tx.cat, type:tx.type, account:tx.account})
+      }).then(r=>{ if (!r.ok) showToast('Tallennus epäonnistui — yritä uudelleen','err'); }).catch(()=>{});
+      if (saveAsRule && kw) {
+        fetch(`${API_BASE}/rules`, {
+          method:'POST', headers:apiHeaders(),
+          body:JSON.stringify({kw, cat:rows[0].cat, type:rows[0].type, priority:0, splits:pcts})
+        }).catch(()=>{});
       }
     }
+    showToast(saveAsRule && kw ? '✓ Tallennettu toistuvana jakona' : '✓ Jako tallennettu', 'ok');
   } else {
     // ── Normaali kategoriatallennus ──
+    const hadSplit = !!tx.splits;
     if (tx.splits) delete tx.splits; // poista vanha split jos oli
     const catName = getSelectedChip('txEditChips');
     const c = catObj(catName);
@@ -2909,7 +2923,8 @@ function saveTxEdit() {
     if (isNewRule) rules.unshift({kw, cat:c.name, type:c.type});
     if (API_BASE) {
       fetch(`${API_BASE}/transactions/${encodeURIComponent(txEditId)}`, {
-        method:'PUT', headers:apiHeaders(), body:JSON.stringify({cat:c.name, type:c.type, account:tx.account})
+        method:'PUT', headers:apiHeaders(),
+        body:JSON.stringify({cat:c.name, type:c.type, account:tx.account, ...(hadSplit?{splits:null}:{})})
       }).then(r=>{ if (!r.ok) showToast('Tallennus epäonnistui — yritä uudelleen','err'); }).catch(()=>{});
       if (isNewRule) {
         fetch(`${API_BASE}/rules`, {
