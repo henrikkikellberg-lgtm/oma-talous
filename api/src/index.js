@@ -318,7 +318,7 @@ async function handleCSVImport(req, env) {
   const { csv, filename } = await req.json();
   if (!csv) return err('Missing csv');
   const rows = parseCSV(csv, filename || '');
-  const { results: existing } = await env.DB.prepare('SELECT id,date,amount,payee FROM transactions').all();
+  const { results: existing } = await env.DB.prepare('SELECT id,date,amount,payee,source FROM transactions').all();
   const ids = new Set(existing.map(r=>r.id));
   const { results: rulesRows } = await env.DB.prepare('SELECT kw,cat,type FROM rules ORDER BY priority DESC').all();
   let added = 0;
@@ -349,6 +349,24 @@ function findExistingDuplicate(row, existing) {
     if (e.date !== row.date) continue;
     if (Math.abs(e.amount - row.amount) > 0.005) continue;
     return true;
+  }
+  // Kuitin skannaus voi pilkkoa yhden ostoksen useaan kategoriariviin (esim.
+  // päivittäistavarat + alkoholi erikseen alkoholiseurannan vuoksi), kun pankin
+  // kortti veloittaa koko ostoksen yhtenä rivinä. Etsitään löytyykö samalta
+  // päivältä käsin syötettyjen/kuitilta skannattujen rivien osajoukko, joka
+  // summautuu täsmälleen tämän CSV-rivin summaan — jos löytyy, kuitin pilkonta
+  // on kanoninen totuus ja CSV-rivi on sen duplikaatti.
+  const sameDay = existing.filter(e => e.date === row.date && (e.source === 'manual' || e.source === 'receipt'));
+  if (sameDay.length >= 2 && sameDay.length <= 12 && subsetSumsTo(sameDay.map(e => e.amount), row.amount)) return true;
+  return false;
+}
+
+function subsetSumsTo(amounts, target) {
+  const n = amounts.length;
+  for (let mask = 1; mask < (1 << n); mask++) {
+    let sum = 0;
+    for (let i = 0; i < n; i++) if (mask & (1 << i)) sum += amounts[i];
+    if (Math.abs(sum - target) <= 0.005) return true;
   }
   return false;
 }
