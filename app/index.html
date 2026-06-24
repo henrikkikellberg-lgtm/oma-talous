@@ -96,6 +96,14 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 .sum-bar{height:3px;background:var(--surface2);border-radius:2px;margin-top:8px;overflow:hidden}
 .sum-bar-fill{height:3px;border-radius:2px;transition:width .4s ease}
 .sum-needs .sum-bar-fill{background:var(--green)}.sum-wants .sum-bar-fill{background:var(--gold)}.sum-savings .sum-bar-fill{background:var(--blue)}
+.kv-flow{display:flex;gap:6px}
+.kv-node,.kv-res{flex:1;padding:10px 8px;border-radius:var(--radius-sm)}
+.kv-res{background:var(--surface2);border-top:2px solid var(--green)}
+.kv-op{display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:18px;min-width:14px}
+.kv-l{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);font-weight:500;margin-bottom:4px}
+.kv-v{font-size:20px;font-weight:300;line-height:1.1}
+.kv-c{font-size:11px;color:var(--muted);margin-top:3px}
+@media(max-width:560px){.kv-flow{flex-direction:column;gap:3px}.kv-op{height:12px;font-size:15px}}
 
 /* ── TRANSACTION LIST ────────────────────────────────── */
 .section-lbl{font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--dim);margin:16px 0 8px}
@@ -343,6 +351,7 @@ tr:hover td{background:var(--surface2)}
       <span id="flagBannerMobText"></span>
       <button class="btn btn-secondary" style="height:28px;padding:0 10px;font-size:12px" onclick="switchTab('tapahtumat');setCurFilter('flag')">Kategorisoi →</button>
     </div>
+    <div id="viewToggle"></div>
     <div id="runwayCard"></div>
     <div class="sum-grid" id="sumGrid"></div>
     <div id="kassavirtaCard"></div>
@@ -571,7 +580,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.4.9';
+const APP_VERSION = '1.5.0';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 const API_SECRET = '8128f7da46a8a897b418f7f85a517bae788abeb3626d49a48840c232d2186248';
 
@@ -761,6 +770,8 @@ let txs = [], rules = [], saldot = {}, selMonths = [], loans = [];
 let accounts = [], settings = {salary_day:27, monthly_salary:3267}, actualBalances = {};
 let pendingSync = []; // offline-luodut tapahtumat jotka odottavat D1-synkkausta
 let curMonth = '', curFilter = 'all', curSearch = '', curTab = 'yhteenveto', curCatFilter = '', curCatDrill = null;
+// Dashboard-näkymän tarkastelujakso: 'calendar' = kalenterikuukausi (oletus), 'period' = palkkajakso (palkkapäivä→palkkapäivä)
+let viewMode = localStorage.getItem('ot_viewmode') || 'calendar';
 
 // ── TILILASKENTA ──────────────────────────────────────────────────────────────
 let lastAccount = (typeof localStorage!=='undefined' && localStorage.getItem('ot_lastacct')) || 'Perus';
@@ -980,6 +991,49 @@ async function normalizeStoredCats() {
 function fmtMonthKey(d) { return d.toISOString().substring(0,7); }
 function allMonths() { return [...new Set(txs.map(t=>t.date.substring(0,7)))].sort().reverse(); }
 function txsForMonth(m) { return txs.filter(t=>t.date.startsWith(m)); }
+function txsForWindow(start, end) { return txs.filter(t=>t.date>=start && t.date<=end); }
+// ── PALKKAJAKSONÄKYMÄ (view mode) ──────────────────────────────────────────────
+function dashIsPeriod() { return curTab==='yhteenveto' && viewMode==='period'; }
+function ddmm(iso) { const p=iso.split('-'); return (+p[2])+'.'+(+p[1])+'.'; }
+// Aktiivisen dashboard-jakson ikkuna: kalenterikuukausi tai palkkajakso (edell. palkkapäivä → tämän kk:n palkkapäivä)
+function dashWindow() {
+  if (viewMode !== 'period') {
+    return { mode:'calendar', start: curMonth+'-01', end: lastDayOfMonth(curMonth) };
+  }
+  const [y,m] = curMonth.split('-').map(Number);
+  const endPay = effectivePayday(y, m-1);
+  const py = m===1 ? y-1 : y, pm = m===1 ? 11 : m-2;
+  const startPay = effectivePayday(py, pm);
+  const startISO = isoLocal(startPay), endPayISO = isoLocal(endPay);
+  const isCurrent = curMonth === fmtMonthKey(new Date());
+  const today = new Date(); today.setHours(0,0,0,0);
+  const spendEnd = (isCurrent && today < endPay) ? today : endPay;
+  return { mode:'period', start: startISO, end: isoLocal(spendEnd), endPay: endPayISO,
+           periodLen: Math.max(daysBetween(startPay, endPay), 1),
+           daysElapsed: Math.max(daysBetween(startPay, spendEnd), 1),
+           isCurrent, label: ddmm(startISO)+'–'+ddmm(endPayISO) };
+}
+// Palkkajakson tulot: jaksoon saapunut palkka (palkkapäivästä alkaen, seuraavaan palkkapäivään asti pois lukien)
+function periodIncomeForMonth(month) {
+  const [y,m] = month.split('-').map(Number);
+  const endPay = effectivePayday(y, m-1);
+  const py = m===1 ? y-1 : y, pm = m===1 ? 11 : m-2;
+  const startPay = effectivePayday(py, pm);
+  const startISO = isoLocal(startPay), endISO = isoLocal(endPay);
+  const inc = txs.filter(t=>t.type==='income' && t.date>=startISO && t.date<endISO).reduce((s,t)=>s+t.amount, 0);
+  const note = 'palkkajakso '+ddmm(startISO)+'–'+ddmm(endISO);
+  const minSal = (settings.monthly_salary||0)*0.4;
+  if (inc>0 && (minSal===0 || inc>=minSal)) return { income: inc, note, isEstimate:false };
+  const sal = settings.monthly_salary||0;
+  if (sal>0) return { income: sal, note: note+' · ennuste', isEstimate:true };
+  return { income: inc, note, isEstimate:false };
+}
+function setViewMode(mode) {
+  if (mode===viewMode) return;
+  viewMode = mode;
+  localStorage.setItem('ot_viewmode', mode);
+  renderAll();
+}
 function eur(n) { return Math.abs(n).toLocaleString('fi-FI',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'; }
 function esigned(n) { return (n>=0?'+':'−')+eur(n); }
 function fmtMonthLbl(key) {
@@ -1082,7 +1136,12 @@ function categorizeTx(tx) {
       return {cat:r.cat, type:r.type};
     }
   }
-  if (tx.amount > 0) return {cat:'Palkka ja tulot', type:'income'};
+  if (tx.amount > 0) {
+    // Positiivinen luottotilin kirjaus ilman sääntöä = todennäköisesti palautus/hyvitys.
+    // Ei automaattisesti tuloksi — jää tarkistettavaksi, jotta sen voi kohdistaa oston kategoriaan (esim. wants/Ostokset).
+    if (accountByKey(tx.account)?.kind === 'credit') return {cat:'— Mahdollinen palautus', type:'flag'};
+    return {cat:'Palkka ja tulot', type:'income'};
+  }
   return {cat:'— Kategorisoimatta', type:'flag'};
 }
 function categorizeAll() { txs = txs.map(tx => ({...tx, ...categorizeTx(tx)})); }
@@ -1293,7 +1352,7 @@ function renderAll() {
 }
 
 function updateMonthLabels() {
-  const lbl = fmtMonthLbl(curMonth);
+  const lbl = dashIsPeriod() ? dashWindow().label : fmtMonthLbl(curMonth);
   const el1 = document.getElementById('monthLbl');
   const el2 = document.getElementById('deskMonthLbl');
   if (el1) el1.textContent = lbl;
@@ -1301,7 +1360,9 @@ function updateMonthLabels() {
 }
 
 function updateMobTotal() {
-  const list = txsForMonth(curMonth).filter(t=>t.amount<0&&t.type!=='neutral'&&t.type!=='financing');
+  const w = dashIsPeriod() ? dashWindow() : null;
+  const base = w ? txsForWindow(w.start, w.end) : txsForMonth(curMonth);
+  const list = base.filter(t=>t.amount<0&&t.type!=='neutral'&&t.type!=='financing');
   const total = list.reduce((s,t)=>s+Math.abs(t.amount),0);
   const el = document.getElementById('mobTotal');
   if (el) el.textContent = eur(total);
@@ -1332,6 +1393,19 @@ function renderTab(tab) {
 
 // ── YHTEENVETO ────────────────────────────────────────────────────────────────
 function prevMonthKey(m) { const [y,mo]=m.split('-').map(Number); return fmtMonthKey(new Date(y, mo-2, 1)); }
+
+// Segmentoitu valitsin: kalenterikuukausi ⇄ palkkajakso + jaksobanneri
+function viewToggleHTML(win, used) {
+  const seg = (mode,label) => `<button onclick="setViewMode('${mode}')" style="flex:1;height:34px;border:none;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;background:${viewMode===mode?'var(--surface)':'transparent'};color:${viewMode===mode?'var(--text)':'var(--muted)'};box-shadow:${viewMode===mode?'0 1px 2px rgba(0,0,0,.06)':'none'}">${label}</button>`;
+  const banner = win.mode==='period' ? `<div style="font-size:12px;color:var(--muted);margin-top:8px;padding:0 2px;display:flex;justify-content:space-between;align-items:baseline">
+      <span>Palkkajakso <b style="color:var(--text)">${win.label}</b> · ${win.daysElapsed}/${win.periodLen} pv</span>
+      <span>käytetty <b style="color:var(--text)">${eur(used)}</b></span>
+    </div>` : '';
+  return `<div style="margin-bottom:12px">
+    <div style="background:var(--surface2);border:0.5px solid var(--border);border-radius:9px;padding:3px;display:flex;gap:3px">
+      ${seg('calendar','Kalenterikuukausi')}${seg('period','Palkkajakso')}
+    </div>${banner}</div>`;
+}
 
 function renderRunwayCard() {
   const el = document.getElementById('runwayCard'); if (!el) return;
@@ -1420,55 +1494,72 @@ function kassavirtaCardHTML(s, bInc, isEstimate, list) {
   const kvColor    = kv >= 0 ? 'var(--green)' : 'var(--red)';
   const nettoColor = netto >= 0 ? 'var(--green)' : 'var(--red)';
   const kvPct  = Math.round(Math.abs(kv) / bInc * 100);
-  const barW   = Math.min(kulutus / bInc * 100, 100);
-  const barColor = kulutus > bInc ? 'var(--red)' : kulutus > bInc * 0.8 ? 'var(--gold)' : 'var(--green)';
   const creditKulutus = list ? expandList(list)
     .filter(t => t.amount < 0 && (t.type==='needs'||t.type==='wants') && accountByKey(t.account)?.kind === 'credit')
-    .reduce((s,t) => s + Math.abs(t.amount), 0) : 0;
-  const cashKV = bInc - (kulutus - creditKulutus);
+    .reduce((a,t) => a + Math.abs(t.amount), 0) : 0;
+  const pct = v => bInc>0 ? Math.max(0, Math.min(100, v / bInc * 100)) : 0;
+  const incVal = (isEstimate ? '~ ' : '+') + eur(bInc);
+  const incColor = isEstimate ? 'var(--gold)' : 'var(--blue)';
   return `
     <div class="sum-card" style="border-top:2.5px solid ${kvColor};margin-bottom:12px">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
-        <div class="sum-label">Kassavirta</div>
-        <span style="font-size:11px;color:var(--dim)">Kulutatko enemmän kuin tienaat?</span>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
-        <div>
-          <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);font-weight:500;margin-bottom:3px">Tulot</div>
-          <div style="font-size:20px;font-weight:300;color:${isEstimate ? 'var(--gold)' : 'var(--blue)'}">${isEstimate ? '~ ' : '+'}${eur(bInc)}</div>
+      <div class="sum-label" style="margin-bottom:12px">Kassavirta</div>
+      <div class="kv-flow">
+        <div class="kv-node">
+          <div class="kv-l">Tulot</div>
+          <div class="kv-v" style="color:${incColor}">${incVal}</div>
+          <div class="kv-c">${isEstimate ? 'ennuste' : 'palkka'}</div>
         </div>
-        <div>
-          <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);font-weight:500;margin-bottom:3px">Kulutus (needs + wants)</div>
-          <div style="font-size:20px;font-weight:300;color:var(--text)">−${eur(kulutus)}</div>
-          ${creditKulutus > 0 ? `<div style="font-size:11px;color:var(--dim);margin-top:3px">josta luotolla −${eur(creditKulutus)}</div>` : ''}
+        <div class="kv-op">−</div>
+        <div class="kv-node">
+          <div class="kv-l">Kulutus</div>
+          <div class="kv-v" style="color:var(--text)">${eur(kulutus)}</div>
+          <div class="kv-c">${creditKulutus > 0 ? eur(creditKulutus)+' luotolla' : 'needs + wants'}</div>
+        </div>
+        <div class="kv-op">=</div>
+        <div class="kv-res" style="border-top-color:${kvColor}">
+          <div class="kv-l">Kassavirta</div>
+          <div class="kv-v" style="color:${kvColor}">${kv>=0?'+':'−'}${eur(kv)}</div>
+          <div class="kv-c" style="${kv<0?'color:var(--red);font-weight:500':''}">${kv<0 ? 'pohja vuotaa' : kvPct+' % tuloista'}</div>
+        </div>
+        <div class="kv-op">−</div>
+        <div class="kv-node">
+          <div class="kv-l">Säästöt</div>
+          <div class="kv-v" style="color:var(--blue)">${eur(s.sav)}</div>
+          <div class="kv-c">sijoitukset</div>
+        </div>
+        <div class="kv-op">=</div>
+        <div class="kv-res" style="border-top-color:${nettoColor}">
+          <div class="kv-l">Netto</div>
+          <div class="kv-v" style="color:${nettoColor}">${netto>=0?'+':'−'}${eur(netto)}</div>
+          <div class="kv-c">${netto>=0 ? 'jää puskuriin' : 'alijäämä'}</div>
         </div>
       </div>
-      <div class="sum-bar" style="margin-bottom:10px">
-        <div class="sum-bar-fill" style="width:${barW}%;background:${barColor}"></div>
+      <div style="display:flex;height:6px;border-radius:3px;overflow:hidden;margin-top:14px">
+        <div style="width:${pct(s.needs)}%;background:var(--green)"></div>
+        <div style="width:${pct(s.wants)}%;background:var(--gold)"></div>
+        <div style="width:${pct(s.sav)}%;background:var(--blue)"></div>
+        <div style="width:${pct(Math.max(netto,0))}%;background:var(--border)"></div>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:8px;border-top:1px solid var(--border)">
-        <div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:2px">Kassavirta (budjetti)</div>
-          <div style="font-size:24px;font-weight:300;color:${kvColor}">${kv>=0?'+':''}${eur(kv)}</div>
-          ${kv < 0 ? `<div style="font-size:11px;color:var(--red);font-weight:500;margin-top:2px">Pohja vuotaa — ${kvPct}% tuloista katetaan muualta</div>` : `<div style="font-size:11px;color:var(--muted);margin-top:2px">${kvPct}% tuloista jää säästöön/lyhennyksiin</div>`}
-          ${creditKulutus > 0 ? `<div style="font-size:11px;color:var(--blue);margin-top:5px">Käteinen kassavirta (ilman luottoa): <strong>${cashKV>=0?'+':''}${eur(cashKV)}</strong></div>` : ''}
-        </div>
-        ${s.sav > 0 ? `<div style="text-align:right">
-          <div style="font-size:11px;color:var(--muted);margin-bottom:2px">− Säästöt/lyhennykset</div>
-          <div style="font-size:13px;color:var(--muted)">−${eur(s.sav)}</div>
-          <div style="font-size:15px;font-weight:500;color:${nettoColor};margin-top:2px">Netto ${netto>=0?'+':''}${eur(netto)}</div>
-        </div>` : ''}
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:11px;color:var(--muted)">
+        <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--green);margin-right:5px"></span>Needs ${Math.round(pct(s.needs))} %</span>
+        <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--gold);margin-right:5px"></span>Wants ${Math.round(pct(s.wants))} %</span>
+        <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--blue);margin-right:5px"></span>Savings ${Math.round(pct(s.sav))} %</span>
+        <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--border);margin-right:5px"></span>Puskuri ${Math.round(pct(Math.max(netto,0)))} %</span>
       </div>
+      ${creditKulutus > 0 ? `<div style="margin-top:14px;padding:8px 10px;background:var(--gold-light);border-radius:var(--radius-sm);font-size:12px;color:var(--gold)">${eur(creditKulutus)} maksettu luotolla — ei lähtenyt tililtä tässä jaksossa</div>` : ''}
     </div>`;
 }
 
 function renderYhteenveto() {
   renderRunwayCard();
   renderTipsCard();
-  const list = txsForMonth(curMonth);
+  const win = dashWindow();
+  const list = txsForWindow(win.start, win.end);
   const s = monthSummary(list);
-  const bi = budgetIncomeForMonth(curMonth);
+  const bi = win.mode==='period' ? periodIncomeForMonth(curMonth) : budgetIncomeForMonth(curMonth);
   const bInc = bi.income;
+  const used = s.needs + s.wants + s.sav;
+  const vt = document.getElementById('viewToggle'); if (vt) vt.innerHTML = viewToggleHTML(win, used);
   const np = bInc>0?Math.round(s.needs/bInc*100):0;
   const wp = bInc>0?Math.round(s.wants/bInc*100):0;
   const sp = bInc>0?Math.round(s.sav/bInc*100):0;
@@ -2630,6 +2721,8 @@ function switchTab(tab) {
   const deskRow = document.getElementById('deskMonthRow');
   if (mobBar) mobBar.style.display = hideMonth ? 'none' : '';
   if (deskRow) deskRow.style.display = hideMonth ? 'none' : '';
+  updateMonthLabels();
+  updateMobTotal();
   renderTab(tab);
 }
 

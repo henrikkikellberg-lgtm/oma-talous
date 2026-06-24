@@ -229,7 +229,9 @@ transition: opacity 0.25s ease;  /* toast-viestit */
 
 ## Kriittiset säännöt
 
-1. **Ei tokeneita tai secreteja koodissa.** API-avaimet aina ympäristömuuttujina (`wrangler secret put` tai CF Dashboard). `.env` on gitignoressa.
+1. **Tilin nykysaldo = laskettu, ei opening_balance.** Älä koskaan käytä `accounts.opening_balance` sellaisenaan analyyseissa tai raporteissa. Oikea saldo: `opening_balance + SUM(transactions.amount WHERE account = key)`. Käytä aina LEFT JOIN -kyselyä (ks. BACKLOG — AI-analyysi-kohta).
+
+2. **Ei tokeneita tai secreteja koodissa.** API-avaimet aina ympäristömuuttujina (`wrangler secret put` tai CF Dashboard). `.env` on gitignoressa.
 2. **Kuittikuvat resizataan ennen lähetystä** — max 1024px leveys, ~300 KB JPEG. Tehdään client-puolella Canvas API:lla ennen R2-uploadia ja Claude API -kutsua.
 3. **budjetti-2.html säilyy koskemattomana** migraation aikana. Se on käytössä rinnalla kunnes uusi app on valmis.
 4. **Ei frameworkeja frontendissä.** Vanilla JS, ei npm-riippuvuuksia app/-hakemistossa.

@@ -163,6 +163,100 @@ Koodissa on Finnair Visa CSV-parseri ja OP Visa Credit -tunnistus, mutta data pu
 
 Huom: OP Visa Credit CSV-formaatti eroaa OP Debit-formaatista — varmista että parseri tunnistaa oikein.
 
+---
+
+### AI-analyysi: aina laskettu saldo, ei opening_balance
+
+**Ongelma:** AI-analyysi (tai mikä tahansa joka lukee `accounts`-taulua suoraan) voi käyttää `opening_balance`-kenttää sellaisenaan, joka on vain lähtösaldo — ei nykysaldo. Esimerkki: Finnair Visa `opening_balance = -30` mutta oikea saldo on `-4 751,92`.
+
+**Korjaus:** Kaikissa AI-analyyseissä, API-endpointeissa ja raportoinneissa käytetään aina laskettua saldoa:
+
+```sql
+SELECT 
+  a.key, a.label, a.kind, a.apr, a.credit_limit,
+  ROUND(a.opening_balance + COALESCE(SUM(t.amount), 0), 2) AS current_balance
+FROM accounts a
+LEFT JOIN transactions t ON t.account = a.key
+GROUP BY a.key
+```
+
+**Toteutus:** Lisää Workers API:hin `GET /accounts/balances` -endpoint joka palauttaa aina lasketut saldot. CLAUDE.md:hen ohje: älä käytä `accounts.opening_balance` analyyseissa suoraan.
+
+---
+
+### Automaattinen tilikohdistus + luottokorttisaldojen reaaliaikainen päivitys
+
+**Nykytilan ongelma:**
+
+Luottokorttitilin saldo lasketaan `opening_balance + SUM(transactions WHERE account = 'X')`. Tämä toimii vain jos tapahtumat kohdistuvat oikealle tilille. Nyt kolme aukkoa:
+
+1. **OP Visa Credit -saldo on jäädytetty**: tilille ei ole yhtään tapahtumaa, saldo pysyy opening_balance-arvossa vaikka ostoja tehtäisiin tai maksettaisiin.
+2. **Luottokorttimaksu Perus-tililtä ei päivitä korttisaldoa**: kun maksat 500 € Perus → OP Visa Credit, syntyy vain yksi tx Perus-tilille (`Luotot — lyhennys`). OPCredit-saldo ei muutu.
+3. **Lainojen saldo (loans-taulu) ei päivity automaattisesti**: balance on manuaalisesti syötetty, ei kytkettynä transaktiodataan.
+
+**Ratkaisu — kolme osaa:**
+
+#### A) Tilidentifiointi (`accounts`-taulu)
+
+Lisää kenttä `identifier TEXT` — vapaamuotoinen tunniste jolla CSV-rivi tai maksu voidaan yhdistää oikeaan tiliin.
+
+```sql
+ALTER TABLE accounts ADD COLUMN identifier TEXT;
+-- Esimerkit:
+-- OPCredit → identifier = 'OP VISA CREDIT' tai kortin 4 viimeistä numeroa '1234'
+-- Finnair  → identifier = 'FINNAIR VISA' tai 'S-PANKKI'
+```
+
+CSV-parserin logiikka:
+- Tiedostonimi tai CSV:n otsikkorivi sisältää tyypillisesti tilin nimen → matchaa `accounts.identifier`:iin
+- Jos match löytyy → aseta `transactions.account` automaattisesti, älä kysy käyttäjältä
+- Fallback: käyttäjä valitsee manuaalisesti (nykyinen toiminta)
+
+#### B) Luottokorttimaksun automaattinen vastatransaktio
+
+Kun Perus-tililtä (tai mistä tahansa checking-tililtä) lähtee maksu jonka payee/selitys matchaa `accounts.identifier` (credit-tili):
+
+1. Tunnista maksu automaattisesti CSV-tuonnissa tai manuaalisyötössä
+2. Luo Perus-tilille tx normaalisti (nykyinen toiminta, `cat = neutral`)
+3. Luo **automaattisesti vastatransaktio** luottokorttitilin puolelle: `amount = +sama summa, cat = neutral, type = neutral, source = 'transfer'`
+
+Näin luottokorttitilin saldo pienenee oikeasti maksun myötä.
+
+**Säännöt-tauluun** lisätään tukeva kenttä:
+```sql
+ALTER TABLE rules ADD COLUMN target_account TEXT;
+-- Jos kw = 'OP VISA CREDIT' AND type = 'debit' → luo vastatransaktio account='OPCredit'
+```
+
+#### C) Lainojen automaattinen saldopäivitys
+
+`loans`-tauluun lisätään `payee_pattern TEXT` — regexp tai substring jolla Perus-tililtä lähtevä lyhennys tunnistetaan.
+
+```sql
+ALTER TABLE loans ADD COLUMN payee_pattern TEXT;
+-- Keittiölaina: payee_pattern = 'OP Vähittäisasiakkaat'
+-- Asuntolaina:  payee_pattern = 'asuntolaina' tai pankin viite
+```
+
+Logiikka CSV-tuonnissa:
+1. Jos tx Perus-tilillä matchaa jonkin lainan `payee_pattern` → laske `loans.balance -= tx.amount` (absoluuttinen vähennys)
+2. Päivitä `loans.updated_at`
+3. Tämä korvaa manuaalisen saldonsyötön
+
+**Vaihtoehto**: lainasaldo pysyy manuaalisena mutta Workers cron ajaa kerran kuussa: `balance -= monthly_payment` automaattisesti ilman transaktiokytkentää (yksinkertaisempi, riittää osamaksuille joissa ei ole vaihtelua).
+
+#### D) UI-muutokset
+
+- **Tilin asetukset**: lisää `Tunniste`-kenttä (vapaamuotoinen teksti), näkyy nykyisen lomakkeen alapuolella
+- **CSV-tuonti**: näytä autodetection-tulos ("Tunnistettu: Finnair Visa") ennen tuontia, mahdollisuus korjata
+- **Saldot-välilehti**: näytä luottokorttien kohdalla viimeisin transaktiopäivä — helpottaa tunnistamaan jos data on vanhentunutta
+
+**Migraatio (ei rikkovia muutoksia):**
+- Kaikki uudet sarakkeet `ALTER TABLE ... ADD COLUMN ... DEFAULT NULL` — olemassaolevat rivit eivät muutu
+- Vanhat CSV-tuonnit ja manuaalisyötöt toimivat edelleen samoin
+
+**Prioriteetti:** Korkea — ilman tätä luottokorttisaldot ovat staattisia ja kassavirta-analyysi epäluotettava.
+
 ### Sijoittaminen — mitä hankittu (siirretty "Iso kuva" -osioon)
 Tarkennettu: tämä ei ole pieni UI-lisäys, vaan OT↔IT-synergia (ks. ylempänä) — rahaston/osakkeen näkeminen riittää jo nykyisestä kategoria-klikkauksesta (Kategoriat-välilehti → drill-down näyttää payee-nimet). Varsinainen tarve on OT:n sijoitustapahtuman automaattinen vienti IT:hen (Investment Trackeriin), joka hakee Yahoo Financella päivän arvon ja laskee tuoton. Huomioi kertasijoitukset erikseen IT:n toistuvien (kuun 15. päivä per rahasto) lisäksi.
 
