@@ -848,9 +848,9 @@ function computeRunway() {
   const todayISOv = isoLocal(today);
   // Vain käteistilit (Perus, Revolut) — luottokorttiostot eivät veloita käyttötiliä nyt
   const spentSoFar = txs
-    .filter(t => (t.type==='needs'||t.type==='wants') && t.amount<0 && t.date>=startISO && t.date<=todayISOv
+    .filter(t => (t.type==='needs'||t.type==='wants') && t.date>=startISO && t.date<=todayISOv
       && (accountByKey(t.account)?.kind ?? 'checking') !== 'credit')
-    .reduce((s,t)=>s+Math.abs(t.amount), 0);
+    .reduce((s,t)=>s - t.amount, 0);
   const avgDaily = spentSoFar / daysElapsed;
   const dailyAllowance = daysLeft>0 ? checking/daysLeft : checking;
   const projection = checking - avgDaily*daysLeft;            // tilin saldo palkkapäivänä (arvio)
@@ -1056,6 +1056,10 @@ function expandTx(tx) {
 }
 function expandList(list) { return list.flatMap(t => expandTx(t)); }
 
+// Netto per tapahtuma: ostot positiivisiksi kuluksi, palautukset vähentävät; tulot säilyvät positiivisina
+function catAmount(t){ return t.type==='income' ? t.amount : -t.amount; }
+// Jakson/kuukauden kokonaiskulutus (needs+wants+sav, netto)
+function spendTotal(list){ const m=monthSummary(list); return m.needs+m.wants+m.sav; }
 function monthSummary(list) {
   const eff = expandList(list);
   const income = eff.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
@@ -1470,7 +1474,7 @@ function buildTips(month) {
     const wp = Math.round(s.wants/bInc*100);
     if (wp > 30) tips.push(`Wants ${wp}% tuloista (tavoite 30%) — karsi harkinnanvaraisia ${eur(s.wants - bInc*0.3)}.`);
   }
-  const catTot = mn => { const o={}; expandList(txsForMonth(mn)).filter(t=>t.type==='wants'&&t.amount<0).forEach(t=>{o[t.cat]=(o[t.cat]||0)+Math.abs(t.amount);}); return o; };
+  const catTot = mn => { const o={}; expandList(txsForMonth(mn)).filter(t=>t.type==='wants').forEach(t=>{o[t.cat]=(o[t.cat]||0)-t.amount;}); return o; };
   const cur = catTot(month), prev = catTot(prevMonthKey(month));
   let top = null; Object.entries(cur).forEach(([c,v])=>{ if(!top||v>top.v) top={c,v}; });
   if (top) { const pv = prev[top.c]||0; if (pv>0 && top.v>pv*1.2) tips.push(`${esc(top.c)} ${eur(top.v)} (viime kk ${eur(pv)}) — ${esigned(-(top.v-pv))}.`); }
@@ -1630,7 +1634,7 @@ function renderTapahtumat() {
   const catBanner = curCatFilter ? `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);margin-bottom:8px;font-size:13px">
     <span>${catObj(curCatFilter).icon}</span>
     <span style="font-weight:500;color:var(--text)">${esc(curCatFilter)}</span>
-    <span style="color:var(--muted);font-size:12px">${list.length} tapahtumaa · ${eur(list.reduce((s,t)=>s+Math.abs(t.amount),0))}</span>
+    <span style="color:var(--muted);font-size:12px">${list.length} tapahtumaa · ${eur(list.reduce((s,t)=>s+catAmount(t),0))}</span>
     <button onclick="setCurCatFilter('')" style="margin-left:auto;background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:0 4px">✕</button>
   </div>` : '';
 
@@ -1751,7 +1755,7 @@ function renderKategoriat() {
   expandList(list).forEach(tx => {
     if (tx.type==='neutral'||tx.type==='flag') return;
     if (!map[tx.cat]) map[tx.cat]={cat:tx.cat,type:tx.type,total:0};
-    map[tx.cat].total += Math.abs(tx.amount);
+    map[tx.cat].total += catAmount(tx);
   });
   const cats = Object.values(map).sort((a,b)=>b.total-a.total);
   if (!cats.length) {
@@ -1819,7 +1823,7 @@ function renderVertailu() {
   const pills = months.map(m => `
     <div class="month-pill${selMonths.includes(m)?' sel':''}" onclick="toggleSelMonth('${m}')">
       <div class="month-pill-name">${fmtMonthLbl(m)}</div>
-      <div class="month-pill-sum">${eur(txsForMonth(m).filter(t=>t.amount<0&&t.type!=='neutral').reduce((s,t)=>s+Math.abs(t.amount),0))}</div>
+      <div class="month-pill-sum">${eur(spendTotal(txsForMonth(m)))}</div>
     </div>`).join('');
 
   let compareHTML = '<p style="font-size:13px;color:var(--muted)">Valitse kuukaudet ylhäältä.</p>';
@@ -1847,7 +1851,7 @@ function renderVertailu() {
 
     const catRows = [...allCats].map(cat => {
       const type = txs.find(t=>t.cat===cat)?.type || 'wants';
-      const amounts = sorted.map(m=>txsForMonth(m).filter(t=>t.cat===cat).reduce((s,t)=>s+Math.abs(t.amount),0));
+      const amounts = sorted.map(m=>txsForMonth(m).filter(t=>t.cat===cat).reduce((s,t)=>s+catAmount(t),0));
       return {cat, type, amounts};
     }).sort((a,b)=>Math.max(...b.amounts)-Math.max(...a.amounts));
 
@@ -1864,7 +1868,7 @@ function renderVertailu() {
       return `<div class="compare-row"><div class="compare-cell lbl">${esc(r.cat)}</div>${cells}</div>`;
     }).join('');
 
-    const totals = sorted.map(m=>txsForMonth(m).filter(t=>t.amount<0&&t.type!=='neutral').reduce((s,t)=>s+Math.abs(t.amount),0));
+    const totals = sorted.map(m=>spendTotal(txsForMonth(m)));
     const totRow = `<div class="compare-row" style="background:var(--surface2)">
       <div class="compare-cell lbl" style="font-weight:500;color:var(--text)">Menot yhteensä</div>
       ${totals.map((a,i)=>makeCell(a,i>0?totals[i-1]:undefined,false).replace('compare-cell','compare-cell').replace('>',` style="font-weight:500">`)).join('')}
@@ -2469,10 +2473,10 @@ function renderAnalytiikka() {
   const past  = monthData.filter(d => !d.isCurrent);
 
   // YTD top kategoriat (needs + wants)
-  const ytdTxs = txs.filter(t => t.date.startsWith(curYear) && t.amount < 0 && t.type !== 'neutral' && t.type !== 'financing');
+  const ytdTxs = txs.filter(t => t.date.startsWith(curYear));
   const catTotals = {};
   ytdTxs.forEach(tx => expandTx(tx).forEach(e => {
-    catTotals[e.cat] = (catTotals[e.cat] || 0) + Math.abs(e.amount);
+    if (e.type==='needs'||e.type==='wants') catTotals[e.cat] = (catTotals[e.cat] || 0) - e.amount;
   }));
   const topCats = Object.entries(catTotals).sort((a, b) => b[1] - a[1]).slice(0, 10);
 
@@ -2653,7 +2657,7 @@ function navCatDrill(dir) {
   const map = {};
   txsForMonth(curMonth).filter(t=>t.type!=='neutral'&&t.type!=='flag').forEach(tx=>{
     if (!map[tx.cat]) map[tx.cat]={cat:tx.cat,total:0};
-    map[tx.cat].total += Math.abs(tx.amount);
+    map[tx.cat].total += catAmount(tx);
   });
   const cats = Object.values(map).sort((a,b)=>b.total-a.total);
   const idx = cats.findIndex(c=>c.cat===curCatDrill);
@@ -2665,7 +2669,7 @@ function renderCatDetail() {
   const map = {};
   txsForMonth(curMonth).filter(t=>t.type!=='neutral'&&t.type!=='flag').forEach(tx=>{
     if (!map[tx.cat]) map[tx.cat]={cat:tx.cat,total:0};
-    map[tx.cat].total += Math.abs(tx.amount);
+    map[tx.cat].total += catAmount(tx);
   });
   const orderedCats = Object.values(map).sort((a,b)=>b.total-a.total);
   const idx = orderedCats.findIndex(c=>c.cat===curCatDrill);
@@ -2673,7 +2677,7 @@ function renderCatDetail() {
   const hasNext = idx < orderedCats.length - 1;
 
   const catTxs = txsForMonth(curMonth).filter(t=>t.cat===curCatDrill&&t.type!=='neutral').sort((a,b)=>b.date.localeCompare(a.date));
-  const total = catTxs.reduce((s,t)=>s+Math.abs(t.amount),0);
+  const total = catTxs.reduce((s,t)=>s+catAmount(t),0);
   const co = catObj(curCatDrill);
 
   const txsHTML = catTxs.length
