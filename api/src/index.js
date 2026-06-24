@@ -537,9 +537,13 @@ function splitCSV(line, sep) {
 function categorize(tx, rules) {
   const txt = ((tx.payee||'')+' '+(tx.selitys||'')+' '+(tx.viesti||'')).toLowerCase();
 
-  // Luottokorttitilille tuleva positiivinen = maksu kortille → neutral
+  // Luottokorttitilille tuleva positiivinen: oma maksu kortille (siirto) → neutral.
+  // Kaupan palautus/hyvitys on myös positiivinen mutta EI maksu — ei pakoteta neutraaliksi,
+  // vaan menee sääntöjen läpi ja jää tarvittaessa tarkistettavaksi (jotta sen voi kohdistaa oston kategoriaan).
   if (tx.amount > 0 && (tx.account === 'Finnair' || tx.account === 'OPCredit')) {
-    return {cat:'MobilePay & siirrot', type:'neutral'};
+    if (/kellberg|kaarlo|suoritus|maksu|payment|tilisiirto/i.test(txt)) {
+      return {cat:'MobilePay & siirrot', type:'neutral'};
+    }
   }
 
   // KELLBERG tulona Perustilillä = oma raha säästötililtä/lippaasta takaisin → neutral
@@ -557,7 +561,11 @@ function categorize(tx, rules) {
     }
     return {cat:r.cat, type:r.type};
   }
-  if (tx.amount>0) return {cat:'Palkka ja tulot', type:'income'};
+  if (tx.amount>0) {
+    // Positiivinen luottotilin kirjaus ilman sääntöä = todennäköisesti palautus → tarkistettavaksi, ei tuloksi
+    if (tx.account === 'Finnair' || tx.account === 'OPCredit') return {cat:'— Mahdollinen palautus', type:'flag'};
+    return {cat:'Palkka ja tulot', type:'income'};
+  }
   return {cat:'— Kategorisoimatta', type:'flag'};
 }
 
