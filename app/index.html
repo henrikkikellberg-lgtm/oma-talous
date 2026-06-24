@@ -580,7 +580,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.5.0';
+const APP_VERSION = '1.5.1';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 const API_SECRET = '8128f7da46a8a897b418f7f85a517bae788abeb3626d49a48840c232d2186248';
 
@@ -1059,9 +1059,10 @@ function expandList(list) { return list.flatMap(t => expandTx(t)); }
 function monthSummary(list) {
   const eff = expandList(list);
   const income = eff.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
-  const needs  = eff.filter(t=>t.type==='needs'&&t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0);
-  const wants  = eff.filter(t=>t.type==='wants'&&t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0);
-  const sav    = eff.filter(t=>t.type==='savings').reduce((s,t)=>s+Math.abs(t.amount),0);
+  // Netto: ostot (−) ja palautukset/hyvitykset (+) summautuvat → palautus (samaa tyyppiä) pienentää kulutusta oikein
+  const needs  = -eff.filter(t=>t.type==='needs').reduce((s,t)=>s+t.amount,0);
+  const wants  = -eff.filter(t=>t.type==='wants').reduce((s,t)=>s+t.amount,0);
+  const sav    = -eff.filter(t=>t.type==='savings').reduce((s,t)=>s+t.amount,0);
   const surplus= income-needs-wants-sav;
   const rate   = income>0?Math.round(sav/income*100):0;
   return {income,needs,wants,sav,surplus,rate,
@@ -1362,8 +1363,8 @@ function updateMonthLabels() {
 function updateMobTotal() {
   const w = dashIsPeriod() ? dashWindow() : null;
   const base = w ? txsForWindow(w.start, w.end) : txsForMonth(curMonth);
-  const list = base.filter(t=>t.amount<0&&t.type!=='neutral'&&t.type!=='financing');
-  const total = list.reduce((s,t)=>s+Math.abs(t.amount),0);
+  const sm = monthSummary(base);
+  const total = sm.needs + sm.wants + sm.sav;
   const el = document.getElementById('mobTotal');
   if (el) el.textContent = eur(total);
   const del = document.getElementById('deskTotal');
@@ -1495,8 +1496,8 @@ function kassavirtaCardHTML(s, bInc, isEstimate, list) {
   const nettoColor = netto >= 0 ? 'var(--green)' : 'var(--red)';
   const kvPct  = Math.round(Math.abs(kv) / bInc * 100);
   const creditKulutus = list ? expandList(list)
-    .filter(t => t.amount < 0 && (t.type==='needs'||t.type==='wants') && accountByKey(t.account)?.kind === 'credit')
-    .reduce((a,t) => a + Math.abs(t.amount), 0) : 0;
+    .filter(t => (t.type==='needs'||t.type==='wants') && accountByKey(t.account)?.kind === 'credit')
+    .reduce((a,t) => a - t.amount, 0) : 0;
   const pct = v => bInc>0 ? Math.max(0, Math.min(100, v / bInc * 100)) : 0;
   const incVal = (isEstimate ? '~ ' : '+') + eur(bInc);
   const incColor = isEstimate ? 'var(--gold)' : 'var(--blue)';
