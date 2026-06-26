@@ -996,16 +996,26 @@ function txsForWindow(start, end) { return txs.filter(t=>t.date>=start && t.date
 function dashIsPeriod() { return curTab==='yhteenveto' && viewMode==='period'; }
 function ddmm(iso) { const p=iso.split('-'); return (+p[2])+'.'+(+p[1])+'.'; }
 // Aktiivisen dashboard-jakson ikkuna: kalenterikuukausi tai palkkajakso (edell. palkkapäivä → tämän kk:n palkkapäivä)
+// Palkkajakson rajat. Nykyiselle kuukaudelle ELETTÄVÄ jakso (edell. → seur. palkkapäivä),
+// joten palkkapäivänä jakso vaihtuu heti uuteen — ei jää näyttämään juuri sulkeutunutta.
+// Historiallisille kuukausille ko. kuukauden palkkapäivään päättyvä jakso (selailu ‹ › toimii).
+function periodBounds(month) {
+  const isCurrent = month === fmtMonthKey(new Date());
+  if (isCurrent) {
+    const today = new Date(); today.setHours(0,0,0,0);
+    return { startPay: prevPaydayFrom(today), endPay: nextPaydayFrom(today), isCurrent:true };
+  }
+  const [y,m] = month.split('-').map(Number);
+  const endPay = effectivePayday(y, m-1);
+  const py = m===1 ? y-1 : y, pm = m===1 ? 11 : m-2;
+  return { startPay: effectivePayday(py, pm), endPay, isCurrent:false };
+}
 function dashWindow() {
   if (viewMode !== 'period') {
     return { mode:'calendar', start: curMonth+'-01', end: lastDayOfMonth(curMonth) };
   }
-  const [y,m] = curMonth.split('-').map(Number);
-  const endPay = effectivePayday(y, m-1);
-  const py = m===1 ? y-1 : y, pm = m===1 ? 11 : m-2;
-  const startPay = effectivePayday(py, pm);
+  const { startPay, endPay, isCurrent } = periodBounds(curMonth);
   const startISO = isoLocal(startPay), endPayISO = isoLocal(endPay);
-  const isCurrent = curMonth === fmtMonthKey(new Date());
   const today = new Date(); today.setHours(0,0,0,0);
   const spendEnd = (isCurrent && today < endPay) ? today : endPay;
   return { mode:'period', start: startISO, end: isoLocal(spendEnd), endPay: endPayISO,
@@ -1015,10 +1025,7 @@ function dashWindow() {
 }
 // Palkkajakson tulot: jaksoon saapunut palkka (palkkapäivästä alkaen, seuraavaan palkkapäivään asti pois lukien)
 function periodIncomeForMonth(month) {
-  const [y,m] = month.split('-').map(Number);
-  const endPay = effectivePayday(y, m-1);
-  const py = m===1 ? y-1 : y, pm = m===1 ? 11 : m-2;
-  const startPay = effectivePayday(py, pm);
+  const { startPay, endPay } = periodBounds(month);
   const startISO = isoLocal(startPay), endISO = isoLocal(endPay);
   const inc = txs.filter(t=>t.type==='income' && t.date>=startISO && t.date<endISO).reduce((s,t)=>s+t.amount, 0);
   const note = 'palkkajakso '+ddmm(startISO)+'–'+ddmm(endISO);
