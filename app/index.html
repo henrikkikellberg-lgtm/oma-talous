@@ -2809,6 +2809,13 @@ function renderReceiptGroups(parsed) {
   }).join('');
 }
 
+// Tulot (income) ja rahoituserät (financing, esim. lainan nosto) kasvattavat saldoa → positiivinen.
+// Muut lajit (needs/wants/savings/neutral) ovat veloituksia → negatiivinen.
+function signedAmount(amount, type) {
+  const a = Math.abs(+amount || 0);
+  return (type === 'income' || type === 'financing') ? a : -a;
+}
+
 function saveCameraReceipt() {
   const merchant = document.getElementById('camMerchant').value.trim();
   const date = document.getElementById('camDate').value;
@@ -2822,7 +2829,7 @@ function saveCameraReceipt() {
     const amtInput = row.querySelector('input[type=number]');
     const amount = parseFloat(amtInput.value);
     if (!amount || isNaN(amount) || amount <= 0) return;
-    addTx({payee:merchant, amount:-amount, date, cat:amtInput.dataset.cat, type:amtInput.dataset.type, source:'receipt', account:acct});
+    addTx({payee:merchant, amount:signedAmount(amount, amtInput.dataset.type), date, cat:amtInput.dataset.cat, type:amtInput.dataset.type, source:'receipt', account:acct});
     saved++;
   });
   if (!saved) { showToast('Ei valittuja tapahtumia', 'err'); return; }
@@ -2867,7 +2874,7 @@ function saveQuick() {
   const c = catObj(cat);
   const acct = document.getElementById('quickAccount').value || 'Perus';
   rememberAccount(acct);
-  addTx({payee:merchant, amount:-amount, date:document.getElementById('quickDate').value, cat:c.name, type:c.type, source:'manual', account:acct});
+  addTx({payee:merchant, amount:signedAmount(amount, c.type), date:document.getElementById('quickDate').value, cat:c.name, type:c.type, source:'manual', account:acct});
   closeModal('quickModal');
   showToast('✓ Tallennettu','ok');
 }
@@ -2889,7 +2896,7 @@ function saveManual() {
   const c = catObj(cat);
   const acct = document.getElementById('manAccount').value || 'Perus';
   rememberAccount(acct);
-  addTx({payee:merchant, amount:-amount, date:document.getElementById('manDate').value, cat:c.name, type:c.type, source:'manual', account:acct});
+  addTx({payee:merchant, amount:signedAmount(amount, c.type), date:document.getElementById('manDate').value, cat:c.name, type:c.type, source:'manual', account:acct});
   closeModal('manualModal');
   showToast('✓ Tallennettu','ok');
 }
