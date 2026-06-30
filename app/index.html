@@ -578,11 +578,25 @@ tr:hover td{background:var(--surface2)}
 
 <div class="toast" id="toast"></div>
 
+<div id="loginOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:var(--bg,#F2F6FA);align-items:center;justify-content:center;padding:24px;">
+  <div style="width:100%;max-width:360px;background:var(--surface,#fff);border:0.5px solid var(--border,#D8E4EE);border-radius:16px;padding:28px 24px;">
+    <div style="font-size:18px;font-weight:500;color:var(--text,#0E1C2D);margin-bottom:4px;">oma<span style="color:var(--gold,#B5883E)">·</span>talous</div>
+    <div style="font-size:13px;color:var(--muted,#5A6E82);margin-bottom:20px;">Kirjaudu sisään jatkaaksesi</div>
+    <input id="loginInput" type="password" autocomplete="current-password" inputmode="text" placeholder="Salasana"
+      onkeydown="if(event.key==='Enter')doLogin()"
+      style="width:100%;box-sizing:border-box;background:var(--surface2,#EAF0F6);border:1px solid var(--border,#D8E4EE);border-radius:7px;padding:12px 14px;color:var(--text,#0E1C2D);font-size:15px;margin-bottom:12px;" />
+    <div id="loginError" style="display:none;color:var(--red,#C0322A);font-size:13px;margin-bottom:12px;"></div>
+    <button id="loginBtn" onclick="doLogin()"
+      style="width:100%;background:var(--green,#1B6B3A);color:#fff;border:none;border-radius:10px;height:48px;font-size:15px;font-weight:500;cursor:pointer;">Kirjaudu</button>
+  </div>
+</div>
+
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.5.1';
+const APP_VERSION = '1.6.0';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
-const API_SECRET = '8128f7da46a8a897b418f7f85a517bae788abeb3626d49a48840c232d2186248';
+// Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
+let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
 
 // ── CONSTANTS ──────────────────────────────────────────────────────────────
 const CATS = [
@@ -2645,6 +2659,7 @@ function renderLisaa() {
     <div style="margin-top:24px;display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-secondary" onclick="exportJSON()">💾 Vie JSON</button>
       <label class="btn btn-secondary" style="cursor:pointer">📂 Tuo JSON<input type="file" accept=".json" hidden onchange="handleJSONInput(event)"></label>
+      <button class="btn btn-secondary" onclick="logout()">🚪 Kirjaudu ulos</button>
     </div>
     <p style="font-size:12px;color:var(--dim);margin-top:12px">${txs.length} tapahtumaa · ${allMonths().length} kk</p>`;
 }
@@ -3212,9 +3227,94 @@ function generateIconPNG(size) {
   });
 })();
 
+// ── AUTH GATE ─────────────────────────────────────────────────────────────────
+// Kirjautuminen: salasana toimii samalla API:n Bearer-tokenina ja tallennetaan
+// VAIN selaimen localStorageen — ei koskaan koodiin. Backend (Workers) tarkistaa
+// että Authorization-header täsmää APP_SECRETiin.
+
+// Globaali 401-vahti: jos mikä tahansa API-kutsu palauttaa 401 (väärä/vaihdettu
+// token), tyhjennetään tallennettu salasana ja näytetään kirjautuminen uudelleen.
+const _origFetch = window.fetch.bind(window);
+window.fetch = async (...args) => {
+  const res = await _origFetch(...args);
+  try {
+    const u = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url);
+    if (res.status === 401 && u && API_BASE && u.indexOf(API_BASE) === 0 && API_SECRET) {
+      handleAuthExpired();
+    }
+  } catch(e) {}
+  return res;
+};
+
+function showLogin(msg) {
+  const ov = document.getElementById('loginOverlay');
+  if (ov) ov.style.display = 'flex';
+  const e = document.getElementById('loginError');
+  if (e) { if (msg) { e.textContent = msg; e.style.display = 'block'; } else { e.style.display = 'none'; } }
+  const inp = document.getElementById('loginInput');
+  if (inp) setTimeout(()=>inp.focus(), 50);
+}
+function hideLogin() {
+  const ov = document.getElementById('loginOverlay');
+  if (ov) ov.style.display = 'none';
+}
+
+async function verifySecret(secret) {
+  try {
+    const res = await _origFetch(`${API_BASE}/accounts`, {
+      headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${secret}` }
+    });
+    return res.ok;
+  } catch(e) { return false; }
+}
+
+async function doLogin() {
+  const inp = document.getElementById('loginInput');
+  const btn = document.getElementById('loginBtn');
+  const val = (inp.value || '').trim();
+  if (!val) return;
+  btn.disabled = true; btn.textContent = 'Tarkistetaan…';
+  const valid = await verifySecret(val);
+  btn.disabled = false; btn.textContent = 'Kirjaudu';
+  if (valid) {
+    API_SECRET = val;
+    try { localStorage.setItem('ot_secret', val); } catch(e) {}
+    inp.value = '';
+    hideLogin();
+    initState();
+  } else {
+    inp.value = '';
+    const e = document.getElementById('loginError');
+    if (e) { e.textContent = 'Väärä salasana'; e.style.display = 'block'; }
+    inp.focus();
+  }
+}
+
+let _authExpiredShown = false;
+function handleAuthExpired() {
+  if (_authExpiredShown) return;
+  _authExpiredShown = true;
+  try { localStorage.removeItem('ot_secret'); } catch(e) {}
+  API_SECRET = '';
+  showLogin('Istunto vanhentunut — kirjaudu uudelleen');
+}
+
+function logout() {
+  try { localStorage.removeItem('ot_secret'); } catch(e) {}
+  API_SECRET = '';
+  location.reload();
+}
+
+function boot() {
+  if (!API_SECRET) { showLogin(); return; }
+  // On jo tallennettu salasana: näytä cache heti ja synkkaa taustalla.
+  // Jos token on vanhentunut, taustasynkka saa 401 → handleAuthExpired näyttää loginin.
+  initState();
+}
+
 // ── INIT ──────────────────────────────────────────────────────────────────────
 document.querySelectorAll('.app-ver').forEach(el=>el.textContent='v'+APP_VERSION);
-initState();
+boot();
 
 // Päivitä data kun app tulee etualalle (iOS PWA jäätyy taustalla)
 let lastFetch = 0;
