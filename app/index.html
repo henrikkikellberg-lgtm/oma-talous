@@ -593,7 +593,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.6.0';
+const APP_VERSION = '1.6.1';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -786,6 +786,10 @@ let pendingSync = []; // offline-luodut tapahtumat jotka odottavat D1-synkkausta
 let curMonth = '', curFilter = 'all', curSearch = '', curTab = 'yhteenveto', curCatFilter = '', curCatDrill = null;
 // Dashboard-näkymän tarkastelujakso: 'calendar' = kalenterikuukausi (oletus), 'period' = palkkajakso (palkkapäivä→palkkapäivä)
 let viewMode = localStorage.getItem('ot_viewmode') || 'calendar';
+// Palkkajakson selausindeksi: 0 = parhaillaan elettävä jakso, -1 = edellinen, -2 = sitä edellinen jne.
+// EI sidottu kalenterikuukauteen — kuukausiavaimella indeksointi kadotti juuri sulkeutuneen jakson
+// aina palkkapäivänä (jaksoja on yksi enemmän kuin kuukausia).
+let periodOffset = 0;
 
 // ── TILILASKENTA ──────────────────────────────────────────────────────────────
 let lastAccount = (typeof localStorage!=='undefined' && localStorage.getItem('ot_lastacct')) || 'Perus';
@@ -1010,25 +1014,34 @@ function txsForWindow(start, end) { return txs.filter(t=>t.date>=start && t.date
 function dashIsPeriod() { return curTab==='yhteenveto' && viewMode==='period'; }
 function ddmm(iso) { const p=iso.split('-'); return (+p[2])+'.'+(+p[1])+'.'; }
 // Aktiivisen dashboard-jakson ikkuna: kalenterikuukausi tai palkkajakso (edell. palkkapäivä → tämän kk:n palkkapäivä)
-// Palkkajakson rajat. Nykyiselle kuukaudelle ELETTÄVÄ jakso (edell. → seur. palkkapäivä),
-// joten palkkapäivänä jakso vaihtuu heti uuteen — ei jää näyttämään juuri sulkeutunutta.
-// Historiallisille kuukausille ko. kuukauden palkkapäivään päättyvä jakso (selailu ‹ › toimii).
-function periodBounds(month) {
-  const isCurrent = month === fmtMonthKey(new Date());
-  if (isCurrent) {
-    const today = new Date(); today.setHours(0,0,0,0);
-    return { startPay: prevPaydayFrom(today), endPay: nextPaydayFrom(today), isCurrent:true };
-  }
-  const [y,m] = month.split('-').map(Number);
-  const endPay = effectivePayday(y, m-1);
-  const py = m===1 ? y-1 : y, pm = m===1 ? 11 : m-2;
-  return { startPay: effectivePayday(py, pm), endPay, isCurrent:false };
+// Palkkajakson rajat OFFSETILLA: 0 = parhaillaan elettävä jakso (edell. palkkapäivä → seur. palkkapäivä),
+// -1 = edellinen jakso jne. Ankkuri on aina tämänhetkinen "edellinen palkkapäivä", josta siirrytään
+// kuukausi kerrallaan taaksepäin. Näin jokainen jakso on selattavissa — myös juuri palkkapäivänä
+// sulkeutunut, joka kuukausiavainpohjaisessa mallissa katosi kokonaan näkyvistä.
+function periodBounds(off) {
+  const o = Number(off) || 0;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const anchor = prevPaydayFrom(today);              // nyt elettävän jakson alku
+  const ay = anchor.getFullYear(), am = anchor.getMonth();
+  return { startPay: effectivePayday(ay, am + o), endPay: effectivePayday(ay, am + o + 1), isCurrent: o === 0 };
+}
+// Kuukausiavain jakson alkupäivälle (palkkapäivän kuukausi) — pitää curMonthin järkevänä
+// kun näkymää vaihdetaan palkkajakso ⇄ kalenterikuukausi.
+function periodStartMonth(off) { return fmtMonthKey(periodBounds(off).startPay); }
+// Kuinka monta jaksoa taaksepäin on dataa: vanhimman tapahtuman kuukauteen asti (+1 puskuriksi).
+function minPeriodOffset() {
+  const ms = allMonths();
+  if (!ms.length) return 0;
+  const oldest = ms[ms.length-1].split('-').map(Number);
+  const anchor = prevPaydayFrom(new Date());
+  const diff = (oldest[0] - anchor.getFullYear())*12 + (oldest[1]-1 - anchor.getMonth());
+  return Math.min(0, diff - 1);
 }
 function dashWindow() {
   if (viewMode !== 'period') {
     return { mode:'calendar', start: curMonth+'-01', end: lastDayOfMonth(curMonth) };
   }
-  const { startPay, endPay, isCurrent } = periodBounds(curMonth);
+  const { startPay, endPay, isCurrent } = periodBounds(periodOffset);
   const startISO = isoLocal(startPay), endPayISO = isoLocal(endPay);
   const today = new Date(); today.setHours(0,0,0,0);
   const spendEnd = (isCurrent && today < endPay) ? today : endPay;
@@ -1038,8 +1051,8 @@ function dashWindow() {
            isCurrent, label: ddmm(startISO)+'–'+ddmm(endPayISO) };
 }
 // Palkkajakson tulot: jaksoon saapunut palkka (palkkapäivästä alkaen, seuraavaan palkkapäivään asti pois lukien)
-function periodIncomeForMonth(month) {
-  const { startPay, endPay } = periodBounds(month);
+function periodIncomeForOffset(off) {
+  const { startPay, endPay } = periodBounds(off);
   const startISO = isoLocal(startPay), endISO = isoLocal(endPay);
   const inc = txs.filter(t=>t.type==='income' && t.date>=startISO && t.date<endISO).reduce((s,t)=>s+t.amount, 0);
   const note = 'palkkajakso '+ddmm(startISO)+'–'+ddmm(endISO);
@@ -1051,6 +1064,17 @@ function periodIncomeForMonth(month) {
 }
 function setViewMode(mode) {
   if (mode===viewMode) return;
+  // Pidä selauskohta järkevänä näkymää vaihdettaessa: kalenterikuukausi ⇄ jakson palkkapäivän kuukausi
+  if (mode === 'period') {
+    const anchor = prevPaydayFrom(new Date());
+    const [y,m] = (curMonth || fmtMonthKey(new Date())).split('-').map(Number);
+    const diff = (y - anchor.getFullYear())*12 + (m-1 - anchor.getMonth());
+    periodOffset = Math.max(minPeriodOffset(), Math.min(0, diff));
+  } else {
+    const months = allMonths();
+    const target = periodStartMonth(periodOffset);
+    if (months.includes(target)) curMonth = target;
+  }
   viewMode = mode;
   localStorage.setItem('ot_viewmode', mode);
   renderAll();
@@ -1582,7 +1606,7 @@ function renderYhteenveto() {
   const win = dashWindow();
   const list = txsForWindow(win.start, win.end);
   const s = monthSummary(list);
-  const bi = win.mode==='period' ? periodIncomeForMonth(curMonth) : budgetIncomeForMonth(curMonth);
+  const bi = win.mode==='period' ? periodIncomeForOffset(periodOffset) : budgetIncomeForMonth(curMonth);
   const bInc = bi.income;
   const used = s.needs + s.wants + s.sav;
   const vt = document.getElementById('viewToggle'); if (vt) vt.innerHTML = viewToggleHTML(win, used);
@@ -2754,6 +2778,19 @@ function switchTab(tab) {
 }
 
 function changeMonth(dir) {
+  // Palkkajaksonäkymässä selataan jaksoja (oma indeksi), ei kalenterikuukausia —
+  // muuten juuri sulkeutunut jakso jää kokonaan tavoittamattomiin palkkapäivän jälkeen.
+  if (dashIsPeriod()) {
+    // Suunta sama kuin kalenterinäkymässä: allMonths() on laskeva, joten dir=+1 = vanhempi jakso.
+    const next = Math.max(minPeriodOffset(), Math.min(0, periodOffset - dir));
+    if (next === periodOffset) return;
+    periodOffset = next;
+    const months = allMonths();
+    const target = periodStartMonth(periodOffset);
+    if (months.includes(target)) curMonth = target;   // pidä muut välilehdet mukana
+    renderAll();
+    return;
+  }
   const months = allMonths();
   if (!months.length) return;
   let idx = months.indexOf(curMonth) + dir;
