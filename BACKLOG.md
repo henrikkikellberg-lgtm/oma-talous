@@ -164,6 +164,34 @@ Tehdyt korjaukset D1:een:
 
 **Havainto mallista:** säästötili ei ole säästötili vaan toinen käyttötili — sieltä maksetaan vakuutukset, yrityksen kulut, sijoitukset ja luottokortti. Säästölipas sen sijaan toimii kuten kuvattu: pieniä pyöristys-PANOja ja isompia nostoja. Säästöaste kannattaa jatkossa mitata **saldojen muutoksesta**, ei `savings`-tapahtumista.
 
+### T2c — Erämaksujen ristiriitatarkistus ✅ TEHTY 27.8.2026 (v1.10.0)
+
+`loanDrift()` vertaa kahta riippumatonta lukua samasta asiasta: **jäljellä oleva saldo** vs. **kuukaudet päättymiskuukauteen × kk-erä**. Ne paljastavat toisensa — elokuussa 2026 iPhonen saldo vastasi 7 erää mutta päättymiskuukauteen oli 4. Kolme erää oli maksettu ilman että saldoa päivitettiin, ja sama koski Huaweita ja keittiölainaa.
+
+- Kynnys on **yksi erä**: laskutettu mutta maksamaton erä saa erottaa luvut ilman varoitusta
+- Vain korottomille erämaksuille (`apr` tyhjä) — korollisessa lainassa saldo ei ole erien monikerta
+- Varoitus näkyy lainakortilla Saldot-välilehdellä
+- Testattu vanhoilla JA korjatuilla arvoilla: kaikki kolme virhettä laukaisevat, korjatut eivät
+
+**Miksi tämä on tärkeä:** erämaksun saldo on käsin ylläpidetty luku, joka vanhenee hiljaa. Kun erät maksetaan tililtä jota ei seurata (esim. yhteiseltä tililtä), tapahtumia ei tule koskaan — ainoa mekanismi joka voi huomata vanhentumisen on tämä ristiriita.
+
+**Korjatut saldot 27.8.2026:** iPhone 242,76 → 138,72 · Huawei 94,99 → 82,60 · Keittiölaina 2 684,54 → 1 839,11 (3 erää maksettu muualta).
+
+### Asunnon kertakulut eroteltu kulutuksesta ✅ TEHTY 27.8.2026
+
+Uusi kategoria **`Asuminen — kalustus`** (`wants`) erottaa muuttoon liittyvät kertaostot toistuvasta kulutuksesta. `Asuminen — remontti` (`financing`) on arvoa nostaville rakennustarvikkeille.
+
+| kk | wants (muu) | kalustus | remontti |
+|---|---|---|---|
+| 04/26 | 2 007,17 | 1 820,91 | — |
+| 05/26 | 910,81 | 1 402,24 | — |
+| 07/26 | 835,25 | — | 950,69 |
+| **yht.** | | **3 223,15** | **950,69** |
+
+Asunnon kertakulut yhteensä **4 173,84 €** (sänky, Westwing, FinnishDesignShop, Tempur, IKEA, K-Rauta, Netrauta).
+
+⚠️ **Tämä ei tarkoita että kulutus olisi ollut pienempää.** Sama raha meni, ja pääosin Finnair Visalle 15,51 %:n korolla. Erottelu tehtiin jotta kuukausibudjetin signaali kertoisi *toistuvasta* kulutuksesta — kertaluonteinen kalustaminen ei ole asia jota ravintolarajan pitäisi vastustaa. Kalustus on tarkoituksella `wants` eikä `financing`: huonekalu ei pidä arvoaan kuten remontti, joten sen kuuluu näkyä kulutuksena.
+
 ### T2 — Korttidata ⚠️ OSITTAIN
 
 - ✅ Finnair Visa tuotu 22.8.2026 asti

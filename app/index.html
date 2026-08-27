@@ -628,7 +628,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.9.0';
+const APP_VERSION = '1.10.0';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -638,6 +638,7 @@ const CATS = [
   {name:'Palkka ja tulot',        type:'income',  icon:'💰'},
   {name:'Lainan nosto',           type:'financing',icon:'🏦'},
   {name:'Asuminen — remontti',    type:'financing',icon:'🔨'},
+  {name:'Asuminen — kalustus',    type:'wants',   icon:'🛋️'},
   {name:'Sijoittaminen',          type:'savings', icon:'📈'},
   {name:'Säästötili',             type:'savings', icon:'🏦'},
   {name:'Säästölipas',            type:'savings', icon:'🐷'},
@@ -2310,6 +2311,25 @@ function realBurdenMonthly() {
     + accounts.filter(a => a.kind === 'credit' && (a.monthly_target || 0) > 0).reduce((s, a) => s + a.monthly_target, 0);
 }
 
+// Erän jäljellä-summa vs. päättymiskuukausi. Nämä ovat kaksi riippumatonta
+// lukua samasta asiasta, joten ne paljastavat toisensa: elokuussa 2026
+// iPhonen saldo väitti 7 erää mutta päättymiskuukausi 4 — kolme erää oli
+// maksettu eikä saldoa ollut päivitetty. Sama koski Huaweita ja keittiölainaa.
+// Kynnys on yksi erä, koska laskutettu mutta maksamaton erä saa erottaa ne.
+const loanDrift = l => {
+  if (l.apr || !l.monthly_payment || !l.end_month) return null;   // vain korottomat erämaksut
+  const rem = monthsUntil(l.end_month);
+  if (rem === null) return null;
+  const odotettu = l.monthly_payment * rem;
+  const ero = l.balance - odotettu;
+  if (Math.abs(ero) <= l.monthly_payment * 1.05) return null;
+  const eria = Math.round(Math.abs(ero) / l.monthly_payment);
+  return { ero, eria, odotettu,
+           viesti: ero > 0
+             ? `Saldo ${eur(l.balance)} vastaa ~${Math.round(l.balance/l.monthly_payment)} erää, mutta päättymiskuukauteen on ${rem}. Onko ${eria} erää maksettu päivittämättä saldoa?`
+             : `Saldo ${eur(l.balance)} on ${eria} erää pienempi kuin päättymiskuukausi ${fmtMonthLbl(l.end_month)} edellyttää (${eur(odotettu)}).` };
+};
+
 function renderLoansSection() {
   const creditTargets = accounts.filter(a => a.kind === 'credit' && (a.monthly_target || 0) > 0);
   const realLoans = loans.filter(l => !l.included_in_tx);
@@ -2321,6 +2341,7 @@ function renderLoansSection() {
 
   const loanCard = l => {
     const rem = monthsUntil(l.end_month);
+    const drift = loanDrift(l);
     const approxTotal = l.monthly_payment > 0 ? Math.ceil(l.balance / l.monthly_payment) : 0;
     const pct = approxTotal > 0 && rem !== null ? Math.max(0, Math.min(100, (1 - rem / Math.max(rem, approxTotal)) * 100)) : 0;
     const barColor = (rem || 0) > 24 ? 'var(--gold)' : (rem || 0) > 0 ? 'var(--green)' : 'var(--dim)';
@@ -2347,6 +2368,8 @@ function renderLoansSection() {
         </div>
         <div class="sum-bar" style="margin-top:6px"><div class="sum-bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
         ${l.note ? `<div style="font-size:11px;color:var(--dim);margin-top:4px">${esc(l.note)}</div>` : ''}
+        ${drift ? `<div style="font-size:11px;color:var(--gold);margin-top:6px;line-height:1.4;display:flex;gap:6px">
+          <span style="flex-shrink:0">⚠️</span><span>${esc(drift.viesti)}</span></div>` : ''}
       </div>`;
   };
 

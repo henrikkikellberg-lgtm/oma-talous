@@ -143,5 +143,21 @@ eq('paattyneelle jaksolle ei viikkotahtia', run(`W4.daysLeftWeek`), 0);
 eq('edellinen viikko laskettu', run(`W4.prev !== null`), true);
 eq('edellisen viikon vertailuosuus on paivasuhteinen', run(`W4.prev.share > 0 && W4.prev.share < 550`), true);
 
+
+console.log('\n— Eramaksujen ristiriitatarkistus (tanaan 27.8.2026) —');
+// Kynnys: yksi era. Laskutettu mutta maksamaton era saa erottaa saldon ja
+// paattymiskuukauden ilman etta varoitus laukeaa.
+const L=(nimi,balance,era,end,apr=null)=>`loanDrift({name:'${nimi}',balance:${balance},monthly_payment:${era},end_month:'${end}',apr:${apr}})`;
+eq('iPhone VANHA saldo 242,76 -> varoitus',      run(`${L('iPhone',242.76,34.68,'2027-01')} !== null`), true);
+eq('iPhone vanha: 2 eraa liikaa',                run(`${L('iPhone',242.76,34.68,'2027-01')}.eria`), 2);
+eq('iPhone KORJATTU 138,72 -> ei varoitusta',    run(`${L('iPhone',138.72,34.68,'2027-01')}`), null);
+eq('Huawei VANHA 94,99 -> varoitus',             run(`${L('Huawei',94.99,4.13,'2028-05')} !== null`), true);
+eq('Huawei KORJATTU 82,60 -> ei varoitusta',     run(`${L('Huawei',82.60,4.13,'2028-05')}`), null);
+eq('Keittiolaina VANHA 2 684,54 -> varoitus',    run(`${L('Keittio',2684.54,281.81,'2027-03')} !== null`), true);
+eq('Keittiolaina KORJATTU 1 839,11 -> ei varoitusta', run(`${L('Keittio',1839.11,281.81,'2027-03')}`), null);
+eq('Roborock 540,60 -> ei varoitusta',           run(`${L('Roborock',540.60,54.06,'2027-07')}`), null);
+eq('MacBook 2 973,64 -> ei varoitusta',          run(`${L('MacBook',2973.64,87.46,'2029-07')}`), null);
+eq('korollista lainaa ei tarkisteta',            run(`${L('Asuntolaina',56940,158,'2056-04',3.3)}`), null);
+
 console.log(fails ? `\n${fails} TESTIA EPAONNISTUI` : '\nKAIKKI TESTIT LAPI');
 process.exit(fails?1:0);
