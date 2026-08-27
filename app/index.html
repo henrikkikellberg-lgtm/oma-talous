@@ -577,6 +577,20 @@ tr:hover td{background:var(--surface2)}
   </div>
 </div>
 
+<div class="modal-overlay" id="importModal" onclick="if(event.target===this)closeModal('importModal')">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Tuo tiliotteet</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:8px;line-height:1.5">
+      Tarkista tili jokaiselle tiedostolle. OP:n käyttötili, säästötili ja säästölipas
+      ovat samaa CSV-muotoa, joten tiliä ei voi päätellä sisällöstä — vain nimestä.
+    </div>
+    <div id="importList" style="margin-bottom:16px"></div>
+    <button class="btn btn-primary btn-full" onclick="confirmImport()">Tuo</button>
+    <button class="modal-cancel" onclick="closeModal('importModal')">Peruuta</button>
+  </div>
+</div>
+
 <div class="modal-overlay" id="budgetModal" onclick="if(event.target===this)closeModal('budgetModal')">
   <div class="modal-sheet">
     <div class="modal-handle"></div>
@@ -614,7 +628,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.8.0';
+const APP_VERSION = '1.9.0';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -1487,18 +1501,32 @@ function parseRevAmount(s) {
   return isNaN(n) ? null : n;
 }
 
-function loadCSVFiles(files) {
+// Tilin päättely tiedostonimestä. OP:n säästötili, säästölipas ja käyttötili ovat
+// TÄYSIN identtistä CSV-muotoa — niitä ei voi erottaa sisällöstä. macOS antaa
+// nimet hajotetussa muodossa, joten diakriitit riisutaan ennen vertailua.
+function accountFromFilename(fname) {
+  const n = (fname || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (/lipas/.test(n)) return 'Lipas';
+  if (/saastotili|saasto/.test(n)) return 'Saasto';
+  if (/credit|luotto/.test(n)) return 'OPCredit';
+  if (/revolut|accountstatement/.test(n)) return 'Revolut';
+  if (/finnair/.test(n)) return 'Finnair';
+  return 'Perus';
+}
+
+// entries: [{file, account}]
+function loadCSVFiles(entries) {
   let done = 0;
   let totalAdded = 0;
   let totalSkippedDuplicates = 0;
-  files.forEach(f => {
+  entries.forEach(({file: f, account}) => {
     const rd = new FileReader();
     rd.onload = async ev => {
       if (API_BASE) {
         try {
           const res = await fetch(`${API_BASE}/import/csv`, {
             method: 'POST', headers: apiHeaders(),
-            body: JSON.stringify({csv: ev.target.result, filename: f.name})
+            body: JSON.stringify({csv: ev.target.result, filename: f.name, account})
           });
           if (res.ok) {
             const data = await res.json();
@@ -1507,14 +1535,14 @@ function loadCSVFiles(files) {
           }
         } catch(e) {}
       } else {
-        const rows = parseCSVFile(ev.target.result, f.name);
+        const rows = parseCSVFile(ev.target.result, f.name).map(r => ({...r, account}));
         const ids = new Set(txs.map(t=>t.id));
         const added = rows.filter(r=>!ids.has(r.id));
         txs.push(...added);
         totalAdded += added.length;
         categorizeAll();
       }
-      if (++done === files.length) {
+      if (++done === entries.length) {
         if (API_BASE) {
           // Hae päivitetty lista D1:stä
           try {
@@ -3449,11 +3477,33 @@ function handleJSONInput(event) {
   rd.readAsText(f);
 }
 
-function handleCSVInput(event) { loadCSVFiles(Array.from(event.target.files)); }
+let pendingCSV = [];
+function handleCSVInput(event) { openImportModal(Array.from(event.target.files)); }
+
+// Väärä tili on hiljainen ja kallis virhe: säästötilin rivit käyttötilillä
+// romuttaisivat saldon, kassavirran ja runwayn kerralla. Siksi arvaus
+// näytetään aina vahvistettavaksi ennen tuontia.
+function openImportModal(files) {
+  if (!files.length) return;
+  pendingCSV = files.map(f => ({ file: f, account: accountFromFilename(f.name) }));
+  const opts = a => accounts.map(x =>
+    `<option value="${esc(x.key)}"${x.key===a?' selected':''}>${esc(x.label)}</option>`).join('');
+  document.getElementById('importList').innerHTML = pendingCSV.map((e,i) => `
+    <div style="padding:12px 0;border-bottom:.5px solid var(--border)">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px;word-break:break-all">${esc(e.file.name)}</div>
+      <select class="field-select" style="width:100%" onchange="pendingCSV[${i}].account=this.value">${opts(e.account)}</select>
+    </div>`).join('');
+  openModal('importModal');
+}
+function confirmImport() {
+  closeModal('importModal');
+  loadCSVFiles(pendingCSV);
+  pendingCSV = [];
+}
 function handleDrop(event) {
   event.preventDefault();
   document.getElementById('dropZone').classList.remove('drag');
-  loadCSVFiles(Array.from(event.dataTransfer.files).filter(f=>f.name.endsWith('.csv')));
+  openImportModal(Array.from(event.dataTransfer.files).filter(f=>f.name.endsWith('.csv')));
 }
 
 // ── UTILS ─────────────────────────────────────────────────────────────────────

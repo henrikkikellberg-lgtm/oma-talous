@@ -329,9 +329,12 @@ async function handleBalances(env, url) {
 
 // ── CSV IMPORT ────────────────────────────────────────────────────────────────
 async function handleCSVImport(req, env) {
-  const { csv, filename } = await req.json();
+  const { csv, filename, account } = await req.json();
   if (!csv) return err('Missing csv');
-  const rows = parseCSV(csv, filename || '');
+  // Tili tulee kutsujalta. Ilman tätä kaikki OP-muotoiset tiliotteet menivät
+  // 'Perus'-tilille kovakoodattuna — säästötilin tuonti olisi romuttanut
+  // käyttötilin saldon (esim. yksi +26 118,75 € PANO).
+  const rows = parseCSV(csv, filename || '', account || null);
   const { results: existing } = await env.DB.prepare('SELECT id,date,amount,payee,source FROM transactions').all();
   const ids = new Set(existing.map(r=>r.id));
   const { results: rulesRows } = await env.DB.prepare('SELECT kw,cat,type,splits FROM rules ORDER BY priority DESC').all();
@@ -521,22 +524,54 @@ async function handleBudgetsDelete(env, id) {
 }
 
 // ── CSV PARSER ────────────────────────────────────────────────────────────────
-function parseCSV(text, fname) {
+// Tilin päättely tiedostonimestä. OP:n säästötili, säästölipas ja käyttötili
+// ovat TÄYSIN identtistä CSV-muotoa — niitä ei voi erottaa sisällöstä, joten
+// nimi on ainoa vihje. Käyttöliittymä näyttää arvauksen vahvistettavaksi.
+function accountFromFilename(fname) {
+  // macOS antaa tiedostonimet hajotetussa muodossa (ä = a + yhdistyvä treema),
+  // joten "Säästötili" ei osu suoraan kirjoitettuun ä-kirjaimeen. Riisutaan
+  // diakriitit ennen vertailua — muuten päättely epäonnistuu hiljaa ja rivit
+  // menisivät oletustilille.
+  const n = (fname || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (/lipas/.test(n)) return 'Lipas';
+  if (/saastotili|saasto/.test(n)) return 'Saasto';
+  if (/credit|luotto/.test(n)) return 'OPCredit';
+  if (/revolut|accountstatement/.test(n)) return 'Revolut';
+  if (/finnair/.test(n)) return 'Finnair';
+  return null;
+}
+
+function parseCSV(text, fname, acctOverride) {
   const lines = text.split('\n').filter(l=>l.trim());
   if (!lines.length) return [];
   const head = lines[0] || '';
-  const isFinnair = head.includes('Maksupäivä');
-  const isRevolut = text.includes('Revolut') || text.includes('Tapahtumaote');
-  if (isRevolut && !isFinnair) return parseRevolut(lines, fname);
+  const isFinnair  = head.includes('Maksupäivä');
+  const isRevolut  = text.includes('Revolut') || text.includes('Tapahtumaote') || head.includes('Aloituspäivä');
+  // OP:n luottokorttiote: 8 saraketta, tunnistuu Kurssi-kentästä. Debit-otteessa
+  // on 11 saraketta ja summasarake on "Määrä EUROA".
+  const isOPCredit = head.includes('Kurssi') && !head.includes('Määrä EUROA');
+  if (isRevolut && !isFinnair) return parseRevolut(lines, fname, acctOverride || 'Revolut');
   const rows = [];
   for (let i=1; i<lines.length; i++) {
+    if (isOPCredit) {
+      const c = lines[i].split(';').map(x=>x.replace(/^"|"$/g,'').trim());
+      if (c.length < 5) continue;
+      const amt = parseFloat((c[2]||'').replace(',','.'));
+      if (isNaN(amt)) continue;
+      // Maksaja on tyhjä koroilla ja maksuilla — käytetään silloin selitettä
+      // ("Korko", "Tilinhoitomaksu", "Suoritus") jotta rivi on tunnistettava.
+      const payee = c[5] || c[4] || '';
+      rows.push({id:c[7]||`OPC_${c[0]}_${payee}_${amt}`, date:c[0], payee, selitys:c[4]||'',
+                 viesti:'', amount:amt, source:fname||'OP Credit', account:acctOverride||'OPCredit'});
+      continue;
+    }
     if (isFinnair) {
       const c = splitCSV(lines[i], ',');
       if (c.length<9) continue;
       const amt = parseFloat(c[8]);
       if (isNaN(amt)) continue;
       const payee = c[1].replace(/"/g,'').trim();
-      rows.push({id:`FI_${c[0]}_${payee}_${amt}`, date:c[0].trim(), payee, selitys:'Finnair Visa', viesti:'', amount:amt, source:fname||'Finnair Visa', account:'Finnair'});
+      rows.push({id:`FI_${c[0]}_${payee}_${amt}`, date:c[0].trim(), payee, selitys:'Finnair Visa', viesti:'', amount:amt, source:fname||'Finnair Visa', account:acctOverride||'Finnair'});
     } else {
       const c = lines[i].split(';').map(x=>x.replace(/^"|"$/g,'').trim());
       if (c.length<6) continue;
@@ -548,7 +583,7 @@ function parseCSV(text, fname) {
       // todellinen ostopäivä OSTOPVM-tunnisteena (YYMMDD) — käytetään sitä kun löytyy,
       // jotta päivä täsmää kuitilta/käsin syötettyyn tapahtumaan eikä synny tuplaa.
       const ostopvm = extractOstopvm(c[9]);
-      rows.push({id:c[10]||`OP_${c[0]}_${c[5]}_${amt}`, date:ostopvm||c[0], payee:c[5]||'', selitys:c[4]||'', viesti, amount:amt, source:fname||'OP', account:'Perus'});
+      rows.push({id:c[10]||`OP_${c[0]}_${c[5]}_${amt}`, date:ostopvm||c[0], payee:c[5]||'', selitys:c[4]||'', viesti, amount:amt, source:fname||'OP', account:acctOverride||'Perus'});
     }
   }
   return rows;
@@ -556,7 +591,33 @@ function parseCSV(text, fname) {
 
 // Revolut: monitiliote, osiot ja sisäiset taulut. Rivit alkavat P.K.VVVV-päivällä.
 // Sarakkeet: Päivämäärä,Kuvaus,Kategoria,"Saapuvat/lähtevät varat",Saldo,...
-function parseRevolut(lines, fname) {
+function parseRevolut(lines, fname, acct) {
+  const account = acct || 'Revolut';
+  const head = lines[0] || '';
+  // Uusi vientimuoto: Tyyppi,Tuote,Aloituspäivä,Valmistumispäivä,Kuvaus,Määrä,
+  // Palvelumaksu,Valuutta,Osavaltio,Saldo. Vanha parseri ei osunut tähän
+  // yhteenkään riviin ja tuonti onnistui hiljaa nollalla rivillä.
+  if (head.includes('Aloituspäivä')) {
+    const rows = [];
+    for (let i=1; i<lines.length; i++) {
+      const c = splitCSV(lines[i], ',').map(x=>x.replace(/^"|"$/g,'').trim());
+      if (c.length < 8) continue;
+      if (c[8] && c[8].toUpperCase() !== 'VALMIS' && c[8].toUpperCase() !== 'COMPLETED') continue;
+      const date = (c[2]||'').substring(0,10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+      const maara = parseFloat(c[5]);
+      const maksu = parseFloat(c[6]) || 0;
+      if (isNaN(maara)) continue;
+      // Palvelumaksu on oma sarakkeensa: kortin toimitusmaksussa Määrä on 0,00
+      // ja koko veloitus on maksukentässä. Ilman tätä rivi katoaisi saldosta.
+      const amt = Math.round((maara - maksu) * 100) / 100;
+      if (amt === 0) continue;
+      const payee = c[4] || c[0] || '';
+      rows.push({id:`RV_${date}_${payee}_${amt}`.replace(/\s+/g,'_'), date, payee,
+                 selitys:c[0]||'', viesti:'Revolut', amount:amt, source:fname||'Revolut', account});
+    }
+    return rows;
+  }
   const rows = [];
   for (const line of lines) {
     const c = splitCSV(line, ',').map(x=>x.replace(/^"|"$/g,'').trim());
@@ -569,7 +630,7 @@ function parseRevolut(lines, fname) {
     if (amt === null) continue;
     const payee = c[1] || '';
     const kat   = c[2] || '';
-    rows.push({id:`RV_${date}_${payee}_${amt}`, date, payee, selitys:kat, viesti:'Revolut', amount:amt, source:fname||'Revolut', account:'Revolut'});
+    rows.push({id:`RV_${date}_${payee}_${amt}`, date, payee, selitys:kat, viesti:'Revolut', amount:amt, source:fname||'Revolut', account});
   }
   return rows;
 }
@@ -591,6 +652,8 @@ function splitCSV(line, sep) {
   res.push(cur); return res;
 }
 
+const SAVINGS_ACCTS = ['Saasto','Lipas'];
+
 function categorize(tx, rules) {
   const txt = ((tx.payee||'')+' '+(tx.selitys||'')+' '+(tx.viesti||'')).toLowerCase();
 
@@ -603,24 +666,45 @@ function categorize(tx, rules) {
     }
   }
 
-  // KELLBERG tulona Perustilillä = oma raha säästötililtä/lippaasta takaisin → neutral
-  if (tx.amount > 0 && tx.account === 'Perus' && /kellberg/i.test(tx.payee)) {
+  // KELLBERG tulona omalla tilillä = oma raha toiselta omalta tililtä → neutral.
+  // Koski aiemmin vain Perustiliä; säästötilin ja lippaan tuonnissa sama kuvio
+  // toistuu kymmeninä riveinä, joten rajaus on tilikohtaisuuden sijaan
+  // "ei-luottotili".
+  if (tx.amount > 0 && !SAVINGS_ACCTS.includes(tx.account) && tx.account !== 'Finnair'
+      && tx.account !== 'OPCredit' && /kellberg/i.test(tx.payee)) {
     return {cat:'MobilePay & siirrot', type:'neutral'};
   }
 
   for (const r of rules) {
     if (!txt.includes(r.kw.toLowerCase())) continue;
+    let res;
     if (r.splits) {
       const pcts = safeParse(r.splits);
       if (Array.isArray(pcts) && pcts.length) {
-        return {cat:r.cat, type:r.type, splits: applySplitPercents(pcts, Math.abs(tx.amount))};
+        res = {cat:r.cat, type:r.type, splits: applySplitPercents(pcts, Math.abs(tx.amount))};
       }
     }
-    return {cat:r.cat, type:r.type};
+    if (!res) res = {cat:r.cat, type:r.type};
+    // Säästötilillä tapahtuva "säästö" ei ole uutta säästämistä kumpaankaan
+    // suuntaan: säästäminen mitataan siinä hetkessä kun raha lähtee KÄYTTÖtililtä.
+    // Ilman tätä sama euro laskettaisiin kahdesti — kerran Perus→Säästölipas
+    // -siirtona ja toisen kerran lippaan PANO-rivinä, ja Perus→Säästötili→Nordnet
+    // jopa kolmesti.
+    if (res.type === 'savings' && SAVINGS_ACCTS.includes(tx.account)) {
+      res = {...res, type:'neutral'};
+    }
+    return res;
   }
   if (tx.amount>0) {
     // Positiivinen luottotilin kirjaus ilman sääntöä = todennäköisesti palautus → tarkistettavaksi, ei tuloksi
     if (tx.account === 'Finnair' || tx.account === 'OPCredit') return {cat:'— Mahdollinen palautus', type:'flag'};
+    // Säästötilille ja Revolutiin tuleva raha on lähtökohtaisesti oma siirto,
+    // EI tuloa. Ilman tätä säästölippaan tuonti loisi ~50 valetulorivia ja
+    // säästötili yhden 26 118,75 €:n "palkan", jolloin jokainen budjettiprosentti
+    // olisi väärin.
+    if (SAVINGS_ACCTS.includes(tx.account) || tx.account === 'Revolut') {
+      return {cat:'MobilePay & siirrot', type:'neutral'};
+    }
     return {cat:'Palkka ja tulot', type:'income'};
   }
   return {cat:'— Kategorisoimatta', type:'flag'};

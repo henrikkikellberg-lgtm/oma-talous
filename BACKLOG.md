@@ -125,6 +125,45 @@ Tehdyt korjaukset D1:een:
 - [ ] Tarkista `Lainan nosto` −158,02 € (31.7., IBAN FI65 5600…). Nimi sanoo nosto, merkki sanoo maksu.
 - [ ] 6 duplikaattiavainsanaa ilman tyyppikonfliktia (compass group, elettra, riihitahti bistro, ptl*stockmann, riihimaen kaupunki, mob.pay*veikkaus). Vain kategoria heittää → kosmeettinen.
 
+### T2b — Tiliotteiden tuonti kaikilta tileiltä ✅ TEHTY 27.8.2026 (v1.9.0)
+
+**Kolme hiljaista bugia, jotka olisivat korruptoineet datan tuonnissa:**
+
+1. **`parseCSV` asetti jokaiselle OP-muotoiselle riville `account:'Perus'` kovakoodattuna** (rivi 551). Säästötilin tuonti olisi kirjannut 88 tapahtumaa käyttötilille — mukaan lukien **+26 118,75 € PANO** helmikuulta. Käyttötilin saldo, kassavirta ja runway olisivat menneet kerralla rikki. Korjattu: tili tulee kutsujalta, ja käyttöliittymä näyttää arvauksen vahvistettavaksi ennen tuontia.
+
+2. **Revolutin uusi vientimuoto ei jäsentynyt lainkaan.** Vanha parseri odotti `d.m.yyyy`-päivää sarakkeessa 0; uudessa muodossa sarake 0 on Tyyppi ja päivä on sarakkeessa 2 aikaleimana. Tuonti olisi onnistunut **nollalla rivillä ilman virheilmoitusta**. Uusi parseri huomioi myös `Palvelumaksu`-sarakkeen: kortin toimitusmaksussa `Määrä` on 0,00 ja koko veloitus on maksukentässä.
+
+3. **Positiivinen rivi säästötilillä olisi luokittunut TULOKSI.** `categorize()`:n viimeinen fallback antaa positiiviselle riville `Palkka ja tulot / income`, ja KELLBERG-siirtosääntö koski vain Perustiliä. Säästölipas olisi tuottanut ~50 valetulorivia (6 339 €) ja säästötili yhden 26 118,75 €:n "palkan" — jokainen budjettiprosentti olisi ollut väärin.
+
+**Lisäksi korjattu tuplalaskenta:** säästötilillä tapahtuva `savings`-rivi muunnetaan `neutral`iksi. Säästäminen mitataan siinä hetkessä kun raha lähtee käyttötililtä; ilman tätä sama euro laskettiin kahdesti (Perus→Säästölipas -siirto + lippaan PANO-rivi) tai kolmesti (Perus→Säästötili→Nordnet).
+
+**Tilin päättely tiedostonimestä.** OP:n käyttötili, säästötili ja säästölipas ovat täysin identtistä CSV-muotoa — tiliä EI voi päätellä sisällöstä. `accountFromFilename()` riisuu diakriitit ennen vertailua, koska macOS antaa nimet hajotetussa muodossa (`ä` = `a` + yhdistyvä treema) eikä `säästötili` muuten osu.
+
+**Verifiointi ennen tuontia:** `scripts/simuloi-tuonti.mjs` ajaa oikeat tiliotteet parserin ja luokittelun läpi ja näyttää lopputuloksen tyypeittäin. Kaikki neljä tiedostoa summautuvat pankin omaan lukuun:
+
+| Tili | Rivejä | Netto | Saldo tuonnin jälkeen |
+|---|---|---|---|
+| OP Visa Credit | 25 | +469,35 | −2 608,82 ✓ ruudulla sama |
+| Säästötili | 27 | +12 312,91 | 14 385,97 |
+| Säästölipas | 61 | +2 839,00 | 5 113,04 |
+| Revolut | 22 | +6,86 | 6,86 ✓ otteen oma loppusaldo |
+
+- ✅ Alkusaldot korjattu D1:een (ks. taulukko alla)
+- ✅ 25 uutta sääntöä sijoitus-, yritys- ja lomavirroille → **ei yhtään kategorisoimatonta riviä** simulaatiossa
+- ✅ Testit: `scripts/test-csv-parsers.mjs`, `scripts/simuloi-tuonti.mjs`
+
+**Korjatut alkusaldot:**
+
+| Tili | Oli | Nyt | Peruste |
+|---|---|---|---|
+| Finnair Visa | −200 (22.3.2025) | 0 (2.12.2025) | CSV summautuu tasan −3 503,44:ään; −200 oli haamu |
+| OP Visa Credit | −2 482,23 (14.6.) | −3 078,17 (31.12.2025) | ruudulla käytetty 2 608,82 − CSV:n netto 469,35 |
+| Säästötili | 13 601,21 (14.6.) | 2 073,06 (31.12.2025) | |
+| Säästölipas | 6 009,04 (14.6.) | 2 274,04 (31.12.2025) | |
+| Revolut | 1 000 (4.7.) | 0 (25.4.) | otteen ensimmäinen rivi on nollasta |
+
+**Havainto mallista:** säästötili ei ole säästötili vaan toinen käyttötili — sieltä maksetaan vakuutukset, yrityksen kulut, sijoitukset ja luottokortti. Säästölipas sen sijaan toimii kuten kuvattu: pieniä pyöristys-PANOja ja isompia nostoja. Säästöaste kannattaa jatkossa mitata **saldojen muutoksesta**, ei `savings`-tapahtumista.
+
 ### T2 — Korttidata ⚠️ OSITTAIN
 
 - ✅ Finnair Visa tuotu 22.8.2026 asti
