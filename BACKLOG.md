@@ -210,6 +210,38 @@ Korjaus: ei-Perus-tilien tunnisteeseen lisätään tilin nimi (`Lipas_20260101/5
 
 ⚠️ **Sama tunnistetörmäys koskee myös selainpuolen `parseCSVFile`-varapolkua** (`app/index.html`), jota käytetään vain jos `API_BASE` on tyhjä. Ei korjattu, koska polku ei ole käytössä — korjaa jos offline-tuonti otetaan koskaan käyttöön.
 
+### T9 — Erämaksujen ryhmittely + vapautumisaikataulu ✅ TEHTY 27.8.2026 (v1.12.0)
+
+**Ryhmittely rahoittajan mukaan** (`loans.lender`, migraatio 006). Elisan lasku on yksi eräpäivä ja yksi summa mutta neljä luottokauppasopimusta — ilman ryhmää ne olivat neljä irrallista riviä eikä yhteissummaa näkynyt mistään, vaikka juuri se lähtee tililtä kerran kuussa:
+
+| Elisa | € | €/kk |
+|---|---|---|
+| MacBook Pro 16 M5 | 2 973,64 | 87,46 |
+| Roborock | 540,60 | 54,06 |
+| iPhone 15 Pro | 138,72 | 34,68 |
+| Huawei mesh | 82,60 | 4,13 |
+| **Yhteensä** | **3 735,56** | **180,33** |
+
+Ryhmäkortti näyttää yhteissumman ja erittelyn sen alla; jokainen rivi on klikattavissa muokattavaksi. Keittiölaina jää omaksi kortikseen (eri rahoittaja).
+
+**Vapautumisaikataulu — `releaseSchedule()`.** Erämaksujen tärkein luku, jota mikään yksittäinen lainakortti ei näytä: 762,14 €/kk ei ole pysyvä tila vaan aikataulu.
+
+| Kuukausi | Päättyy | Vapautuu | Jää |
+|---|---|---|---|
+| tammikuu 2027 | iPhone | −34,68 | 727,46 |
+| maaliskuu 2027 | Keittiölaina | −281,81 | 445,65 |
+| heinäkuu 2027 | Roborock | −54,06 | 391,59 |
+| toukokuu 2028 | Huawei mesh | −4,13 | 387,46 |
+| heinäkuu 2029 | MacBook Pro | −87,46 | **300,00** |
+
+Lattia 300 €/kk on luottokorttien tavoitelyhennys, joka **ei pääty itsestään** — se on ainoa erä jonka kokoon voi itse vaikuttaa.
+
+- ✅ `lender`-kenttä lainamodaaliin, ehdottaa jo käytössä olevia (ryhmä ei hajoa kirjoitusvirheeseen)
+- ✅ Löydös: `note`-saraketta ei ollut `loans`-taulussa lainkaan, vaikka kenttä on käyttöliittymässä — muistiinpano ei ole koskaan tallentunut. Sarake lisätty migraatiossa 006.
+- ✅ Testattu: 14 uutta testiä `scripts/test-budgets.js`:ssä (63 yhteensä)
+
+**Jatko:** marraskuun muutos (rahoitusvastike −296,10 €/kk pois, asuntolainan lyhennys ~650 €/kk tilalle) kannattaa lisätä aikatauluun, kun asuntolaina on `loans`-taulussa. Silloin aikataulu näyttäisi myös kuorman *kasvun*, ei vain kevenemisen.
+
 ### T2 — Korttidata ⚠️ OSITTAIN
 
 - ✅ Finnair Visa tuotu 22.8.2026 asti

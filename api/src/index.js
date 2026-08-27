@@ -461,19 +461,19 @@ async function handleLoansCreate(req, env) {
   if (!loan.name) return err('Missing name');
   loan.id = loan.id || `loan_${Date.now()}_${Math.random().toString(36).substr(2,5)}`;
   await env.DB.prepare(
-    `INSERT INTO loans (id,name,balance,monthly_payment,end_month,apr,included_in_tx)
-     VALUES (?,?,?,?,?,?,?)`
+    `INSERT INTO loans (id,name,balance,monthly_payment,end_month,apr,included_in_tx,lender,note)
+     VALUES (?,?,?,?,?,?,?,?,?)`
   ).bind(
     loan.id, loan.name, loan.balance||0, loan.monthly_payment||0,
     loan.end_month||null, loan.apr||null,
-    loan.included_in_tx ? 1 : 0
+    loan.included_in_tx ? 1 : 0, loan.lender||null, loan.note||null
   ).run();
   return ok({ id: loan.id });
 }
 
 async function handleLoansUpdate(req, env, id) {
   const loan = await req.json();
-  const fields = ['name','balance','monthly_payment','end_month','apr','included_in_tx'].filter(f=>loan[f]!==undefined);
+  const fields = ['name','balance','monthly_payment','end_month','apr','included_in_tx','lender','note'].filter(f=>loan[f]!==undefined);
   if (!fields.length) return err('Nothing to update');
   const sets = fields.map(f=>`${f}=?`).join(',') + ',updated_at=datetime(\'now\')';
   const vals = fields.map(f => f==='included_in_tx' ? (loan[f] ? 1 : 0) : loan[f]);

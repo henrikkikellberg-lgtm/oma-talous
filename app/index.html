@@ -566,7 +566,10 @@ tr:hover td{background:var(--surface2)}
       </div>
       <div class="field-group" style="flex:1"><div class="field-label">Korko % (valinnainen)</div><input class="field-input" id="loanApr" type="number" step="0.01" placeholder="—"></div>
     </div>
-    <div class="field-group"><div class="field-label">Muistiinpano (valinnainen)</div><input class="field-input" id="loanNote" placeholder="esim. auto, kodin remontti"></div>
+    <div style="display:flex;gap:10px">
+      <div class="field-group" style="flex:1"><div class="field-label">Rahoittaja (ryhmittelee)</div><input class="field-input" id="loanLender" placeholder="esim. Elisa" list="lenderList"><datalist id="lenderList"></datalist></div>
+      <div class="field-group" style="flex:1"><div class="field-label">Muistiinpano (valinnainen)</div><input class="field-input" id="loanNote" placeholder="esim. auto, kodin remontti"></div>
+    </div>
     <label style="display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--text);margin-bottom:16px;cursor:pointer;line-height:1.4">
       <input type="checkbox" id="loanIncluded" style="width:16px;height:16px;accent-color:var(--green);margin-top:2px;flex-shrink:0">
       <span>Sisältyy jo kuluihin <span style="color:var(--muted)">(esim. puhelinlasku sisältää laiteosamaksun — ei lasketa uutena rasitteena budjettiin)</span></span>
@@ -628,7 +631,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.11.0';
+const APP_VERSION = '1.12.0';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -2333,6 +2336,50 @@ const loanDrift = l => {
              : `Saldo ${eur(l.balance)} on ${eria} erää pienempi kuin päättymiskuukausi ${fmtMonthLbl(l.end_month)} edellyttää (${eur(odotettu)}).` };
 };
 
+// Erien vapautuminen: milloin kiinteä kuukausikuorma kevenee ja paljonko.
+// Tämä on erämaksujen tärkein luku, jota mikään yksittäinen lainakortti ei näytä:
+// 762 €/kk ei ole pysyvä tila vaan aikataulu, jonka jokainen erä päättää eri
+// kuukautena. Ilman aikataulua "milloin minulla on taas varaa" on arvaus.
+function releaseSchedule() {
+  const items = loans.filter(l => l.end_month && l.monthly_payment > 0);
+  // Luottokorttien tavoitelyhennykset eivät pääty itsestään — ne jäävät lattiaksi.
+  const floor = accounts.filter(a => a.kind === 'credit' && (a.monthly_target || 0) > 0)
+                        .reduce((s,a) => s + (a.monthly_target || 0), 0);
+  const alku = items.reduce((s,l) => s + l.monthly_payment, 0) + floor;
+  const byMonth = {};
+  items.forEach(l => { (byMonth[l.end_month] = byMonth[l.end_month] || []).push(l); });
+  let burden = alku;
+  const rows = Object.keys(byMonth).sort().map(m => {
+    const grp = byMonth[m];
+    const vapautuu = grp.reduce((s,l) => s + l.monthly_payment, 0);
+    burden -= vapautuu;
+    return { month:m, nimet:grp.map(l=>l.name), vapautuu, jaljella:burden, kk:monthsUntil(m) };
+  });
+  return { alku, floor, rows };
+}
+
+function releaseCardHTML() {
+  const { alku, floor, rows } = releaseSchedule();
+  if (!rows.length) return '';
+  return `<div style="background:var(--surface);border:.5px solid var(--border);border-top:2.5px solid var(--blue);border-radius:var(--radius);padding:16px 18px;margin-top:8px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.07em;color:var(--dim)">Erien vapautuminen</div>
+      <div style="font-size:16px;font-weight:300;color:var(--text)">${eur(alku)}/kk nyt</div>
+    </div>
+    ${rows.map(r => `
+      <div style="display:flex;align-items:baseline;gap:10px;padding:7px 0;border-bottom:.5px solid var(--border)">
+        <span style="font-size:12px;color:var(--muted);width:96px;flex-shrink:0">${fmtMonthLbl(r.month)}</span>
+        <span style="font-size:12px;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.nimet.join(', '))}</span>
+        <span style="font-size:13px;color:var(--green);flex-shrink:0">−${eur(r.vapautuu)}</span>
+        <span style="font-size:13px;color:var(--text);width:78px;text-align:right;flex-shrink:0">${eur(r.jaljella)}</span>
+      </div>`).join('')}
+    <div style="font-size:11px;color:var(--dim);margin-top:8px;line-height:1.5">
+      Oikea sarake = kiinteä kuukausierä sen jälkeen kun kyseisen kuukauden erät ovat päättyneet.
+      ${floor > 0 ? `Lattia ${eur(floor)}/kk on luottokorttien tavoitelyhennys, joka ei pääty itsestään.` : ''}
+    </div>
+  </div>`;
+}
+
 function renderLoansSection() {
   const creditTargets = accounts.filter(a => a.kind === 'credit' && (a.monthly_target || 0) > 0);
   const realLoans = loans.filter(l => !l.included_in_tx);
@@ -2395,7 +2442,49 @@ function renderLoansSection() {
       </div>`;
   };
 
-  const allCards = [...loans.map(loanCard), ...creditTargets.map(creditTargetCard)].join('');
+  // Elisan lasku on yksi eräpäivä ja yksi summa, mutta neljä sopimusta. Ryhmä
+  // näyttää sen mitä tililtä oikeasti lähtee, ja erittelyn sen alla.
+  const groups = {};
+  const yksinaiset = [];
+  loans.forEach(l => { if (l.lender) (groups[l.lender] = groups[l.lender] || []).push(l); else yksinaiset.push(l); });
+
+  const groupCard = (lender, list) => {
+    const bal  = list.reduce((s,l) => s + l.balance, 0);
+    const kk   = list.reduce((s,l) => s + l.monthly_payment, 0);
+    const last = list.reduce((m,l) => (!m || l.end_month > m) ? l.end_month : m, '');
+    const drifts = list.map(loanDrift).filter(Boolean);
+    return `
+      <div class="saldo-card" style="border-top:2.5px solid var(--gold)">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:500;color:var(--text)">${esc(lender)}</div>
+            <div style="font-size:11px;color:var(--dim)">${list.length} sopimusta · yksi lasku</div>
+          </div>
+          <span style="font-size:18px;font-weight:300;color:var(--red)">${eur(bal)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:6px">
+          <span style="font-weight:500;color:var(--text)">${eur(kk)}/kk</span>
+          <span>${last ? `viimeinen erä ${fmtMonthLbl(last)}` : '—'}</span>
+        </div>
+        <div style="margin-top:10px;padding-top:8px;border-top:.5px solid var(--border)">
+          ${list.slice().sort((a,b)=>b.balance-a.balance).map(l => `
+            <div style="display:flex;align-items:baseline;gap:8px;padding:4px 0;cursor:pointer" onclick="openLoanModal('${l.id}')">
+              <span style="font-size:12px;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l.name)}</span>
+              <span style="font-size:11px;color:var(--muted);flex-shrink:0">${eur(l.monthly_payment)}/kk</span>
+              <span style="font-size:11px;color:var(--dim);width:72px;text-align:right;flex-shrink:0">${fmtMonthLbl(l.end_month)}</span>
+              <span style="font-size:12px;color:var(--red);width:76px;text-align:right;flex-shrink:0">${eur(l.balance)}</span>
+            </div>`).join('')}
+        </div>
+        ${drifts.map(d => `<div style="font-size:11px;color:var(--gold);margin-top:6px;line-height:1.4;display:flex;gap:6px">
+          <span style="flex-shrink:0">⚠️</span><span>${esc(d.viesti)}</span></div>`).join('')}
+      </div>`;
+  };
+
+  const allCards = [
+    ...Object.entries(groups).map(([lender, list]) => groupCard(lender, list)),
+    ...yksinaiset.map(loanCard),
+    ...creditTargets.map(creditTargetCard)
+  ].join('');
   const empty = !loans.length && !creditTargets.length;
   const total = loans.length + creditTargets.length;
 
@@ -2432,7 +2521,8 @@ function renderLoansSection() {
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
       ${empty ? `<div style="font-size:13px;color:var(--muted);text-align:center;padding:12px 0">Ei tallennettuja lainoja tai tavoitelyhennysksiä.</div>` : allCards}
     </div>
-    ${summaryRow}`;
+    ${summaryRow}
+    ${releaseCardHTML()}`;
 }
 
 function avgNeedsMonthly(nMonths = 3) {
@@ -2551,6 +2641,10 @@ function openLoanModal(id) {
   }
   document.getElementById('loanApr').value = (loan && loan.apr) ? loan.apr : '';
   document.getElementById('loanNote').value = loan ? (loan.note || '') : '';
+  document.getElementById('loanLender').value = loan ? (loan.lender || '') : '';
+  // Ehdota jo käytössä olevia rahoittajia, jotta ryhmä ei hajoa kirjoitusvirheeseen
+  const lenders = [...new Set(loans.map(l => l.lender).filter(Boolean))];
+  document.getElementById('lenderList').innerHTML = lenders.map(x=>`<option value="${esc(x)}">`).join('');
   document.getElementById('loanIncluded').checked = loan ? !!loan.included_in_tx : false;
   document.getElementById('loanDeleteBtn').style.display = loan ? 'block' : 'none';
   openModal('loanModal');
@@ -2570,7 +2664,8 @@ async function saveLoan() {
   const apr = parseFloat(document.getElementById('loanApr').value) || null;
   const note = document.getElementById('loanNote').value.trim();
   const included_in_tx = document.getElementById('loanIncluded').checked;
-  const loanData = { name, balance, monthly_payment: monthly, end_month: endMonth, apr, note, included_in_tx };
+  const lender = document.getElementById('loanLender').value.trim() || null;
+  const loanData = { name, balance, monthly_payment: monthly, end_month: endMonth, apr, note, lender, included_in_tx };
   if (id) {
     const idx = loans.findIndex(l => l.id === id);
     if (idx >= 0) loans[idx] = {...loans[idx], ...loanData};

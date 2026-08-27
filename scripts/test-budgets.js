@@ -159,5 +159,38 @@ eq('Roborock 540,60 -> ei varoitusta',           run(`${L('Roborock',540.60,54.0
 eq('MacBook 2 973,64 -> ei varoitusta',          run(`${L('MacBook',2973.64,87.46,'2029-07')}`), null);
 eq('korollista lainaa ei tarkisteta',            run(`${L('Asuntolaina',56940,158,'2056-04',3.3)}`), null);
 
+
+console.log('\n— Erien vapautumisaikataulu —');
+run(`
+loans = [
+  {id:'a',name:'Keittiölaina',balance:1839.11,monthly_payment:281.81,end_month:'2027-03',apr:null,included_in_tx:1},
+  {id:'b',name:'iPhone-erämaksu',balance:138.72,monthly_payment:34.68,end_month:'2027-01',apr:null,included_in_tx:1,lender:'Elisa'},
+  {id:'c',name:'Huawei mesh-reititin',balance:82.60,monthly_payment:4.13,end_month:'2028-05',apr:null,included_in_tx:1,lender:'Elisa'},
+  {id:'d',name:'Roborock',balance:540.60,monthly_payment:54.06,end_month:'2027-07',apr:null,included_in_tx:1,lender:'Elisa'},
+  {id:'e',name:'MacBook Pro M5 Pro',balance:2973.64,monthly_payment:87.46,end_month:'2029-07',apr:null,included_in_tx:1,lender:'Elisa'},
+];
+accounts = [
+  {key:'OPCredit',kind:'credit',monthly_target:150},
+  {key:'Finnair', kind:'credit',monthly_target:150},
+  {key:'Perus',   kind:'checking'},
+];
+RS = releaseSchedule();
+`);
+eq('kiinteat erat nyt', run(`RS.alku`), 762.14);
+eq('lattia = korttien tavoitelyhennykset', run(`RS.floor`), 300);
+eq('vapautumisia 5 kpl', run(`RS.rows.length`), 5);
+eq('1. tammikuu 2027 (iPhone)', run(`RS.rows[0].month`), '2027-01');
+eq('   ...jaljelle jaa', run(`RS.rows[0].jaljella`), 727.46);
+eq('2. maaliskuu 2027 (keittiolaina)', run(`RS.rows[1].month`), '2027-03');
+eq('   ...jaljelle jaa', run(`RS.rows[1].jaljella`), 445.65);
+eq('3. heinakuu 2027 (Roborock)', run(`RS.rows[2].jaljella`), 391.59);
+eq('4. toukokuu 2028 (Huawei)', run(`RS.rows[3].jaljella`), 387.46);
+eq('5. heinakuu 2029 (MacBook) -> lattia', run(`RS.rows[4].jaljella`), 300);
+eq('Elisa-ryhma: 4 sopimusta', run(`loans.filter(l=>l.lender==='Elisa').length`), 4);
+eq('Elisa-ryhma: yhteissaldo', run(`loans.filter(l=>l.lender==='Elisa').reduce((s,l)=>s+l.balance,0)`), 3735.56);
+eq('Elisa-ryhma: yhteiserä = laskun summa', run(`loans.filter(l=>l.lender==='Elisa').reduce((s,l)=>s+l.monthly_payment,0)`), 180.33);
+eq('samaan kuukauteen paattyvat niputetaan',
+   run(`loans.push({id:'f',name:'Testi',balance:100,monthly_payment:50,end_month:'2027-01',apr:null}); releaseSchedule().rows[0].nimet.length`), 2);
+
 console.log(fails ? `\n${fails} TESTIA EPAONNISTUI` : '\nKAIKKI TESTIT LAPI');
 process.exit(fails?1:0);
