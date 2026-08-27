@@ -210,6 +210,42 @@ Korjaus: ei-Perus-tilien tunnisteeseen lisätään tilin nimi (`Lipas_20260101/5
 
 ⚠️ **Sama tunnistetörmäys koskee myös selainpuolen `parseCSVFile`-varapolkua** (`app/index.html`), jota käytetään vain jos `API_BASE` on tyhjä. Ei korjattu, koska polku ei ole käytössä — korjaa jos offline-tuonti otetaan koskaan käyttöön.
 
+### Kaikki tilit täsmäävät pankkiin ✅ 27.8.2026
+
+| Tili | Rivejä | Saldo | Lähde |
+|---|---|---|---|
+| OP Perustili | 710 | 3 616,41 | |
+| OP Säästötili | 27 | 14 385,97 | tiliote |
+| OP Säästölipas | 61 | 5 113,04 | tiliote |
+| OP Visa Credit | 25 | −2 608,82 | tiliote = OP-appi ✓ |
+| Finnair Visa | 89 | −3 503,44 | tiliote ✓ |
+| Revolut | 22 | 6,86 | otteen loppusaldo ✓ |
+
+**Nettorahoitusasema** (ilman asuntoa ja asuntolainaa): varat 23 122,28 − korttivelat 6 112,26 − erämaksut 5 309,82 = **+11 700,20 €**.
+
+### Keittiölaina — lasku paljasti että se ei ole koroton ✅ KORJATTU 27.8.2026
+
+Finvoice 1506393245 (28.7.2026, eräpäivä 17.8.2026) OP Yrityspankilta, myyjä Puuajatus Oy, luottomuoto myyntirahoitus:
+
+| Laskun rivi | € |
+|---|---|
+| Lyhennys | 273,46 |
+| Korko (1,5 %) | 2,35 |
+| **Käsittelymaksu** | **6,00** |
+| Viivästyskorko 8,50 % ajalta 17.6.–3.7.2026 | 1,05 |
+| Perintäkulu | 5,00 |
+| **Laskun summa** | **287,86** |
+
+Kolme löydöstä:
+
+1. **Laina ei ole koroton.** Korko 1,5 % + **käsittelymaksu 6,00 € joka laskulla** = ~8,35 €/kk. Noin 1 800 €:n saldolla efektiivinen kustannus on ~5,6 %/v, ei 1,5 %. Käsittelymaksu yksin on 72 €/v ja se on kiinteä — mitä pienempi saldo, sitä kalliimpi suhteessa.
+2. **Kuukausierä ei ole 281,81 vaan 287,86.** Erä on 281,81 mutta laskutettava minimimäärä sisältää kulut.
+3. **Yksi maksu oli myöhässä** (eräpäivä 17.6., suoritus 3.7.) → viivästyskorko + perintäkulu 6,05 €. Heinäkuussa maksettiin kahdesti (6.7. ja 21.7.) kiinni kuromiseksi.
+
+Korjattu: saldo **1 574,26 €** (laskun pääomasaldo 1 847,72 − lyhennys 273,46), `apr` 1,5, `end_month` 2027-02 (6 erää).
+
+`loanDrift`-toleranssi väljennetty matalakorkoisille: erästä osa menee korkoon ja kuluihin, joten koroton 1,05 × erä antaisi väärän hälytyksen. Nyt ≤2 %:n lainoissa toleranssi on 2,1 × erä — 3 erää vanhentunut saldo laukaisee yhä.
+
 ### T9 — Erämaksujen ryhmittely + vapautumisaikataulu ✅ TEHTY 27.8.2026 (v1.12.0)
 
 **Ryhmittely rahoittajan mukaan** (`loans.lender`, migraatio 006). Elisan lasku on yksi eräpäivä ja yksi summa mutta neljä luottokauppasopimusta — ilman ryhmää ne olivat neljä irrallista riviä eikä yhteissummaa näkynyt mistään, vaikka juuri se lähtee tililtä kerran kuussa:

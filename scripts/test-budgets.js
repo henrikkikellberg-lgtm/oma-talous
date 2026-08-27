@@ -157,7 +157,11 @@ eq('Keittiolaina VANHA 2 684,54 -> varoitus',    run(`${L('Keittio',2684.54,281.
 eq('Keittiolaina KORJATTU 1 839,11 -> ei varoitusta', run(`${L('Keittio',1839.11,281.81,'2027-03')}`), null);
 eq('Roborock 540,60 -> ei varoitusta',           run(`${L('Roborock',540.60,54.06,'2027-07')}`), null);
 eq('MacBook 2 973,64 -> ei varoitusta',          run(`${L('MacBook',2973.64,87.46,'2029-07')}`), null);
-eq('korollista lainaa ei tarkisteta',            run(`${L('Asuntolaina',56940,158,'2056-04',3.3)}`), null);
+eq('korollista lainaa (yli 2 %) ei tarkisteta',  run(`${L('Asuntolaina',56940,158,'2056-04',3.3)}`), null);
+// Keittiolaina on 1,5 %:n myyntirahoitus jossa erasta 6 EUR on kasittelymaksua:
+// tarkistus toimii yha, mutta valjemmalla toleranssilla.
+eq('keittiolaina laskun mukaan -> ei varoitusta', run(`${L('Keittio',1574.26,281.81,'2027-02',1.5)}`), null);
+eq('keittiolaina 3 eraa vanhentuneena -> varoitus', run(`${L('Keittio',2419.69,281.81,'2027-02',1.5)} !== null`), true);
 
 
 console.log('\n— Erien vapautumisaikataulu —');

@@ -631,7 +631,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.12.0';
+const APP_VERSION = '1.12.1';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -2323,12 +2323,19 @@ function realBurdenMonthly() {
 // maksettu eikä saldoa ollut päivitetty. Sama koski Huaweita ja keittiölainaa.
 // Kynnys on yksi erä, koska laskutettu mutta maksamaton erä saa erottaa ne.
 const loanDrift = l => {
-  if (l.apr || !l.monthly_payment || !l.end_month) return null;   // vain korottomat erämaksut
+  if (!l.monthly_payment || !l.end_month) return null;
+  const apr = l.apr || 0;
+  // Korollisessa lainassa saldo ei ole erien monikerta, joten vertailu ei toimi.
+  // Matalakorkoisissa (≤2 %) se toimii yhä, mutta erästä osa menee korkoon ja
+  // kuluihin — keittiölainan 281,81 €:n erästä vain ~273 € lyhentää pääomaa ja
+  // 6 € on käsittelymaksua. Siksi väljempi toleranssi.
+  if (apr > 2) return null;
+  const toleranssi = apr > 0 ? 2.1 : 1.05;
   const rem = monthsUntil(l.end_month);
   if (rem === null) return null;
   const odotettu = l.monthly_payment * rem;
   const ero = l.balance - odotettu;
-  if (Math.abs(ero) <= l.monthly_payment * 1.05) return null;
+  if (Math.abs(ero) <= l.monthly_payment * toleranssi) return null;
   const eria = Math.round(Math.abs(ero) / l.monthly_payment);
   return { ero, eria, odotettu,
            viesti: ero > 0
