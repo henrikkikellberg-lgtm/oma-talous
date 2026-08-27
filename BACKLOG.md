@@ -192,6 +192,24 @@ Asunnon kertakulut yhteensä **4 173,84 €** (sänky, Westwing, FinnishDesignSh
 
 ⚠️ **Tämä ei tarkoita että kulutus olisi ollut pienempää.** Sama raha meni, ja pääosin Finnair Visalle 15,51 %:n korolla. Erottelu tehtiin jotta kuukausibudjetin signaali kertoisi *toistuvasta* kulutuksesta — kertaluonteinen kalustaminen ei ole asia jota ravintolarajan pitäisi vastustaa. Kalustus on tarkoituksella `wants` eikä `financing`: huonekalu ei pidä arvoaan kuten remontti, joten sen kuuluu näkyä kulutuksena.
 
+### T2d — Tuonnin tunnistetörmäys ✅ KORJATTU 27.8.2026 (v1.11.0)
+
+Ensimmäinen oikea tuonti paljasti kaksi bugia joita simulaatio ei voinut nähdä, koska ne syntyvät vasta kannassa olevaa dataa vasten.
+
+**1. OP käyttää samaa arkistointitunnusta siirron molemmilla puolilla.** Tunnus `20260101/593156/0F4760` on sekä käyttötilin −9,00 € että säästölippaan +9,00 €. Tunniste on perusavain, joten lippaan puoli ohitettiin "jo olemassa" -sääntönä. **Säästölippaan 61 rivistä meni sisään 3** ja säästötilin 27:stä 21 — hiljaa, ilman virheilmoitusta, ja tuonti raportoi onnistuneensa.
+
+Korjaus: ei-Perus-tilien tunnisteeseen lisätään tilin nimi (`Lipas_20260101/593156/0F4760`). Perustili säilyttää paljaan tunnisteen, jottei jo tuotu data monistu.
+
+**2. Duplikaattihaku vertasi tilien yli.** `findExistingDuplicate` täsmäsi pelkällä päivämäärällä ja summalla riippumatta tilistä. Sama päivä ja summa eri tileillä on kuitenkin normaali sisäinen siirto — ja siirron molemmat puolet tarvitaan, jotta kummankin tilin saldo täsmää pankkiin. Nyt vertailu tapahtuu vain saman tilin sisällä.
+
+**3. CAT_DEST laski siirrot kahdesti.** `handleBalances` lisäsi säästötilin saldoon käyttötilin "Säästölipas"-kategorian siirrot *arviona*. Kun lippaan oma tiliote tuotiin, sama siirto laskettiin toiseen kertaan — säästölipas näytti 4 909,04 € kun oikea luku on 5 113,04 €. Nyt arvio käytetään vain jos tililtä EI ole omaa tiliotedataa; oma data voittaa aina arvion.
+
+- ✅ Testattu: `scripts/test-tuonnin-duplikaatit.mjs` — simuloi kannan jossa siirron toinen puoli on jo olemassa, ja varmistaa että kaikki 61 + 27 riviä menevät läpi mutta aito saman tilin duplikaatti torjutaan yhä
+
+**Toimenpide:** Saaston ja Lippaan rivit poistettiin D1:stä ja tiedostot on tuotava uudelleen korjatulla koodilla.
+
+⚠️ **Sama tunnistetörmäys koskee myös selainpuolen `parseCSVFile`-varapolkua** (`app/index.html`), jota käytetään vain jos `API_BASE` on tyhjä. Ei korjattu, koska polku ei ole käytössä — korjaa jos offline-tuonti otetaan koskaan käyttöön.
+
 ### T2 — Korttidata ⚠️ OSITTAIN
 
 - ✅ Finnair Visa tuotu 22.8.2026 asti

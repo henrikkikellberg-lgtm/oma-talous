@@ -628,7 +628,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.10.0';
+const APP_VERSION = '1.11.0';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -845,8 +845,11 @@ function computeBalances(asOf) {
     const delta = txs
       .filter(t => t.account === a.key && t.date > a.opening_date && t.date <= asOf)
       .reduce((s,t)=>s+(+t.amount||0), 0);
-    // Sisäiset siirrot tälle tilille (esim. Perus → Säästölipas): lisää kohdetiliin
-    const incoming = txs
+    // Sisäiset siirrot tälle tilille (esim. Perus → Säästölipas) lisätään VAIN
+    // jos tililtä ei ole omaa tiliotedataa. Muuten sama siirto laskettaisiin
+    // kahdesti: kerran käyttötilin lähtevänä ja kerran lippaan saapuvana.
+    const omaData = txs.some(t => t.account === a.key && t.date > a.opening_date && t.date <= asOf);
+    const incoming = omaData ? 0 : txs
       .filter(t => CAT_DEST[t.cat] === a.key && t.account !== a.key && (+t.amount||0) < 0 && t.date > a.opening_date && t.date <= asOf)
       .reduce((s,t)=>s+Math.abs(+t.amount||0), 0);
     const balance = a.opening_balance + delta + incoming;

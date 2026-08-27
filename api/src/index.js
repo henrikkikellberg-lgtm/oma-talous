@@ -306,7 +306,11 @@ async function handleBalances(env, url) {
     const delta = txs
       .filter(t => t.account === a.key && t.date > a.opening_date && t.date <= asOf)
       .reduce((s,t)=>s+t.amount, 0);
-    const incoming = txs
+    // CAT_DEST on arvio niille tileille joilta EI ole tiliotetta: käyttötilin
+    // "Säästölipas"-kategorian siirto oletetaan saapuneeksi lippaaseen. Kun
+    // lippaan oma tiliote on tuotu, arvio laskisi saman siirron toiseen kertaan.
+    const omaData = txs.some(t => t.account === a.key && t.date > a.opening_date && t.date <= asOf);
+    const incoming = omaData ? 0 : txs
       .filter(t => CAT_DEST[t.cat] === a.key && t.account !== a.key && t.amount < 0 && t.date > a.opening_date && t.date <= asOf)
       .reduce((s,t)=>s+Math.abs(t.amount), 0);
     const balance = a.opening_balance + delta + incoming;
@@ -335,7 +339,7 @@ async function handleCSVImport(req, env) {
   // 'Perus'-tilille kovakoodattuna — säästötilin tuonti olisi romuttanut
   // käyttötilin saldon (esim. yksi +26 118,75 € PANO).
   const rows = parseCSV(csv, filename || '', account || null);
-  const { results: existing } = await env.DB.prepare('SELECT id,date,amount,payee,source FROM transactions').all();
+  const { results: existing } = await env.DB.prepare('SELECT id,date,amount,payee,source,account FROM transactions').all();
   const ids = new Set(existing.map(r=>r.id));
   const { results: rulesRows } = await env.DB.prepare('SELECT kw,cat,type,splits FROM rules ORDER BY priority DESC').all();
   let added = 0;
@@ -362,7 +366,11 @@ async function handleCSVImport(req, env) {
 // ostopäiväksi (ks. extractOstopvm) — kahden eri ostoksen osuminen samaan
 // päivään ja täsmälleen samaan summaan on käytännössä harvinaista.
 function findExistingDuplicate(row, existing) {
+  // Vertailu VAIN saman tilin sisällä. Sama päivä ja summa eri tileillä on
+  // normaali sisäinen siirto, ei duplikaatti — ja siirron molemmat puolet
+  // tarvitaan jotta kummankin tilin saldo täsmää pankkiin.
   for (const e of existing) {
+    if ((e.account || 'Perus') !== (row.account || 'Perus')) continue;
     if (e.date !== row.date) continue;
     if (Math.abs(e.amount - row.amount) > 0.005) continue;
     return true;
@@ -373,7 +381,8 @@ function findExistingDuplicate(row, existing) {
   // päivältä käsin syötettyjen/kuitilta skannattujen rivien osajoukko, joka
   // summautuu täsmälleen tämän CSV-rivin summaan — jos löytyy, kuitin pilkonta
   // on kanoninen totuus ja CSV-rivi on sen duplikaatti.
-  const sameDay = existing.filter(e => e.date === row.date && (e.source === 'manual' || e.source === 'receipt'));
+  const sameDay = existing.filter(e => (e.account || 'Perus') === (row.account || 'Perus')
+    && e.date === row.date && (e.source === 'manual' || e.source === 'receipt'));
   if (sameDay.length >= 2 && sameDay.length <= 12 && subsetSumsTo(sameDay.map(e => e.amount), row.amount)) return true;
   return false;
 }
@@ -583,7 +592,15 @@ function parseCSV(text, fname, acctOverride) {
       // todellinen ostopäivä OSTOPVM-tunnisteena (YYMMDD) — käytetään sitä kun löytyy,
       // jotta päivä täsmää kuitilta/käsin syötettyyn tapahtumaan eikä synny tuplaa.
       const ostopvm = extractOstopvm(c[9]);
-      rows.push({id:c[10]||`OP_${c[0]}_${c[5]}_${amt}`, date:ostopvm||c[0], payee:c[5]||'', selitys:c[4]||'', viesti, amount:amt, source:fname||'OP', account:acctOverride||'Perus'});
+      // OP käyttää SAMAA arkistointitunnusta siirron molemmilla puolilla: sama
+      // "20260101/593156/0F4760" on käyttötilin −9,00 ja säästölippaan +9,00.
+      // Ilman tilin lisäämistä tunnisteeseen jälkimmäinen ohitettiin
+      // duplikaattina, ja säästölippaasta tuli 61 rivistä sisään vain 3.
+      // Perustili säilyttää paljaan tunnisteen, jottei jo tuotu data monistu.
+      const acct = acctOverride || 'Perus';
+      const rid = c[10] ? (acct === 'Perus' ? c[10] : `${acct}_${c[10]}`)
+                        : `OP_${acct}_${c[0]}_${c[5]}_${amt}`;
+      rows.push({id:rid, date:ostopvm||c[0], payee:c[5]||'', selitys:c[4]||'', viesti, amount:amt, source:fname||'OP', account:acct});
     }
   }
   return rows;
