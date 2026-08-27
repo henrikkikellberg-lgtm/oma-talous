@@ -352,6 +352,7 @@ tr:hover td{background:var(--surface2)}
       <button class="btn btn-secondary" style="height:28px;padding:0 10px;font-size:12px" onclick="switchTab('tapahtumat');setCurFilter('flag')">Kategorisoi →</button>
     </div>
     <div id="viewToggle"></div>
+    <div id="weekCard"></div>
     <div id="runwayCard"></div>
     <div class="sum-grid" id="sumGrid"></div>
     <div id="kassavirtaCard"></div>
@@ -576,6 +577,26 @@ tr:hover td{background:var(--surface2)}
   </div>
 </div>
 
+<div class="modal-overlay" id="budgetModal" onclick="if(event.target===this)closeModal('budgetModal')">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="budgetModalTitle">Uusi budjetti</div>
+    <input type="hidden" id="budgetEditId">
+    <div class="field-group"><div class="field-label">Nimi</div><input class="field-input" id="budgetLabel" placeholder="esim. Ulkona syöminen ja juominen"></div>
+    <div class="field-group"><div class="field-label">Raja € / palkkajakso</div><input class="field-input" id="budgetLimit" type="number" step="1" inputmode="decimal" placeholder="550"></div>
+    <div class="field-group"><div class="field-label">Kategoriat — raja koskee näiden summaa</div>
+      <div id="budgetCatChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"></div>
+    </div>
+    <label style="display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--text);margin-bottom:16px;cursor:pointer;line-height:1.4">
+      <input type="checkbox" id="budgetRollover" style="width:16px;height:16px;accent-color:var(--green);margin-top:2px;flex-shrink:0">
+      <span>Ylitys vähennetään seuraavan jakson rajasta <span style="color:var(--muted)">(ilman seurausta raja on koriste — sen voi ylittää ilman että mikään muuttuu)</span></span>
+    </label>
+    <button class="btn btn-primary btn-full" onclick="saveBudget()">Tallenna</button>
+    <button id="budgetDeleteBtn" class="btn btn-full" style="background:var(--red-light);color:var(--red);border:none;height:44px;border-radius:var(--radius);font-size:15px;font-weight:500;margin-top:6px;display:none" onclick="deleteBudget()">Poista budjetti</button>
+    <button class="modal-cancel" onclick="closeModal('budgetModal')">Peruuta</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <div id="loginOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:var(--bg,#F2F6FA);align-items:center;justify-content:center;padding:24px;">
@@ -593,7 +614,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.6.1';
+const APP_VERSION = '1.8.0';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -602,6 +623,7 @@ let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('o
 const CATS = [
   {name:'Palkka ja tulot',        type:'income',  icon:'💰'},
   {name:'Lainan nosto',           type:'financing',icon:'🏦'},
+  {name:'Asuminen — remontti',    type:'financing',icon:'🔨'},
   {name:'Sijoittaminen',          type:'savings', icon:'📈'},
   {name:'Säästötili',             type:'savings', icon:'🏦'},
   {name:'Säästölipas',            type:'savings', icon:'🐷'},
@@ -780,7 +802,7 @@ const DEF_ACCOUNTS = [
 ];
 
 // ── STATE ───────────────────────────────────────────────────────────────────
-let txs = [], rules = [], saldot = {}, selMonths = [], loans = [];
+let txs = [], rules = [], saldot = {}, selMonths = [], loans = [], budgets = [];
 let accounts = [], settings = {salary_day:27, monthly_salary:3267}, actualBalances = {};
 let pendingSync = []; // offline-luodut tapahtumat jotka odottavat D1-synkkausta
 let curMonth = '', curFilter = 'all', curSearch = '', curTab = 'yhteenveto', curCatFilter = '', curCatDrill = null;
@@ -894,6 +916,7 @@ function saveLocalState() {
     localStorage.setItem('ot_accounts', JSON.stringify(accounts));
     localStorage.setItem('ot_settings', JSON.stringify(settings));
     localStorage.setItem('ot_loans', JSON.stringify(loans));
+    localStorage.setItem('ot_budgets', JSON.stringify(budgets));
     localStorage.setItem('ot_pending', JSON.stringify(pendingSync));
   } catch(e) { showToast('Tallennusvirhe — vie JSON!', 'err'); }
 }
@@ -932,6 +955,7 @@ async function initState() {
     settings = Object.assign({salary_day:27, monthly_salary:3267}, JSON.parse(localStorage.getItem('ot_settings') || '{}'));
     actualBalances = JSON.parse(localStorage.getItem('ot_actualbal') || '{}');
     loans = JSON.parse(localStorage.getItem('ot_loans') || '[]');
+    budgets = JSON.parse(localStorage.getItem('ot_budgets') || '[]');
     pendingSync = JSON.parse(localStorage.getItem('ot_pending') || '[]');
   } catch(e) { rules = [...DEF_RULES]; saldot = {}; txs = []; accounts = DEF_ACCOUNTS.map(a=>({...a})); }
   if (!accounts.length) accounts = DEF_ACCOUNTS.map(a=>({...a}));
@@ -948,6 +972,10 @@ async function initState() {
   fetch(`${API_BASE}/loans`, { headers: apiHeaders() })
     .then(r=>r.ok?r.json():null)
     .then(rows=>{ if(Array.isArray(rows)){ loans = rows; saveLocalState(); renderTab(curTab); } })
+    .catch(()=>{});
+  fetch(`${API_BASE}/budgets`, { headers: apiHeaders() })
+    .then(r=>r.ok?r.json():null)
+    .then(rows=>{ if(Array.isArray(rows)){ budgets = rows; saveLocalState(); renderTab(curTab); } })
     .catch(()=>{});
   fetch(`${API_BASE}/settings`, { headers: apiHeaders() })
     .then(r=>r.ok?r.json():null)
@@ -1011,7 +1039,10 @@ function allMonths() { return [...new Set(txs.map(t=>t.date.substring(0,7)))].so
 function txsForMonth(m) { return txs.filter(t=>t.date.startsWith(m)); }
 function txsForWindow(start, end) { return txs.filter(t=>t.date>=start && t.date<=end); }
 // ── PALKKAJAKSONÄKYMÄ (view mode) ──────────────────────────────────────────────
-function dashIsPeriod() { return curTab==='yhteenveto' && viewMode==='period'; }
+// Palkkajaksonäkymä on käytössä Yhteenvedossa JA Kategorioissa: kategoriarajat
+// elävät palkkajaksossa, joten niiden selaus on pakko toimia samalla akselilla.
+const PERIOD_TABS = ['yhteenveto','kategoriat'];
+function dashIsPeriod() { return PERIOD_TABS.includes(curTab) && viewMode==='period'; }
 function ddmm(iso) { const p=iso.split('-'); return (+p[2])+'.'+(+p[1])+'.'; }
 // Aktiivisen dashboard-jakson ikkuna: kalenterikuukausi tai palkkajakso (edell. palkkapäivä → tämän kk:n palkkapäivä)
 // Palkkajakson rajat OFFSETILLA: 0 = parhaillaan elettävä jakso (edell. palkkapäivä → seur. palkkapäivä),
@@ -1062,6 +1093,210 @@ function periodIncomeForOffset(off) {
   if (sal>0) return { income: sal, note: note+' · ennuste', isEstimate:true };
   return { income: inc, note, isEstimate:false };
 }
+// ── BUDJETIT ──────────────────────────────────────────────────────────────────
+// Perusperiaate: ensisijainen luku on JÄLJELLÄ, ei käytetty. "Ravintolat 543 €"
+// on tilastotieto; "Ravintolat: 7 € jäljellä, 4 pv" on päätöstieto. Ero ratkaisee
+// tehdäänkö valinta ennen ostosta vai vasta kuukauden lopussa jälkiviisaana.
+// Budjetti kohdistuu kategoriaJOUKKOON: per-kategoria-raja kierretään
+// vaihtamalla kategoriaa (lounas → ravintola → kahvila).
+
+// Jakson tunniste: alkupalkkapäivän kuukausi. 27.7.–26.8.2026 → "2026-P07".
+function periodIdFor(off) {
+  const d = periodBounds(off).startPay;
+  return d.getFullYear()+'-P'+String(d.getMonth()+1).padStart(2,'0');
+}
+// Budjetit elävät AINA palkkajaksossa, myös kalenterikuukausinäkymässä —
+// muuten raja nollautuisi väärään aikaan ja jäljellä-luku valehtelisi
+// palkkapäivän molemmin puolin.
+function budgetOffset() {
+  if (viewMode === 'period') return periodOffset;
+  const anchor = prevPaydayFrom(new Date());
+  const [y,m] = (curMonth || fmtMonthKey(new Date())).split('-').map(Number);
+  const diff = (y - anchor.getFullYear())*12 + (m-1 - anchor.getMonth());
+  return Math.max(minPeriodOffset(), Math.min(0, diff));
+}
+function budgetCats(b) { return (b.cats||[]).map(stripIcon); }
+// Oliko budjetti voimassa jo jakson `off` alkaessa?
+function budgetGovernedAt(b, off) {
+  if (!b.created_at) return true;                       // tuntematon ikä → oletetaan voimassa
+  const t = Date.parse(String(b.created_at).replace(' ','T') + (String(b.created_at).endsWith('Z')?'':'Z'));
+  if (!isFinite(t)) return true;
+  return t <= periodBounds(off).startPay.getTime();
+}
+// Toteuma lasketaan tapahtumista lennossa — ei erillistä toteumataulua pidettäväksi
+// synkassa. expandList purkaa splitit, joten taloyhtiölaskun osat osuvat oikein.
+function budgetSpentWindow(b, startISO, endISO) {
+  const set = new Set(budgetCats(b));
+  return expandList(txs.filter(t => t.date>=startISO && t.date<endISO))
+    .filter(t => t.type!=='income' && t.type!=='neutral' && t.type!=='flag' && set.has(stripIcon(t.cat)))
+    .reduce((sum,t) => sum + catAmount(t), 0);
+}
+function budgetCountWindow(b, startISO, endISO) {
+  const set = new Set(budgetCats(b));
+  return txs.filter(t => t.date>=startISO && t.date<endISO && t.amount<0 && set.has(stripIcon(t.cat))).length;
+}
+function budgetSpent(b, off) {
+  const { startPay, endPay } = periodBounds(off);
+  return budgetSpentWindow(b, isoLocal(startPay), isoLocal(endPay));
+}
+function budgetStatus(b, off) {
+  const o = (off===undefined) ? budgetOffset() : off;
+  const spent = budgetSpent(b, o);
+  // Rollover on se seuraus ylityksestä jota ilman raja on pelkkä koriste:
+  // edellisen jakson ylitys syö tämän jakson rajaa.
+  // Rollover ei ulotu budjettia edeltäviin jaksoihin: rajaa jota ei ollut
+  // olemassa ei voi olla rikkonut. Ilman tätä uusi budjetti aloittaisi
+  // valmiiksi miinuksella historian perusteella, mikä on epäreilua ja tekee
+  // koko mittarista heti uskottavuudeltaan kyseenalaisen.
+  let carry = 0;
+  if (b.rollover && o > minPeriodOffset() && budgetGovernedAt(b, o-1)) {
+    carry = Math.max(0, budgetSpent(b, o-1) - b.limit_eur);
+  }
+  const effLimit = Math.max(0, b.limit_eur - carry);
+  const remaining = effLimit - spent;
+  const { startPay, endPay } = periodBounds(o);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const isCurrent = today >= startPay && today < endPay;
+  const daysLeft = isCurrent ? Math.max(daysBetween(today, endPay), 0) : 0;
+  return { spent, carry, effLimit, remaining, daysLeft, isCurrent,
+           perDay: daysLeft > 0 ? remaining/daysLeft : null,
+           over: remaining < 0,
+           pct: effLimit > 0 ? Math.min(spent/effLimit*100, 100) : 0,
+           label: ddmm(isoLocal(startPay))+'–'+ddmm(isoLocal(endPay)) };
+}
+// Frekvenssi euromäärän rinnalle: 44 ostosta à 20,62 € ei ole yksi päätös vaan 44.
+// Summa yksinään piilottaa sen, että kyse on tottumuksesta eikä yksittäisestä valinnasta.
+function budgetCount(b, off) {
+  const { startPay, endPay } = periodBounds(off===undefined ? budgetOffset() : off);
+  return budgetCountWindow(b, isoLocal(startPay), isoLocal(endPay));
+}
+
+// ── VIIKKOPALAUTE ─────────────────────────────────────────────────────────────
+// Kuukausi on liian pitkä korjausliikkeeseen: kun ylitys näkyy, jakso on jo
+// pilalla eikä tilaa reagoida ole. Viikko on lyhin sykli jossa ehtii vielä
+// muuttaa suuntaa saman jakson sisällä.
+//
+// Viikko on ma–su (ei palkkapäivästä laskettu 7 pv), koska arkirytmi on
+// kalenteriviikko — jakson reunoilla viikko leikataan jakson sisään.
+const DAY_MS = 86400000;
+function weekBoundsOf(d) {
+  const s = new Date(d); s.setHours(0,0,0,0);
+  s.setDate(s.getDate() - ((s.getDay() + 6) % 7));   // ma = 0 … su = 6
+  const e = new Date(s); e.setDate(e.getDate() + 7);
+  return { start: s, end: e };
+}
+function clampDate(d, lo, hi) { return d < lo ? lo : (d > hi ? hi : d); }
+
+function weekStatus(b, off) {
+  const o = (off===undefined) ? budgetOffset() : off;
+  const { startPay, endPay } = periodBounds(o);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const isCurrent = today >= startPay && today < endPay;
+  const ref = isCurrent ? today : new Date(endPay.getTime() - DAY_MS);
+  const wb = weekBoundsOf(ref);
+  const wStart = clampDate(wb.start, startPay, endPay);
+  const wEnd   = clampDate(wb.end,   startPay, endPay);
+  const st = budgetStatus(b, o);
+  const periodLen = Math.max(daysBetween(startPay, endPay), 1);
+
+  // Dynaaminen tahti: jäljellä oleva jaksobudjetti / jäljellä olevat päivät.
+  // Ylitys alkuviikosta kutistaa loppujakson tahtia itsestään — luku ei koskaan
+  // valehtele, eikä erillistä viikkorolloveria tarvita. Kiinteä jaksoraja/4,43
+  // näyttäisi yhä "124 € tällä viikolla" vaikka jakso olisi jo 300 € yli.
+  const daysLeftPeriod = isCurrent ? Math.max(daysBetween(today, endPay), 0) : 0;
+  const daysLeftWeek   = isCurrent ? Math.max(daysBetween(today, wEnd), 0) : 0;
+  const perDay    = daysLeftPeriod > 0 ? st.remaining / daysLeftPeriod : 0;
+  const allowance = perDay * daysLeftWeek;
+
+  const spent = budgetSpentWindow(b, isoLocal(wStart), isoLocal(wEnd));
+  const count = budgetCountWindow(b, isoLocal(wStart), isoLocal(wEnd));
+
+  // Edellinen viikko: vertailukohtana päiväsuhteinen osuus jakson rajasta.
+  // Tämä on laskettavissa jälkikäteen mille tahansa viikolle, toisin kuin
+  // dynaaminen tahti joka riippuu kuljetusta polusta.
+  const pb = weekBoundsOf(new Date(wb.start.getTime() - DAY_MS));
+  const pStart = clampDate(pb.start, startPay, endPay);
+  const pEnd   = clampDate(pb.end,   startPay, endPay);
+  const pDays  = daysBetween(pStart, pEnd);
+  let prev = null;
+  if (pDays > 0) {
+    const pSpent = budgetSpentWindow(b, isoLocal(pStart), isoLocal(pEnd));
+    const share  = b.limit_eur * pDays / periodLen;
+    prev = { days:pDays, spent:pSpent, share, over: pSpent > share,
+             count: budgetCountWindow(b, isoLocal(pStart), isoLocal(pEnd)),
+             label: ddmm(isoLocal(pStart))+'–'+ddmm(isoLocal(new Date(pEnd.getTime()-DAY_MS))) };
+  }
+
+  return { isCurrent, spent, count, allowance, perDay, daysLeftWeek, daysLeftPeriod,
+           over: allowance < 0, periodRemaining: st.remaining, prev,
+           label: ddmm(isoLocal(wStart))+'–'+ddmm(isoLocal(new Date(wEnd.getTime()-DAY_MS))) };
+}
+
+function weekCardHTML() {
+  if (!budgets.length) return '';
+  const b = budgets[0];                       // ensisijainen budjetti nostetaan viikkotasolle
+  const w = weekStatus(b);
+  if (!w.isCurrent) return '';                // menneelle jaksolle viikkotahti ei tarkoita mitään
+  // Keltainen kun tahti on tiukka: alle 40 % alkuperäisestä päivätahdista jäljellä.
+  const parTahti = b.limit_eur / Math.max(daysBetween(periodBounds(budgetOffset()).startPay, periodBounds(budgetOffset()).endPay), 1);
+  const heroColor = w.over ? 'var(--red)' : (w.perDay < parTahti * 0.4 ? 'var(--gold)' : 'var(--green)');
+  const prev = w.prev ? `<div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:10px;margin-top:10px;border-top:.5px solid var(--border);font-size:12px">
+      <span style="color:var(--muted)">Edellinen viikko ${w.prev.label}</span>
+      <span style="color:${w.prev.over?'var(--red)':'var(--green)'}">${eur(w.prev.spent)} <span style="color:var(--muted)">/ ${eur(w.prev.share)} · ${w.prev.count} ostosta</span></span>
+    </div>` : '';
+  return `<div class="sum-card" style="margin:4px 0 12px;border-top:2.5px solid ${heroColor}">
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <div class="sum-label">${esc(b.label)} · tämä viikko</div>
+      <div style="font-size:11px;color:var(--muted)">${w.label}</div>
+    </div>
+    <div style="display:flex;align-items:baseline;gap:8px;margin-top:6px">
+      <span style="font-size:28px;font-weight:300;color:${heroColor};line-height:1">${eur(Math.abs(w.allowance))}</span>
+      <span style="font-size:13px;color:var(--muted)">${w.over ? 'yli jaksobudjetin' : `jäljellä · ${w.daysLeftWeek} pv`}</span>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-top:6px">
+      käytetty tällä viikolla <b style="color:var(--text);font-weight:500">${eur(w.spent)}</b> · <b style="color:var(--text);font-weight:500">${w.count}</b> ostosta
+      ${w.perDay > 0 ? ` · tahti ${eur(w.perDay)}/pv` : ''}
+    </div>
+    ${prev}
+  </div>`;
+}
+function renderWeekCard() {
+  const el = document.getElementById('weekCard');
+  if (el) el.innerHTML = weekCardHTML();
+}
+
+function budgetCardHTML(b) {
+  const st = budgetStatus(b);
+  const n = budgetCount(b);
+  const color = st.over ? 'var(--red)' : st.pct > 80 ? 'var(--gold)' : 'var(--green)';
+  const perDayTxt = st.isCurrent && st.daysLeft > 0
+    ? `${eur(Math.max(st.perDay,0))}/pv · ${st.daysLeft} pv jäljellä`
+    : (st.isCurrent ? 'viimeinen päivä' : 'jakso päättynyt');
+  const carryTxt = st.carry > 0
+    ? `<div style="font-size:11px;color:var(--red);margin-top:6px">Edellisen jakson ylitys −${eur(st.carry)} vähennetty rajasta</div>` : '';
+  const catsTxt = budgetCats(b).map(c=>esc(c)).join(' · ');
+  return `<div style="background:var(--surface);border:.5px solid var(--border);border-top:2.5px solid ${color};border-radius:var(--radius);padding:16px 18px;margin-bottom:10px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.07em;color:var(--dim)">${esc(b.label)}</div>
+      <div style="font-size:11px;color:var(--muted)">${st.label}</div>
+    </div>
+    <div style="display:flex;align-items:baseline;gap:8px">
+      <span style="font-size:32px;font-weight:300;color:${color};line-height:1">${eur(Math.abs(st.remaining))}</span>
+      <span style="font-size:13px;color:var(--muted)">${st.over ? 'yli rajan' : 'jäljellä'}</span>
+    </div>
+    <div style="height:4px;background:var(--surface2);border-radius:2px;margin:12px 0 8px">
+      <div style="height:4px;border-radius:2px;background:${color};width:${st.pct}%;transition:width .4s ease"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted)">
+      <span>käytetty <b style="color:var(--text);font-weight:500">${eur(st.spent)}</b> / ${eur(st.effLimit)} · <b style="color:var(--text);font-weight:500">${n}</b> ostosta</span>
+      <span>${perDayTxt}</span>
+    </div>
+    ${carryTxt}
+    <div style="font-size:11px;color:var(--dim);margin-top:8px;padding-top:8px;border-top:.5px solid var(--border)">${catsTxt}
+      <span style="float:right;cursor:pointer;color:var(--muted)" onclick="openBudgetModal('${esc(b.id)}')">muokkaa</span></div>
+  </div>`;
+}
+
 function setViewMode(mode) {
   if (mode===viewMode) return;
   // Pidä selauskohta järkevänä näkymää vaihdettaessa: kalenterikuukausi ⇄ jakson palkkapäivän kuukausi
@@ -1601,6 +1836,7 @@ function kassavirtaCardHTML(s, bInc, isEstimate, list) {
 }
 
 function renderYhteenveto() {
+  renderWeekCard();
   renderRunwayCard();
   renderTipsCard();
   const win = dashWindow();
@@ -1792,10 +2028,18 @@ function setCatInline(sel) {
 // ── KATEGORIAT ────────────────────────────────────────────────────────────────
 function renderKategoriat() {
   if (curCatDrill) { renderCatDetail(); return; }
-  const list = txsForMonth(curMonth).filter(t=>t.type!=='neutral'&&t.type!=='flag');
-  const s = monthSummary(txsForMonth(curMonth));
-  const bi = budgetIncomeForMonth(curMonth);
+  // Kategorianäkymä noudattaa samaa ikkunaa kuin Yhteenveto: palkkajakso tai
+  // kalenterikuukausi. Rajat elävät palkkajaksossa, joten selauksen on pakko
+  // toimia samalla akselilla — muuten raja ja toteuma katsovat eri aikaväliä.
+  const w = dashIsPeriod() ? dashWindow() : null;
+  const base = w ? txsForWindow(w.start, w.end) : txsForMonth(curMonth);
+  const list = base.filter(t=>t.type!=='neutral'&&t.type!=='flag');
+  const s = monthSummary(base);
+  const bi = w ? periodIncomeForOffset(periodOffset) : budgetIncomeForMonth(curMonth);
   const budgetInc = bi.income;
+  const headerHTML = `<div style="grid-column:1/-1">${viewToggleHTML(w || {mode:'calendar'}, spendTotal(base))}</div>`
+    + (budgets.length ? `<div style="grid-column:1/-1">${budgets.map(budgetCardHTML).join('')}</div>` : '')
+    + `<div style="grid-column:1/-1;margin-bottom:14px"><button onclick="openBudgetModal()" style="width:100%;height:40px;background:transparent;border:1px dashed var(--border);border-radius:var(--radius);color:var(--muted);font-size:13px;cursor:pointer">+ Uusi budjetti</button></div>`;
   const map = {};
   expandList(list).forEach(tx => {
     if (tx.type==='neutral'||tx.type==='flag') return;
@@ -1804,7 +2048,7 @@ function renderKategoriat() {
   });
   const cats = Object.values(map).sort((a,b)=>b.total-a.total);
   if (!cats.length) {
-    document.getElementById('catGrid').innerHTML = `<div class="empty" style="grid-column:1/-1"><div class="empty-icon">📊</div><div class="empty-text">Ei dataa tälle kuulle.</div></div>`;
+    document.getElementById('catGrid').innerHTML = headerHTML + `<div class="empty" style="grid-column:1/-1"><div class="empty-icon">📊</div><div class="empty-text">Ei dataa tälle jaksolle.</div></div>`;
     return;
   }
 
@@ -1859,7 +2103,7 @@ function renderKategoriat() {
     </div>`;
   }).join('');
 
-  document.getElementById('catGrid').innerHTML = wantsBlock + cards;
+  document.getElementById('catGrid').innerHTML = headerHTML + wantsBlock + cards;
 }
 
 // ── VERTAILU ──────────────────────────────────────────────────────────────────
@@ -3213,6 +3457,78 @@ function handleDrop(event) {
 }
 
 // ── UTILS ─────────────────────────────────────────────────────────────────────
+
+// ── BUDJETTIMODAALI ───────────────────────────────────────────────────────────
+let budgetSelCats = [];
+function renderBudgetCatChips() {
+  const el = document.getElementById('budgetCatChips');
+  if (!el) return;
+  el.innerHTML = CATS.filter(c => c.type!=='income' && c.type!=='neutral').map(c => {
+    const on = budgetSelCats.includes(c.name);
+    return `<button type="button" onclick="toggleBudgetCat(this,'${c.name.replace(/'/g,"\\'")}')"
+      style="border:.5px solid ${on?'var(--green)':'var(--border)'};background:${on?'var(--green-light)':'var(--surface)'};
+      color:${on?'var(--green)':'var(--muted)'};border-radius:16px;padding:5px 11px;font-size:12px;cursor:pointer;transition:all .12s">
+      ${c.icon} ${esc(c.name)}</button>`;
+  }).join('');
+}
+function toggleBudgetCat(btn, name) {
+  const i = budgetSelCats.indexOf(name);
+  if (i >= 0) budgetSelCats.splice(i,1); else budgetSelCats.push(name);
+  renderBudgetCatChips();
+}
+function openBudgetModal(id) {
+  const b = id ? budgets.find(x=>x.id===id) : null;
+  document.getElementById('budgetModalTitle').textContent = b ? 'Muokkaa budjettia' : 'Uusi budjetti';
+  document.getElementById('budgetEditId').value = b ? b.id : '';
+  document.getElementById('budgetLabel').value  = b ? b.label : '';
+  document.getElementById('budgetLimit').value  = b ? b.limit_eur : '';
+  document.getElementById('budgetRollover').checked = b ? !!b.rollover : true;
+  document.getElementById('budgetDeleteBtn').style.display = b ? 'block' : 'none';
+  budgetSelCats = b ? [...(b.cats||[])] : [];
+  renderBudgetCatChips();
+  openModal('budgetModal');
+}
+async function saveBudget() {
+  const id    = document.getElementById('budgetEditId').value;
+  const label = document.getElementById('budgetLabel').value.trim();
+  const limit = parseFloat(document.getElementById('budgetLimit').value);
+  const rollover = document.getElementById('budgetRollover').checked;
+  if (!label) return showToast('Anna budjetille nimi', 'err');
+  if (!isFinite(limit) || limit <= 0) return showToast('Anna raja euroina', 'err');
+  if (!budgetSelCats.length) return showToast('Valitse vähintään yksi kategoria', 'err');
+
+  const b = {
+    id: id || label.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').substring(0,32) || `b_${Date.now()}`,
+    label, cats: [...budgetSelCats], limit_eur: limit, period: 'salary', rollover, sort: budgets.length
+  };
+  // Uudelle budjetille luontihetki heti mukaan, jotta rollover ei ulotu
+  // taaksepäin jaksoihin joissa rajaa ei vielä ollut.
+  if (!id) b.created_at = new Date().toISOString().replace('T',' ').substring(0,19);
+  const i = budgets.findIndex(x=>x.id===b.id);
+  if (i >= 0) budgets[i] = {...budgets[i], ...b}; else budgets.push(b);
+  saveLocalState();
+  closeModal('budgetModal');
+  renderTab(curTab);
+
+  if (!API_BASE) return;
+  try {
+    const r = await fetch(`${API_BASE}/budgets`, { method:'POST', headers: apiHeaders(), body: JSON.stringify(b) });
+    if (!r.ok) throw new Error(await r.text());
+    showToast('Budjetti tallennettu', 'ok');
+  } catch(e) { showToast('Tallennus D1:een epäonnistui — tallennettu vain tälle laitteelle', 'err'); }
+}
+async function deleteBudget() {
+  const id = document.getElementById('budgetEditId').value;
+  if (!id) return;
+  budgets = budgets.filter(b=>b.id!==id);
+  saveLocalState();
+  closeModal('budgetModal');
+  renderTab(curTab);
+  if (!API_BASE) return;
+  try { await fetch(`${API_BASE}/budgets/${encodeURIComponent(id)}`, { method:'DELETE', headers: apiHeaders() }); }
+  catch(e) { showToast('Poisto D1:stä epäonnistui', 'err'); }
+}
+
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 function fmtDateLbl(d) {

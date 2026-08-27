@@ -85,6 +85,172 @@ Avoimet suunnitteluasiat:
 
 ---
 
+## v1.5.0 — Päätöksiä pakottava analytiikka (SEURAAVA)
+
+**Tausta.** Palkkajakson 27.7.–26.8.2026 analyysi (27.8.2026, korttidata mukana) paljasti, että sovellus raportoi kulutuksen mutta ei muuta sitä.
+
+| | € |
+|---|---|
+| Tulot | 3 633,04 |
+| needs | −1 558,42 |
+| wants | −1 172,78 |
+| savings | −741,00 |
+| financing (remontti 721,90 + 158,02) | −879,92 |
+| **Netto** | **−719,08** |
+
+**Jakso on alijäämäinen.** 741 € siirrettiin säästöön, mutta sitä ei ansaittu — kortille jäi 849,03 € ostoja ja 40,19 € korkoa. Ilman kertaluontoista remonttia jakso menee +2,82 €:iin eli tasan nollille. Tämä on juuri se "vuotava pohja" jonka mittari on tässä backlogissa määritelty mutta jota kukaan ei ollut vielä laskenut oikein.
+
+Löydös: **harkinnanvaraisesta 1 173 eurosta 907 € (77 %) on ulkona syömistä ja juomista.** Jaksoittain: 27.4.–26.5. 718,75 € / 26 kertaa → 27.5.–26.6. 192,01 € / 13 → 27.6.–26.7. 574,69 € / 28 → **27.7.–26.8. 907,06 € / 44**. Samaan aikaan päivittäistavarat putosivat 587 → 283 €. Ruokamenot eivät kasvaneet — ne siirtyivät kaupasta ravintolaan (ulkona-osuus ruokamenoista 25 % → 49 % → 76 %).
+
+Rakenne: 44 ostosta 23 päivänä 31:stä, keskihinta 20,62 €, valtaosa haarukassa 10–20 €. **Ei ole yhtä päätöstä jonka voisi peruuttaa — frekvenssi on muuttuja, ei summa.** Kuukauden lopussa näytetty summa tulee liian myöhään ollakseen päätöstieto.
+
+---
+
+### T1 — Datan laatu ✅ TEHTY 27.8.2026
+
+**Juurisyy 1: emoji-haamusäännöt.** `rules`-taulussa oli 28 emoji-etuliitteistä sääntöä (id 132–164) jotka jäivät emoji-siivouksesta. `categorizeTx()` iteroi säännöt järjestyksessä `priority DESC, id ASC` ja **ensimmäinen osuma voittaa** — kaikilla prioriteetti 0, joten vanha emoji-sääntö voitti aina korjatun. Systemaattinen seuraus: päivittäistavarat, liikkuminen ja asuminen luokittuivat `wants`-tyypiksi.
+
+**Juurisyy 2: `finnair`-sääntö osui kaikkeen.** Sääntö id 119 (`kw='finnair'` → Matkailu — harrastus / wants) vertautuu kenttiin `payee + selitys + viesti`, ja **jokaisen Finnair Visa -tapahtuman `selitys` on "Finnair Visa"**. Sääntö osui siis jokaiseen korttitapahtumaan jolla ei ollut osumaa pienemmällä id:llä. Virhe jäi huomaamatta koska korttia käytetään pääosin matkustamiseen — mutta se luokitteli mm. 721,90 € remonttitarvikkeita matkailuksi. Korjattu: `kw='finnair - '` (osuu enää `FINNAIR - INFLI` -tyyppisiin ostoihin, ei selitykseen).
+
+Tehdyt korjaukset D1:een:
+- Poistettu 22 emoji-sääntöä joilla oli puhdas vastine; korjattu 6 vastineetonta (id 132/158/162/164 → `Ostokset`, id 134 → `Asuminen`/`needs`, id 159 → `Päivittäistavarat`/`needs`)
+- Poistettu sääntö id 29 `verohallinto → Muut/wants` (osui sekä palautuksiin että maksuihin; nyt palautus → `income`, maksu → `— Kategorisoimatta` tarkistettavaksi)
+- Korjattu sääntö id 119 `finnair` (ks. yllä), id 111 `alko` → `Alkoholi` (oli `Baarit`), id 231 `ptl*netrauta.fi` → `Asuminen — remontti`/`financing`
+- Taloyhtiölasku tallennettu toistuvana splittinä (sääntö id 134, priority 10): **vastike 289,80 (46,3013 %) + vesi 40,00 (6,3908 %) + rahoitusvastike 296,10 (47,3079 %)**. Prosentteina, joten jako pysyy oikeana vaikka kk-summa muuttuisi. Molemmat 625,90 €:n tapahtumat päivitetty.
+- Uusi kategoria `Asuminen — remontti`, tyyppi `financing` — ei sotke needs/wants/savings-suhteita eikä ravintolarajan signaalia, mutta näkyy kassavirrassa
+- Uudelleenluokiteltu yhteensä ~20 tapahtumaa (Asuminen→needs, Lainan nosto→financing, Alko→Alkoholi 9 kpl, Netrauta→remontti, Anthropic→Suoratoisto & liittymät, veronpalautus→income)
+
+**Jäljellä:**
+- [ ] **Estä uusiutuminen.** Kaksi juurisyytä kolmesta johtui samasta asiasta: sääntötaulussa saa olla useita osumia samaan tapahtumaan, ja voittaja ratkeaa id-järjestyksellä. Korjaus: `UNIQUE(kw)` tai vähintään varoitus UI:hin kun uusi sääntö osuisi tapahtumiin joilla on jo sääntö. Harkitse myös että `categorizeTx()` valitsisi **pisimmän** osuvan avainsanan lyhimmän sijaan.
+- [ ] Tarkista `Lainan nosto` −158,02 € (31.7., IBAN FI65 5600…). Nimi sanoo nosto, merkki sanoo maksu.
+- [ ] 6 duplikaattiavainsanaa ilman tyyppikonfliktia (compass group, elettra, riihitahti bistro, ptl*stockmann, riihimaen kaupunki, mob.pay*veikkaus). Vain kategoria heittää → kosmeettinen.
+
+### T2 — Korttidata ⚠️ OSITTAIN
+
+- ✅ Finnair Visa tuotu 22.8.2026 asti
+- ✅ **OP Visa Credit: ei toimenpiteitä.** Kortilla ei tehdä ostoja eikä siitä saa tiliotetta — tapahtumat on vietävä käsin. Saldo ja korko pysyvät silti mukana `accounts`-taulun kautta.
+- [ ] Hyväksymiskriteeri: jokaisen aktiivisen tilin `MAX(date)` on korkeintaan 7 vrk vanha
+- [ ] Lisää Yhteenveto-välilehdelle varoitus kun jonkin tilin data on yli 14 vrk vanha — tämä analyysi oli ensin 719 € liian optimistinen juuri siksi ettei puuttuvasta datasta varoitettu mitenkään
+
+### T3 — Palkkajaksologiikka 27.→26. ✅ TEHTY 27.8.2026 (v1.7.0)
+
+**Arvio oli väärä.** Tämä oli merkitty "isoksi refaktoroinniksi", mutta logiikka oli jo olemassa ja toimiva: `effectivePayday()` (siirtää palkkapäivän edelliselle pankkipäivälle), `periodBounds(off)`, `dashWindow()`, `periodIncomeForOffset()` ja `minPeriodOffset()` rakennettiin v1.1.0:ssa Yhteenveto-välilehden jaksonäkymää varten. Ainoa este oli yksi rivi:
+
+```js
+function dashIsPeriod() { return curTab==='yhteenveto' && viewMode==='period'; }
+```
+
+Jaksonäkymä oli lukittu yhteen välilehteen. Korjaus:
+
+```js
+const PERIOD_TABS = ['yhteenveto','kategoriat'];
+function dashIsPeriod() { return PERIOD_TABS.includes(curTab) && viewMode==='period'; }
+```
+
+Tämän jälkeen `changeMonth()`, `updateMonthLabels()` ja `updateMobTotal()` toimivat Kategoriat-välilehdellä ilman muutoksia. `renderKategoriat()` lukee nyt `dashWindow()`-ikkunan ja `periodIncomeForOffset()`-tulon kalenterikuukauden sijaan.
+
+- ✅ `periodIdFor(off)` → `2026-P07` (jakson alkupalkkapäivän kuukausi)
+- ✅ Reunatapaus katettu: jaksossa 27.6.–26.7. ei ole palkkaa, 27.5.–26.6. on kaksi. `periodIncomeForOffset()` laskee tulon palkkapäivästä palkkapäivään ja putoaa `monthly_salary`-ennusteeseen kun jakson tulo alittaa 40 % kynnyksen.
+- ✅ Testattu: `node scripts/test-budgets.js` (17 testiä)
+
+### T4 — `budgets`-taulu + jäljellä-luku ✅ TEHTY 27.8.2026 (v1.7.0)
+
+**Skeema muuttui suunnitellusta.** Alkuperäinen `cat TEXT PRIMARY KEY` olisi ollut virhe: ulkona syöminen hajautuu viiteen kategoriaan, ja per-kategoria-rajan kiertää vaihtamalla kategoriaa (lounas → ravintola → kahvila). Budjetti kohdistuu siksi kategoria**joukkoon**:
+
+```sql
+CREATE TABLE IF NOT EXISTS budgets (
+  id         TEXT PRIMARY KEY,
+  label      TEXT NOT NULL,
+  cats       TEXT NOT NULL,                    -- JSON-taulukko kategorianimiä
+  limit_eur  REAL NOT NULL,
+  period     TEXT NOT NULL DEFAULT 'salary',   -- salary | month
+  rollover   INTEGER NOT NULL DEFAULT 0,       -- 1 = ylitys vähennetään seuraavasta jaksosta
+  sort       INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT
+);
+```
+
+Toteumalle ei tehty omaa taulua — se lasketaan tapahtumista lennossa (`budgetSpent()`), samoin rollover edellisen jakson tapahtumista. Yksi totuuden lähde, ei synkattavaa.
+
+- ✅ Migraatio `api/migrations/005_budgets.sql`, ajettu D1:een
+- ✅ API: `GET /budgets`, `POST /budgets` (upsert), `PUT /budgets/:id`, `DELETE /budgets/:id`
+- ✅ UI: `budgetCardHTML()` — **ensisijainen luku on jäljellä (32px)**, käytetty/raja toissijaisena rivinä. Mukana ostosten lukumäärä, koska 44 ostosta à 20,62 € ei ole yksi päätös vaan 44 — summa yksinään piilottaa sen että kyse on tottumuksesta.
+- ✅ Modaali budjettien luontiin: nimi, raja, kategoriavalinta chipeinä, rollover-valinta
+- ✅ Aloitusbudjetti luotu: `ulkona`, 550 €, rollover päällä
+- ✅ Testattu: `node scripts/test-budgets.js`
+
+Aloitusrajat datasta johdettuna:
+
+| Kategoriaryhmä | Toteuma 27.7.–26.8. | Raja jakso 1 | Tavoite jakso 3 |
+|---|---|---|---|
+| Ravintolat + Baarit + Kahvilat + Lounas + Alkoholi | 907 € | **550 €** (124 €/vk) | 400 € |
+| Päivittäistavarat | 283 € | ei kattoa — tämän kuuluu nousta | ~450 € |
+
+550 € on täsmälleen jakson 27.6.–26.7. taso: aloitusraja jonka on jo kerran alittanut on ainoa jonka noudattamisesta on näyttöä.
+
+- ✅ **Seuraus ylitykselle toteutettu:** `rollover`-lippu. Edellisen jakson ylitys vähennetään tämän jakson rajasta (`budgetStatus().carry`). Ilman tätä raja on koriste jonka voi ylittää ilman että mikään muuttuu.
+
+**Deploy-toimet (sinä):**
+1. `cd api && npx wrangler deploy` — API:n uudet `/budgets`-reitit
+2. Pushaa repo → CF Pages deployaa `app/`
+3. Migraatio on jo ajettu D1:een (taulu + aloitusbudjetti olemassa)
+
+### T5 — Viikkopalaute ✅ TEHTY 27.8.2026 (v1.8.0)
+
+Kortti Yhteenvedon ylimpänä (`#weekCard`), ensimmäisenä mitä sovelluksen avatessa näkee.
+
+**Viikkoraja on dynaaminen, ei jaksoraja/4,43.** Suunniteltu kiinteä jako olisi valehdellut: se näyttäisi yhä "124 € tällä viikolla" vaikka jakso olisi jo 300 € yli. Toteutus:
+
+```
+päivätahti      = jäljellä oleva jaksobudjetti / jäljellä olevat päivät
+viikon liikkumavara = päivätahti × tämän viikon jäljellä olevat päivät
+```
+
+Ylitys alkuviikosta kutistaa loppujakson tahtia itsestään — erillistä viikkorolloveria ei tarvita, eikä luku voi olla epäsynkassa jaksobudjetin kanssa. Kun jakso menee yli, luku menee negatiiviseksi ja teksti vaihtuu muotoon "yli jaksobudjetin".
+
+- ✅ Viikko = ma–su (arkirytmi), leikattuna jakson sisään. Jakson reunaviikot ovat lyhyempiä ja se on oikein.
+- ✅ **Frekvenssi euromäärän rinnalla:** "käytetty tällä viikolla 84 € · 5 ostosta". 44 ostosta à 20,62 € ei ole yksi päätös vaan 44.
+- ✅ Edellisen viikon tulos kortin alalaidassa: toteuma vs. päiväsuhteinen osuus jakson rajasta. Vertailuluku on laskettavissa jälkikäteen mille tahansa viikolle, toisin kuin dynaaminen tahti joka riippuu kuljetusta polusta.
+- ✅ Väri: vihreä normaali, kulta kun päivätahti alle 40 % alkuperäisestä, punainen yli.
+
+**Kaksi bugia jotka löytyivät vasta testeissä:**
+
+1. **Jakso ei ole 31 päivää.** 27.9.2026 on sunnuntai → palkkapäivä siirtyy pe 25.9:aan → jakso 27.8.–25.9. on **29 päivää**. Kiinteä "/4,43" olisi antanut väärän tahdin joka kerta kun palkkapäivä osuu viikonlopulle. Nyt tahti lasketaan todellisista päivistä.
+2. **Rollover ulottui budjettia edeltäviin jaksoihin.** Uusi budjetti olisi aloittanut −354,06 € miinuksella heinäkuun toteuman perusteella — rajaa jota ei ollut olemassa ei voi olla rikkonut. Lisätty `budgetGovernedAt()`: carry lasketaan vain jaksoista jotka alkoivat budjetin luonnin jälkeen.
+
+- ✅ Testattu: `node scripts/test-budgets.js` — 39 testiä
+
+**Push-ilmoitus jäi tekemättä tarkoituksella** — ks. T8.
+
+### T8 — Push-ilmoitus viikkoyhteenvedosta (HARKINNASSA)
+
+Kortti ratkaisee palautesyklin pituuden, mutta vaatii että avaat sovelluksen. Push toisi yhteenvedon ilman avaamista.
+
+Vaatii: VAPID-avainparin, `push_subscriptions`-taulun, service workerin `push`-handlerin, allekirjoituksen Workerissa (Web Crypto, `nodejs_compat` on jo päällä) ja Workers Cron Triggerin sunnuntai-illaksi. iOS vaatii että PWA on asennettu kotivalikkoon.
+
+Päätä vasta kun kortti on ollut käytössä pari jaksoa: jos avaat sovelluksen muutenkin viikoittain, push ei tuo lisäarvoa vaan pelkkää ylläpidettävää.
+
+### T6 — Toistuvien kulujen tunnistus
+
+Ainoa säästö joka ei vaadi tahdonvoimaa: päätät kerran, vaikutus toistuu joka kuukausi.
+
+- [ ] Payee-normalisointi: sama kauppias + sama summa ±5 % ≥ 3 kk peräkkäin → "Kiinteät kulut" -lista
+- [ ] Yhteensä €/kk, osuus tuloista, muutosilmoitus ("uusi tilaus havaittu")
+- [ ] **Ensimmäinen tarkistettava rivi: Elisa 194,31 € (27.7.–26.8.), edellinen jakso 130,63 €.** Sisältääkö laite-erän? Jos kyllä, päättymispäivä näkyviin; jos ei, siellä on ~60 €/kk selittämätöntä.
+- [ ] Kiinteä pohja tiedossa: taloyhtiölasku 625,90 €/kk (vastike + vesi + rahoitusvastike), toistaiseksi muuttumaton
+
+### T7 — Remonttiseuranta (UUSI)
+
+Remontin kesto on auki. Jos kuluja tulee lisää, ne syövät kategoriarajojen uskottavuuden joka jaksossa ellei niitä eroteta.
+
+- [ ] Oma budjetti kategorialle `Asuminen — remontti`, seuranta erillään NWS-suhteista
+- [ ] Kumulatiivinen remonttikulu näkyviin (nyt 721,90 €)
+- [ ] Päätä rahoitustapa: nyt remontti meni kortille 15,51 % korolla. Jos remontti jatkuu, tämä on kallein mahdollinen tapa rahoittaa se.
+
+---
+
+
 ## Kehitysjonossa (prioriteettijärjestyksessä)
 
 ### "Vuotava pohja" — todellinen kassavirta-mittari ✅ TOTEUTETTU (v1.4.x)

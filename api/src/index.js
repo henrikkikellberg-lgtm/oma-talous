@@ -89,6 +89,18 @@ export default {
         if (method === 'DELETE') return handleLoansDelete(env, loanMatch[1]);
       }
 
+      // Budgets
+      if (path === '/budgets') {
+        if (method === 'GET')  return handleBudgetsList(env);
+        if (method === 'POST') return handleBudgetsUpsert(req, env);
+      }
+      const budgetMatch = path.match(/^\/budgets\/(.+)$/);
+      if (budgetMatch) {
+        const bid = decodeURIComponent(budgetMatch[1]);
+        if (method === 'PUT')    return handleBudgetsUpsert(req, env, bid);
+        if (method === 'DELETE') return handleBudgetsDelete(env, bid);
+      }
+
       return err('Not found', 404);
     } catch (e) {
       console.error(e);
@@ -460,6 +472,51 @@ async function handleLoansUpdate(req, env, id) {
 
 async function handleLoansDelete(env, id) {
   await env.DB.prepare('DELETE FROM loans WHERE id=?').bind(id).run();
+  return ok({ ok: true });
+}
+
+// ── BUDGETS ───────────────────────────────────────────────────────────────────
+// Budjetti kohdistuu kategoriaJOUKKOON, ei yhteen kategoriaan: ulkona syöminen
+// hajautuu viiteen kategoriaan, ja per-kategoria-raja kierretään vaihtamalla
+// kategoriaa. Toteuma lasketaan asiakaspäässä tapahtumista — täällä vain CRUD.
+function budgetRow(r) {
+  let cats = [];
+  try { cats = JSON.parse(r.cats || '[]'); } catch (e) { cats = []; }
+  return { ...r, cats, rollover: !!r.rollover };
+}
+
+async function handleBudgetsList(env) {
+  const { results } = await env.DB.prepare('SELECT * FROM budgets ORDER BY sort, label').all();
+  return ok(results.map(budgetRow));
+}
+
+// Sama handler luo ja päivittää: id polusta (PUT) tai bodystä (POST).
+async function handleBudgetsUpsert(req, env, idFromPath) {
+  const b = await req.json();
+  const id = idFromPath || b.id;
+  if (!id) return err('Missing id');
+  if (!b.label) return err('Missing label');
+  const cats = Array.isArray(b.cats) ? b.cats : [];
+  if (!cats.length) return err('Budget must cover at least one category');
+  const limit = Number(b.limit_eur);
+  if (!isFinite(limit) || limit <= 0) return err('limit_eur must be a positive number');
+  const period = b.period === 'month' ? 'month' : 'salary';
+
+  await env.DB.prepare(
+    `INSERT INTO budgets (id,label,cats,limit_eur,period,rollover,sort)
+     VALUES (?,?,?,?,?,?,?)
+     ON CONFLICT(id) DO UPDATE SET
+       label=excluded.label, cats=excluded.cats, limit_eur=excluded.limit_eur,
+       period=excluded.period, rollover=excluded.rollover, sort=excluded.sort,
+       updated_at=datetime('now')`
+  ).bind(id, b.label, JSON.stringify(cats), limit, period, b.rollover ? 1 : 0, b.sort || 0).run();
+
+  return ok({ id });
+}
+
+async function handleBudgetsDelete(env, id) {
+  const result = await env.DB.prepare('DELETE FROM budgets WHERE id=?').bind(id).run();
+  if (result.meta?.changes === 0) return err('Budget not found', 404);
   return ok({ ok: true });
 }
 
