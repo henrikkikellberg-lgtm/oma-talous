@@ -227,6 +227,66 @@ transition: opacity 0.25s ease;  /* toast-viestit */
 
 ---
 
+## Tapahtumatyypit ja kaksoislaskenta
+
+Jokaisella tapahtumalla on `type`. Tyyppi ratkaisee näkyykö tapahtuma analytiikassa.
+
+| type | Merkitys | Näkyy budjeteissa / NWS-jakaumassa |
+|------|----------|-----------------------------------|
+| `income` | Tulo | kyllä (tulopuolella) |
+| `needs` | Välttämätön meno | kyllä |
+| `wants` | Harkinnanvarainen meno | kyllä |
+| `savings` | Säästö / sijoitus | kyllä |
+| `financing` | Rahoitus (asuntokauppa, remontti) | kyllä |
+| `neutral` | Raha liikkui, mutta ei ole kulutusta | **EI** |
+| `flag` | Kategorisoimaton / tarkistettava | **EI** |
+
+`neutral` ja `flag` suodatetaan pois kaikesta analytiikasta (`t.type!=='neutral' && t.type!=='flag'`).
+Kategoria **MobilePay & siirrot** on `neutral`-tyypin säilytyspaikka — se ei ole kululuokka.
+Sinne laitettu oikea kulu katoaa appista kokonaan, ilman varoitusta.
+
+### Milloin `neutral` on oikein
+
+1. **Sisäinen siirto omien tilien välillä** — Perus ↔ Saasto ↔ Lipas ↔ Revolut. Raha ei poistu taloudesta.
+2. **Luottokortin laskun maksu, JOS kortin ostot tuodaan omana tilinä.** Ostot kirjautuvat kertaalleen korttitilille (OPCredit, Finnair); laskun maksu käyttötililtä on pelkkä siirto. Ilman tätä sama euro laskettaisiin kahdesti.
+3. **Positiivinen rivi luottokorttitilillä** (palautus, maksusuoritus).
+4. **`savings`-rivi säästötilin sisällä** → muunnetaan `neutral`iksi. Säästäminen mitataan siinä hetkessä kun raha lähtee käyttötililtä; muuten Perus→Lipas-siirto + lippaan PANO-rivi laskettaisiin kahdesti.
+5. **Positiivinen rivi säästötilillä** — ilman tätä `categorize()`:n fallback tekisi siitä palkkatuloa.
+
+### Milloin `neutral` on VÄÄRIN — sokea piste
+
+> **Tarkistussääntö: luottokortin tai luoton maksu saa olla `neutral` VAIN jos maksun vastapuoli löytyy `accounts`-taulusta.**
+
+Jos kortin omia tapahtumia ei tuoda, sen laskun maksu on ainoa jälki kulutuksesta. Neutraaliksi merkittynä kulutus katoaa: ei ostoina eikä maksuna. Tämä ei näy virheenä missään — luvut vain ovat hiljaa liian pieniä.
+
+**Nimiansa: maksunsaaja on kortin myöntäjäpankki, ei kortin nimi.** `accounts`-taulusta ei löydy riviä nimellä joka lukee tiliotteella. Tunnetut parit:
+
+| Tiliotteen maksunsaaja | Tili `accounts`-taulussa | Sääntö |
+|---|---|---|
+| `Aktia Bank Abp` | `Finnair` (Finnair Visa) | `neutral` ✓ oikein — Aktia laskuttaa Finnair Visan |
+| `OP Vähittäisasiakkaat Oyj` | `OPCredit` (OP Visa Credit) | tarkista tapauskohtaisesti — sama nimi laskuttaa myös muuta |
+
+Aktia-maksu Perus-tililtä muodostaa parin Finnair-tilin positiivisen rivin kanssa (sama päivä, sama summa, `selitys = "Finnair Visa"`). Molemmat `neutral`, ostot laskettu kertaalleen Finnair-tilillä. Esim. 31.8.2026 −200 € / +200 € ja 3.9.2026 −1 000 € / +1 000 €.
+
+**Ennen kuin merkkaat neutraalin luottomaksun virheeksi:** etsi sama summa ja päivä luottokorttitilin puolelta. Jos pari löytyy, kirjanpito on kunnossa vaikka nimi näyttäisi tuntemattomalta.
+
+### Tunnetut päällekkäisyydet ja niiden hoito
+
+- **`loans.included_in_tx = 1`** → erä näkyy jo tapahtumissa. Älä lisää sitä erikseen mihinkään summaan.
+- **Elisan lasku on erämaksuja, ei liittymämaksu.** 4.9.2026 lasku 180,33 € = iPhone 34,68 + Huawei-mesh 4,13 + Roborock 54,06 + MacBook Pro 87,46. Kategoria `Suoratoisto & liittymät` / `needs` on harhaanjohtava — sisältö on velanlyhennystä.
+- **CAT_DEST-arvio** lisätään säästötilin saldoon vain jos tililtä EI ole omaa tiliotedataa. Oma data voittaa aina arvion.
+- **Duplikaattihaku** vertaa vain saman tilin sisällä. Sama päivä + sama summa eri tileillä on normaali sisäinen siirto, ja molemmat puolet tarvitaan.
+- **Säännöt `kellberg hen` / `kaarlo henri`** osuvat kaikkiin ulosmeneviin siirtoihin näillä nimillä. Tarkista rivi riviltä ennen automaattikorjausta.
+
+### Tarkistuslista ennen kuin vastaat "mihin raha meni"
+
+1. Mihin päivään data loppuu? Viimeisin `MAX(date)` ei ole sama kuin tämä päivä.
+2. Kuinka paljon jaksolla on `neutral`-rivejä? Jos ne ovat suurin erä, kysy mitä ne ovat ennen johtopäätöksiä.
+3. Onko jokaisen `neutral`-luottomaksun vastapuoli `accounts`-taulussa? Jos ei → sokea piste.
+4. Onko jaksolla `flag`-rivejä kategorisoimatta?
+
+---
+
 ## Kriittiset säännöt
 
 1. **Tilin nykysaldo = laskettu, ei opening_balance.** Älä koskaan käytä `accounts.opening_balance` sellaisenaan analyyseissa tai raporteissa. Oikea saldo: `opening_balance + SUM(transactions.amount WHERE account = key)`. Käytä aina LEFT JOIN -kyselyä (ks. BACKLOG — AI-analyysi-kohta).
