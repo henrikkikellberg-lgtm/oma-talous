@@ -297,6 +297,18 @@ Aktia-maksu Perus-tililtä muodostaa parin Finnair-tilin positiivisen rivin kans
 4. **Ei frameworkeja frontendissä.** Vanilla JS, ei npm-riippuvuuksia app/-hakemistossa.
 5. **D1-kyselyt Workers-koodissa** — ei suoria D1-kutsuja frontendistä.
 
+## Deploy
+
+| Osa | Miten | Huom |
+|-----|-------|------|
+| Frontend (`app/`) | **`make push`** — Pages-projekti `oma-talous` on kytketty GitHubiin ja rakentaa itsensä main-pushista | Älä aja `wrangler pages deploy` käsin |
+| API (`api/`) | `make deploy-api` | Erillinen, ei lähde pushista |
+| D1-migraatiot | `cd api && wrangler d1 execute oma-talous-db --remote --file=migrations/00X_....sql` | Aja ENNEN kuin uusi API-koodi menee tuotantoon |
+
+⚠️ **Repossa ei ole Pages-configia** (`.wrangler/` on gitignoressa, eikä juuressa ole `wrangler.toml`:ia). Siksi `wrangler pages deploy app/` ilman `--project-name`-lippua ei tiedä mihin projektiin `app/` kuuluu ja **tarjoaa uuden projektin luomista** — hyväksyminen veisi buildin uuteen URLiin jota puhelimen PWA ei näe. Hätädeploy on `make deploy-app-force`, jossa nimi on kovakoodattu.
+
+Tuotanto: https://oma-talous.pages.dev · API: https://oma-talous-api.henrikki-kellberg.workers.dev
+
 ## Git-workflow
 
 ```bash

@@ -1,6 +1,6 @@
 WRANGLER := $(shell command -v wrangler 2>/dev/null || echo ~/.npm-global/bin/wrangler)
 
-.PHONY: push deploy-api deploy-app dev-api dev-app schema
+.PHONY: push deploy-api deploy-app deploy-app-force dev-api dev-app schema
 
 # Nopea commit + push
 # Käyttö: make push m="commit viesti"
@@ -21,9 +21,23 @@ schema:
 deploy-api:
 	cd api && $(WRANGLER) deploy
 
-# Deploy frontend (Pages)
+# Frontend EI deployata käsin.
+# Pages-projekti 'oma-talous' on kytketty GitHubiin (Git Provider: Yes) ja
+# rakentaa itsensä jokaisesta main-pushista. 'make push' riittää.
+#
+# Suora 'wrangler pages deploy app/' git-kytkettyyn projektiin menee build-pipelinen
+# ohi ja kysyy projektin nimeä (repossa ei ole Pages-configia) — silloin on helppo
+# luoda vahingossa kokonaan uusi projekti uuteen URLiin.
 deploy-app:
-	$(WRANGLER) pages deploy app/
+	@echo "Frontend deployautuu automaattisesti GitHub-pushista → https://oma-talous.pages.dev"
+	@echo "Käytä: make push m=\"viesti\""
+	@echo ""
+	@echo "Jos GitHub-buildi on jumissa ja tarvitset hätädeployn: make deploy-app-force"
+
+# Hätävara: ohittaa GitHub-buildin. Projektin nimi on pakko antaa, muuten wrangler
+# tarjoaa uuden projektin luomista.
+deploy-app-force:
+	$(WRANGLER) pages deploy app/ --project-name=oma-talous --branch=main
 
 # Paikallinen dev
 dev-api:
