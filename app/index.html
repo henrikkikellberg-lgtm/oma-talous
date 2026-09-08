@@ -218,6 +218,7 @@ tr:hover td{background:var(--surface2)}
 .modal-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 20px}
 .modal-title{font-size:18px;font-weight:500;margin-bottom:20px}
 .modal-cancel{width:100%;padding:14px;border:none;background:none;color:var(--muted);font-size:14px;font-family:'Inter',sans-serif;cursor:pointer;margin-top:8px}
+.modal-actions{position:sticky;bottom:0;z-index:3;display:flex;gap:8px;margin-top:12px;padding:10px 0 8px;background:var(--surface);box-shadow:0 -10px 14px -10px rgba(14,28,45,.18)}
 
 /* ── CAMERA ──────────────────────────────────────────── */
 .camera-area{aspect-ratio:4/3;background:var(--surface2);border-radius:var(--radius);border:1.5px dashed var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;overflow:hidden;position:relative;margin-bottom:12px}
@@ -531,8 +532,8 @@ tr:hover td{background:var(--surface2)}
         Tallenna toistuvana jakona (käytetään automaattisesti tulevia maksuja)
       </label>
     </div>
-    <div style="display:flex;gap:8px;margin-top:12px">
-      <button class="btn btn-secondary" id="txSplitToggleBtn" style="height:44px;flex:1;font-size:13px" onclick="toggleSplitEditor()">✂️ Jaa</button>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="txSplitToggleBtn" style="height:44px;flex:1;font-size:13px" onclick="toggleSplitEditor()">✂️ Jaa kategorioihin</button>
       <button class="btn btn-primary" id="txSaveBtn" style="height:44px;flex:2" onclick="saveTxEdit()">Tallenna</button>
     </div>
     <button class="btn btn-full" style="background:var(--red-light);color:var(--red);border:none;height:44px;border-radius:var(--radius);font-size:15px;font-weight:500;margin-top:6px" onclick="deleteTxEdit()">Poista tapahtuma</button>
@@ -631,7 +632,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.12.1';
+const APP_VERSION = '1.12.2';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
