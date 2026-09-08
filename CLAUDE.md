@@ -280,7 +280,7 @@ Aktia-maksu Perus-tililtä muodostaa parin Finnair-tilin positiivisen rivin kans
 
 ### Tarkistuslista ennen kuin vastaat "mihin raha meni"
 
-1. Mihin päivään data loppuu? Viimeisin `MAX(date)` ei ole sama kuin tämä päivä.
+1. **`MAX(transactions.date)` EI kerro datan tuoreutta.** Tili jolla ei ole ollut tapahtumia (Revolut, säästötili) näyttää täsmälleen samalta kuin tili jonka tiliotetta ei ole tuotu kuukauteen. Ensimmäinen on kunnossa, toinen tekee kaikista luvuista hiljaa liian pieniä. Ainoa luotettava signaali on `accounts.last_import_at` — leima siitä milloin tiliote tuotiin, päivittyy myös kun tiedostossa ei ollut yhtään riviä.
 2. Kuinka paljon jaksolla on `neutral`-rivejä? Jos ne ovat suurin erä, kysy mitä ne ovat ennen johtopäätöksiä.
 3. Onko jokaisen `neutral`-luottomaksun vastapuoli `accounts`-taulussa? Jos ei → sokea piste.
 4. Onko jaksolla `flag`-rivejä kategorisoimatta?

@@ -354,7 +354,32 @@ async function handleCSVImport(req, env) {
     ).bind(row.id,row.date,row.payee,row.selitys,row.viesti,row.amount,cat.cat,cat.type,row.source,row.account||'Perus',row.month,cat.splits?JSON.stringify(cat.splits):null).run();
     added++;
   }
+  await stampImport(env, rows, account);
   return ok({ added, total: rows.length, skippedDuplicates });
+}
+
+// Merkitsee tuontihetken tilikohtaisesti. Ajetaan AINA, myös kun added === 0:
+// tyhjä tiliote on validi tulos ("ei tapahtumia") eikä sama asia kuin tuomatta
+// jäänyt tiliote, ja vain tämä leima erottaa ne toisistaan.
+async function stampImport(env, rows, accountParam) {
+  const now = new Date().toISOString();
+  const through = {};
+  for (const r of rows) {
+    const k = r.account || accountParam || 'Perus';
+    if (!through[k] || r.date > through[k]) through[k] = r.date;
+  }
+  if (accountParam && !(accountParam in through)) through[accountParam] = null;
+  for (const [key, maxDate] of Object.entries(through)) {
+    await env.DB.prepare(
+      `UPDATE accounts
+          SET last_import_at = ?1,
+              last_import_through = CASE
+                WHEN ?2 IS NULL THEN last_import_through
+                WHEN last_import_through IS NULL OR ?2 > last_import_through THEN ?2
+                ELSE last_import_through END
+        WHERE key = ?3`
+    ).bind(now, maxDate, key).run();
+  }
 }
 
 // Tunnistaa sen, että samasta reaalimaailman tapahtumasta on jo rivi tietokannassa

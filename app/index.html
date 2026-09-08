@@ -632,7 +632,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.12.2';
+const APP_VERSION = '1.13.0';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -1693,12 +1693,17 @@ function updateMobTotal() {
 
 function updateFlagBanner() {
   const n = txs.filter(t=>t.type==='flag').length;
+  const stale = staleAccounts();
+  const parts = [];
+  if (n > 0) parts.push(`${n} kategorisoimatta`);
+  if (stale.length) parts.push(`${stale.length} tilin tiliote tuomatta`);
+  const show = parts.length > 0;
   const bd = document.getElementById('flagBannerDesk');
   const bm = document.getElementById('flagBannerMob');
   const bt = document.getElementById('flagBannerMobText');
-  if (bd) { bd.style.display=n>0?'inline':'none'; bd.textContent=`⚠️ ${n} kategorisoimatta`; }
-  if (bm) bm.style.display = n>0?'flex':'none';
-  if (bt) bt.textContent = `⚠️ ${n} tapahtumaa ilman kategoriaa`;
+  if (bd) { bd.style.display=show?'inline':'none'; bd.textContent=`⚠️ ${parts.join(' · ')}`; }
+  if (bm) bm.style.display = show?'flex':'none';
+  if (bt) bt.textContent = `⚠️ ${parts.join(' · ')}`;
 }
 
 function renderTab(tab) {
@@ -2710,6 +2715,61 @@ function deleteLoan() {
 
 // ── SALDOT ────────────────────────────────────────────────────────────────────
 let saldotEditMode = false;
+// ── DATAN TUOREUS ────────────────────────────────────────────────────────────
+// Tuoreutta EI voi päätellä viimeisimmästä tapahtumapäivästä: tili jolla ei ole
+// ollut tapahtumia näyttää samalta kuin tili jonka tiliotetta ei ole tuotu.
+// Ainoa luotettava signaali on accounts.last_import_at — milloin tiliote tuotiin.
+const IMPORT_WARN_DAYS = 10;
+const IMPORT_STALE_DAYS = 21;
+
+function daysSince(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d)) return null;
+  return Math.floor((Date.now() - d.getTime()) / 86400000);
+}
+
+function importFreshness(acct) {
+  const n = daysSince(acct && acct.last_import_at);
+  if (n === null) return {n:null, stale:true, color:'var(--dim)',
+    text:'Tuontia ei kirjattu — tuo tiliote kerran, niin tuoreus alkaa näkyä'};
+  const when = n===0 ? 'tänään' : n===1 ? 'eilen' : n+' pv sitten';
+  const thru = acct.last_import_through ? ' · aineisto ' + fmtDateLbl(acct.last_import_through) : '';
+  return {
+    n,
+    stale: n >= IMPORT_STALE_DAYS,
+    color: n >= IMPORT_STALE_DAYS ? 'var(--red)' : n >= IMPORT_WARN_DAYS ? 'var(--gold)' : 'var(--dim)',
+    text: 'Tuotu ' + when + thru
+  };
+}
+
+function staleAccounts() {
+  return accounts.filter(a => { const f = importFreshness(a); return f.stale; });
+}
+
+function freshnessLineHTML(acct) {
+  const f = importFreshness(acct);
+  return `<div style="font-size:11px;color:${f.color};margin-top:4px">${f.n>=IMPORT_WARN_DAYS||f.n===null?'⚠️ ':''}${esc(f.text)}</div>`;
+}
+
+function freshnessCardHTML() {
+  const stale = staleAccounts();
+  if (!stale.length) {
+    return `<div class="saldo-card" style="border-top:2.5px solid var(--green)">
+      <div class="saldo-lbl">Datan tuoreus</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">Kaikkien ${accounts.length} tilin tiliote tuotu ${IMPORT_STALE_DAYS} päivän sisällä.</div>
+    </div>`;
+  }
+  return `<div class="saldo-card" style="border-top:2.5px solid var(--red)">
+    <div class="saldo-lbl" style="color:var(--red)">⚠️ Datan tuoreus — ${stale.length} tiliä jäljessä</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:6px">${stale.map(a=>{
+      const f = importFreshness(a);
+      return `<div style="display:flex;justify-content:space-between;padding:3px 0"><span>${esc(a.label)}</span><span style="color:${f.color}">${f.n===null?'ei tuontia':f.n+' pv'}</span></div>`;
+    }).join('')}</div>
+    <div style="font-size:11px;color:var(--dim);margin-top:6px">Näiden tilien tapahtumia puuttuu, joten kaikki budjetti- ja kategorialuvut ovat liian pieniä.</div>
+  </div>`;
+}
+
 function saldotSummaryHTML() {
   const todayMk = fmtMonthKey(new Date());
   const asOf = curMonth === todayMk ? todayISO() : lastDayOfMonth(curMonth);
@@ -2722,6 +2782,7 @@ function saldotSummaryHTML() {
       <div>
         <div class="saldo-lbl">${esc(b.label)}</div>
         <div style="font-size:11px;color:var(--dim)">${b.kind==='savings'?'Säästö':'Käyttötili'} · alkaen ${fmtDateLbl(b.opening_date)}</div>
+        ${freshnessLineHTML(accountByKey(b.key))}
       </div>
       <div style="font-size:20px;font-weight:300;color:var(--text)">${eur(b.balance)}</div>
     </div>`;
@@ -2745,6 +2806,7 @@ function saldotSummaryHTML() {
         <span>${b.apr?('Korko '+b.apr.toLocaleString('fi-FI')+'% · ~'+eur(b.est_monthly_interest)+'/kk'):''}</span>
       </div>
       ${b.monthly_target ? `<div style="font-size:11px;color:var(--blue);font-weight:500;margin-top:4px">Tavoitelyhennys ${eur(b.monthly_target)}/kk</div>` : ''}
+      ${freshnessLineHTML(accountByKey(b.key))}
     </div>`;
   };
 
@@ -2785,6 +2847,7 @@ function saldotSummaryHTML() {
 
 function renderSaldot() {
   document.getElementById('saldotContent').innerHTML = `
+    ${freshnessCardHTML()}
     <div id="saldotSummary">${saldotSummaryHTML()}</div>
     ${budgetFitCardHTML()}
     <button class="btn btn-secondary" style="margin-top:16px" onclick="toggleSaldotEdit()">${saldotEditMode?'Sulje asetukset':'⚙️ Tilien asetukset (alkusaldo, limiitti, korko)'}</button>
