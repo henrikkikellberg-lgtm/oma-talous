@@ -695,6 +695,7 @@ function splitCSV(line, sep) {
 }
 
 const SAVINGS_ACCTS = ['Saasto','Lipas'];
+const CREDIT_ACCTS  = ['Finnair','OPCredit'];
 
 function categorize(tx, rules) {
   const txt = ((tx.payee||'')+' '+(tx.selitys||'')+' '+(tx.viesti||'')).toLowerCase();
@@ -734,6 +735,14 @@ function categorize(tx, rules) {
     // jopa kolmesti.
     if (res.type === 'savings' && SAVINGS_ACCTS.includes(tx.account)) {
       res = {...res, type:'neutral'};
+    }
+    // Luottokortilta EI voi tehdä tilisiirtoa: negatiivinen rivi on aina osto tai kulu.
+    // Luottokorttiotteessa payee on kortinhaltijan nimi ja kauppias on selitys-kentässä
+    // ("KELLBERG HENRIKKI" / "Gant SWEDEN AB"), joten nimipohjaiset neutral-säännöt
+    // (kellberg, kaarlo) osuvat ostoihin ja piilottavat ne kaikesta analytiikasta.
+    // Yksi 298,80 €:n ostos katosi näin 21.6.2026. Nostetaan tarkistettavaksi.
+    if (res.type === 'neutral' && tx.amount < 0 && CREDIT_ACCTS.includes(tx.account)) {
+      return {cat:'— Kategorisoimatta', type:'flag'};
     }
     return res;
   }

@@ -268,6 +268,10 @@ Jos kortin omia tapahtumia ei tuoda, sen laskun maksu on ainoa jälki kulutukses
 
 Aktia-maksu Perus-tililtä muodostaa parin Finnair-tilin positiivisen rivin kanssa (sama päivä, sama summa, `selitys = "Finnair Visa"`). Molemmat `neutral`, ostot laskettu kertaalleen Finnair-tilillä. Esim. 31.8.2026 −200 € / +200 € ja 3.9.2026 −1 000 € / +1 000 €.
 
+**Toinen ansa samasta juuresta: luottokorttiotteessa `payee` on kortinhaltijan nimi, kauppias on `selitys`-kentässä.** Rivi `payee = "KELLBERG HENRIKKI"` / `selitys = "Gant SWEDEN AB"` / −298,80 € on vaateostos, mutta nimipohjaiset neutral-säännöt (`kellberg`, `kaarlo`) osuvat siihen ja piilottavat sen kaikesta analytiikasta. Yksi tällainen löytyi 21.6.2026.
+
+Suoja lisätty `categorize()`:en (API ja frontend, v1.13.1): **luottotilillä negatiivinen rivi ei voi koskaan olla `neutral`** — kortilta ei tehdä tilisiirtoja, joten miinusmerkkinen rivi on aina osto tai kulu. Jos sääntö antaa neutraalin, rivi menee `flag`iin tarkistettavaksi eikä katoa hiljaa. Positiivinen rivi luottotilillä on edelleen maksusuoritus → `neutral`.
+
 **Ennen kuin merkkaat neutraalin luottomaksun virheeksi:** etsi sama summa ja päivä luottokorttitilin puolelta. Jos pari löytyy, kirjanpito on kunnossa vaikka nimi näyttäisi tuntemattomalta.
 
 ### Tunnetut päällekkäisyydet ja niiden hoito

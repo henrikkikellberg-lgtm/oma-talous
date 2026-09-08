@@ -444,7 +444,7 @@ Kassavirta-kortti lisätty Yhteenveto-välilehdelle. Analytiikka-välilehdellä 
 
 ✅ **Korjattu (`3e8c61c`):** positiivinen summa Finnair/OPCredit-tilillä → `neutral` (maksu kortille). KELLBERG-tulo Perustilillä → `neutral` (oma raha takaisin). 17 vanhaa väärää kirjausta korjattu D1:ssä samalla.
 
-⚠️ **Yhä auki:** sääntöjen `kaarlo henri` / `kellberg hen` (taulu `rules`) **negatiivinen** puoli Perustilillä on yhä `Luotot — lyhennys` / `needs`. Nämä osuvat kaikkiin ulosmeneviin siirtoihin näillä nimillä — myös Finnair-kortin saldonmaksuihin, joiden pitäisi olla `neutral` (koska ostot lasketaan jo erikseen Finnair-CSV:n kautta). Riski: sama nimi voi osua myös aitoihin ei-kortti-siirtoihin, joten tarkistus vaatii käyttäjän silmäilyä rivi riviltä ennen automaattikorjausta.
+✅ **Korjattu v1.13.1 (8.9.2026):** `categorize()` ei enää anna `neutral`ia negatiiviselle riville luottotilillä — nimipohjaiseen sääntöön osuva ostos menee `flag`iin. Alkuperäinen havainto: sääntöjen `kaarlo henri` / `kellberg hen` (taulu `rules`) **negatiivinen** puoli Perustilillä on yhä `Luotot — lyhennys` / `needs`. Nämä osuvat kaikkiin ulosmeneviin siirtoihin näillä nimillä — myös Finnair-kortin saldonmaksuihin, joiden pitäisi olla `neutral` (koska ostot lasketaan jo erikseen Finnair-CSV:n kautta). Riski: sama nimi voi osua myös aitoihin ei-kortti-siirtoihin, joten tarkistus vaatii käyttäjän silmäilyä rivi riviltä ennen automaattikorjausta.
 
 **Seuraava askel:** käy läpi `Luotot — lyhennys`-kategorian rivit Perustilillä, tunnista mitkä ovat Finnair/OPCredit-kortin saldonmaksuja (→ `neutral`) vs. aitoja lainanlyhennyksiä (esim. `OP Yrityspankki Oyj`, `OP Vähittäisasiakkaat Oyj` -toistuvat erät vaikuttavat aidoilta lainoilta, ei kortinmaksuilta — vahvista).
 

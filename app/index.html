@@ -632,7 +632,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.13.0';
+const APP_VERSION = '1.13.1';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -1439,6 +1439,13 @@ function categorizeTx(tx) {
           return {label:s.label||s.cat, cat:s.cat, type:s.type, amount:amt};
         });
         return {cat:r.cat, type:r.type, splits};
+      }
+      // Luottokortilta EI voi tehdä tilisiirtoa: negatiivinen rivi on aina osto tai kulu.
+      // Luottokorttiotteessa payee on kortinhaltijan nimi ja kauppias on selitys-kentässä
+      // ("KELLBERG HENRIKKI" / "Gant SWEDEN AB"), joten nimipohjaiset neutral-säännöt
+      // osuvat ostoihin ja piilottavat ne kaikesta analytiikasta. Nostetaan esiin.
+      if (r.type === 'neutral' && tx.amount < 0 && accountByKey(tx.account)?.kind === 'credit') {
+        return {cat:'— Kategorisoimatta', type:'flag'};
       }
       return {cat:r.cat, type:r.type};
     }
