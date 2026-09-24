@@ -852,3 +852,10 @@ Vaihe 0 ✅
 ```
 
 **Seuraava konkreettinen askel:** `wrangler login` terminaalissa → Vaihe 1 alkaa.
+
+## Vuokra: vastikkeiden erittely (lisätty 9/2026)
+- Uudet kategoriat: `Vuokra — rahoitusvastikkeet`, `Vuokra — ylimääräiset vastikkeet`. Kuukausivastikkeen rahoitusosuus jaetaan vuokra.html:ssä `PROPS[id].rahoitus` -aikataululla (a3 290,75 €/kk 7/2025→, a1 38,80 €/kk 3/2026→; lähde Tuottokartta paaomavastike_kk).
+- AVOIN: Niiralan ja B17:n rahoitusvastikkeen historia ennen noita kuukausia (yhtiökokousten vastikelaskelmat) → täydennä aikatauluun.
+- B10 −1 256,20 € 21.10.2025 tulkittu lainaosuuden kertasuoritukseksi (rahoitusvastikkeet).
+- Vakuuden pidätys kirjataan palautusrivin splitsillä (negatiivinen osa = tulo). Äikäksen 116,89 € meni suoraan taloyhtiölle 5.3.2024 → kirjattu vakuuksiin.
+- Kumpulaisen (B10) vakuutta ei löydy tiliotteilta.

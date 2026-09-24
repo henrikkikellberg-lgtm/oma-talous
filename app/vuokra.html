@@ -326,7 +326,7 @@ function renderAsunnot(){
       ${strip(done, C)}
       ${Object.entries(C.extra).filter(([k])=>months.includes(k)).map(([k,v])=>`<div class="flag g">Tuplamaksu ${mlabel(k)} (+${eur(v)}) — ennakko, vakuus vai virhe? Tarkista ja jaa rivi tarvittaessa.</div>`).join('')}
       ${runs.length?runs.map(r=>`<div class="flag ${r.kind==='empty'?'r':'g'}">${r.kind==='empty'?'Tyhjä':'Vajaa'}: ${mlabel(r.from)}${r.to!==r.from?' – '+mlabel(r.to):''}${r.kind==='part'?` (${r.cov.map(c=>Math.round(c*100)+' %').join(', ')})`:''} · arviolta ${eur(r.loss)} vuokraa jäi saamatta</div>`).join(''):`<div class="flag" style="background:var(--green-light);color:var(--green)">Vuokra katettu jokaiselta kuukaudelta${period==='all'?'':' jaksolla'}</div>`}
-      <div class="prow" style="margin-top:8px"><span>Vakuudet hallussa (maksetut − palautetut)</span><span>${eur(dep)}</span></div>
+      <div class="prow" style="margin-top:8px"><span title="Maksetut − palautetut vakuudet">Vakuudet hallussa</span><span style="white-space:nowrap">${eur(dep)}</span></div>
       ${depEv.map(e=>`<div class="prow mut" style="font-size:12px"><span>${fdate(e.t.date)} ${esc(e.t.payee)}</span><span>${eur(e.d)}</span></div>`).join('')}
       ${extra.length?`<div class="flag g">Tavallista suurempi vastike (mediaani ${eur(med)}/kk): ${extra.map(([k,v])=>`${mlabel(k)} ${eur(v)}`).join(', ')}</div>`:''}
     </div>`;

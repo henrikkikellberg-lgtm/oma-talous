@@ -633,7 +633,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.15.0';
+const APP_VERSION = '1.16.0';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -675,6 +675,8 @@ const CATS = [
   {name:'MobilePay & siirrot',    type:'neutral', icon:'📲'},
   {name:'Vuokra — tulot',          type:'neutral', icon:'🏘️'},
   {name:'Vuokra — vastikkeet',     type:'neutral', icon:'🏢'},
+  {name:'Vuokra — rahoitusvastikkeet', type:'neutral', icon:'🏗️'},
+  {name:'Vuokra — ylimääräiset vastikkeet', type:'neutral', icon:'➕'},
   {name:'Vuokra — lainan lyhennys',type:'neutral', icon:'🏦'},
   {name:'Vuokra — lainan korko',   type:'neutral', icon:'💸'},
   {name:'Vuokra — uudelleenrahoitus',type:'neutral', icon:'🔁'},
