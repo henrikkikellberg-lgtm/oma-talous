@@ -632,7 +632,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.14.0';
+const APP_VERSION = '1.14.1';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -1585,6 +1585,11 @@ function loadCSVFiles(entries) {
           try {
             const res = await fetch(`${API_BASE}/transactions`, { headers: apiHeaders() });
             if (res.ok) { txs = await res.json(); saveLocalState(); }
+            // Tuonti leimaa accounts.last_import_at palvelimella → haetaan tilit
+            // uudelleen, muuten "tiliote tuomatta" -varoitus jää näkyviin
+            // vanhasta välimuistista kunnes sovellus käynnistetään uudelleen.
+            const ra = await fetch(`${API_BASE}/accounts`, { headers: apiHeaders() });
+            if (ra.ok) { const rows = await ra.json(); if (Array.isArray(rows) && rows.length) { accounts = rows; saveLocalState(); } }
           } catch(e) {}
         } else {
           saveLocalState();
