@@ -280,6 +280,8 @@ Suoja lisätty `categorize()`:en (API ja frontend, v1.13.1): **luottotilillä ne
 - **Elisan lasku on erämaksuja, ei liittymämaksu.** 4.9.2026 lasku 180,33 € = iPhone 34,68 + Huawei-mesh 4,13 + Roborock 54,06 + MacBook Pro 87,46. Kategoria `Suoratoisto & liittymät` / `needs` on harhaanjohtava — sisältö on velanlyhennystä.
 - **CAT_DEST-arvio** lisätään säästötilin saldoon vain jos tililtä EI ole omaa tiliotedataa. Oma data voittaa aina arvion.
 - **Duplikaattihaku** vertaa vain saman tilin sisällä. Sama päivä + sama summa eri tileillä on normaali sisäinen siirto, ja molemmat puolet tarvitaan.
+- **Revolutin sijoitustili (v1.13.2).** Menosuunta `Sijoitustilille` / `To Robo portfolio` on `savings`. Paluusuunta — Revolut-rivi jonka kuvaus on pelkkä `Rahanlisäys` ilman lähdettä — on sijoitusten purkua ja kirjataan `Sijoittaminen` / `savings` **plussalla**, jolloin se vähentää säästöä nettona. Neutraalina sama euro laskettiin säästöksi kahdesti (6.7. −200 / 11.8. +200 / 11.8. −209,72). Oikeat rahanlisäykset nimeävät aina lähteensä (`Avoimen pankkitoiminnan lisämaksu`, `Apple Pay:n rahanlisäys kortilla *XXXX`). Arvopaperitilin omaa otetta (`CC…csv`, sarakkeet `Ticker,Type,Quantity…`) **ei tuoda** — se on säästöjen sisäistä liikettä ja laskisi saman rahan uudelleen.
+- **Positiivinen `savings`-rivi on sallittu ja netotetaan** (`monthSummary`, budjetit, API `/summary`). Älä laske savingsia `Math.abs`illa.
 - **Säännöt `kellberg hen` / `kaarlo henri`** osuvat kaikkiin ulosmeneviin siirtoihin näillä nimillä. Tarkista rivi riviltä ennen automaattikorjausta.
 
 ### Tarkistuslista ennen kuin vastaat "mihin raha meni"

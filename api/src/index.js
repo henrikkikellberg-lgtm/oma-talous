@@ -262,9 +262,13 @@ async function handleSummary(req, env, url) {
   if (!month) return err('month param required');
   const { results } = await env.DB.prepare('SELECT type, amount FROM transactions WHERE month=?').bind(month).all();
   const income  = results.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
-  const needs   = results.filter(t=>t.type==='needs'&&t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0);
-  const wants   = results.filter(t=>t.type==='wants'&&t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0);
-  const savings = results.filter(t=>t.type==='savings').reduce((s,t)=>s+Math.abs(t.amount),0);
+  // Netto kuten frontendin monthSummary: palautus (+) pienentää kulutusta ja
+  // sijoitusten purku (+ savings) pienentää säästöä. Math.abs laski purun
+  // säästöksi lisää — sama euro kahdesti.
+  const net = type => -results.filter(t=>t.type===type).reduce((s,t)=>s+t.amount,0);
+  const needs   = net('needs');
+  const wants   = net('wants');
+  const savings = net('savings');
   const rate    = income>0 ? Math.round(savings/income*100) : 0;
   return ok({ month, income, needs, wants, savings, rate, surplus: income-needs-wants-savings });
 }
@@ -716,6 +720,22 @@ function categorize(tx, rules) {
   if (tx.amount > 0 && !SAVINGS_ACCTS.includes(tx.account) && tx.account !== 'Finnair'
       && tx.account !== 'OPCredit' && /kellberg/i.test(tx.payee)) {
     return {cat:'MobilePay & siirrot', type:'neutral'};
+  }
+
+  // Revolutin arvopaperi-/Robo-tililtä takaisin käyttötilille tuleva raha on
+  // SIJOITUSTEN PURKUA, ei neutraali siirto. Menosuunta ("Sijoitustilille",
+  // "To Robo portfolio") on savings, joten paluusuunnan on oltava savings
+  // plussalla — muuten sama euro lasketaan säästöksi kahdesti (6.7. −200 €
+  // sijoitustilille, 11.8. +200 € takaisin neutraalina, 11.8. −209,72 € uudelleen
+  // → säästöä näkyi 409,72 € vaikka nettona 209,72 €).
+  // Tunniste: jokainen oikea rahanlisäys nimeää lähteensä kuvauksessa
+  // ("Avoimen pankkitoiminnan lisämaksu", "Apple Pay:n rahanlisäys kortilla *4597").
+  // Sijoitustililtä palaava raha on pelkkä "Rahanlisäys" ilman lähdettä.
+  // Tarkistus ennen sääntöjä, koska sääntö "rahanlisäys" → neutral osuu
+  // Tyyppi-kenttään (selitys) jokaisessa lisäyksessä.
+  if (tx.amount > 0 && tx.account === 'Revolut' &&
+      (/^rahanlisäys$/i.test((tx.payee||'').trim()) || /sijoitustilil|robo portfolio|invest/i.test(tx.payee||''))) {
+    return {cat:'Sijoittaminen', type:'savings'};
   }
 
   for (const r of rules) {
