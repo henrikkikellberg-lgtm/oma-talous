@@ -632,7 +632,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.13.3';
+const APP_VERSION = '1.14.0';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -672,6 +672,15 @@ const CATS = [
   {name:'Muut',                   type:'wants',   icon:'📦'},
   // ── Neutraali ──
   {name:'MobilePay & siirrot',    type:'neutral', icon:'📲'},
+  {name:'Vuokra — tulot',          type:'neutral', icon:'🏘️'},
+  {name:'Vuokra — vastikkeet',     type:'neutral', icon:'🏢'},
+  {name:'Vuokra — lainan lyhennys',type:'neutral', icon:'🏦'},
+  {name:'Vuokra — lainan korko',   type:'neutral', icon:'💸'},
+  {name:'Vuokra — uudelleenrahoitus',type:'neutral', icon:'🔁'},
+  {name:'Vuokra — vakuudet',       type:'neutral', icon:'🔐'},
+  {name:'Vuokra — vakuutukset',    type:'neutral', icon:'🛡️'},
+  {name:'Vuokra — kulut',          type:'neutral', icon:'🧾'},
+  {name:'Asunnon myynti',          type:'neutral', icon:'🏷️'},
 ];
 
 const GROUP_CAT_MAP = {
@@ -1425,6 +1434,11 @@ function budgetIncomeForMonth(month) {
 // ── CATEGORIZE ──────────────────────────────────────────────────────────────
 function categorizeTx(tx) {
   const txt = ((tx.payee||'')+' '+(tx.selitys||'')+' '+(tx.viesti||'')).toLowerCase();
+  // Vuokratili pidetään erillään henkilökohtaisesta analytiikasta: kategoria
+  // (API:n categorizeRental) säilyy, tyyppi on aina neutral. Ks. CLAUDE.md.
+  if (accountByKey(tx.account)?.kind === 'rental') {
+    return {cat: tx.cat || 'Vuokra — kulut', type: 'neutral', ...(tx.splits ? {splits: tx.splits} : {})};
+  }
   // Revolutin sijoitustililtä palaava raha = sijoitusten purku → savings plussalla
   // (vähentää säästöä nettona). Oikea rahanlisäys nimeää aina lähteensä; pelkkä
   // "Rahanlisäys" tulee arvopaperitililtä. Sama tarkistus API:n categorize()-funktiossa.
@@ -1533,6 +1547,7 @@ function accountFromFilename(fname) {
   if (/credit|luotto/.test(n)) return 'OPCredit';
   if (/revolut|accountstatement/.test(n)) return 'Revolut';
   if (/finnair/.test(n)) return 'Finnair';
+  if (/vuokra/.test(n)) return 'Vuokra';
   return 'Perus';
 }
 
@@ -2784,7 +2799,8 @@ function importFreshness(acct) {
 }
 
 function staleAccounts() {
-  return accounts.filter(a => { const f = importFreshness(a); return f.stale; });
+  // Lopetettu tili (kind 'closed') ei saa uusia tiliotteita → ei varoiteta tuoreudesta.
+  return accounts.filter(a => a.kind !== 'closed' && importFreshness(a).stale);
 }
 
 function freshnessLineHTML(acct) {
@@ -2821,7 +2837,7 @@ function saldotSummaryHTML() {
     <div class="saldo-card" style="display:flex;justify-content:space-between;align-items:center">
       <div>
         <div class="saldo-lbl">${esc(b.label)}</div>
-        <div style="font-size:11px;color:var(--dim)">${b.kind==='savings'?'Säästö':'Käyttötili'} · alkaen ${fmtDateLbl(b.opening_date)}</div>
+        <div style="font-size:11px;color:var(--dim)">${b.kind==='savings'?'Säästö':b.kind==='closed'?'Lopetettu':b.kind==='rental'?'Vuokratili · erillinen':'Käyttötili'} · alkaen ${fmtDateLbl(b.opening_date)}</div>
         ${freshnessLineHTML(accountByKey(b.key))}
       </div>
       <div style="font-size:20px;font-weight:300;color:var(--text)">${eur(b.balance)}</div>

@@ -722,10 +722,39 @@ function splitCSV(line, sep) {
 }
 
 const SAVINGS_ACCTS = ['Saasto','Lipas'];
+// Vuokratili seurataan ERILLÄÄN henkilökohtaisesta taloudesta: kaikki rivit
+// ovat type 'neutral' (eivät näy budjeteissa, NWS-jakaumassa eikä runwayssa),
+// mutta saavat vuokratoiminnan kategorian ja lainaerät jaetaan korkoon ja
+// lyhennykseen OP:n viestikentästä. Saldo lasketaan normaalisti.
+const RENTAL_ACCTS = ['Vuokra'];
+function categorizeRental(tx) {
+  const p = tx.payee || '', v = tx.viesti || '', s = (tx.selitys || '').toUpperCase(), a = tx.amount;
+  const N = x => parseFloat(String(x).replace(/\s/g,'').replace(',','.'));
+  const r = cat => ({cat, type:'neutral'});
+  if (/vuokravakuus/i.test(v)) return r('Vuokra — vakuudet');
+  if (s === 'LUOTON MAKSU' || s === 'LUOTON NOSTO') {
+    const m = v.match(/Lyhennys ([\d\s]+,\d+) euroa Korko ([\d\s]+,\d+) euroa/);
+    // Kertalyhennys/uudelleenrahoitus (esim. vanhan lainan poismaksu uudella) ei ole kuukausierä
+    if (s === 'LUOTON NOSTO' || !m || a >= 0 || N(m[1]) > 5000) return r('Vuokra — uudelleenrahoitus');
+    const lyh = N(m[1]), korko = Math.round((-a - lyh) * 100) / 100;
+    return {cat:'Vuokra — lainan lyhennys', type:'neutral', splits:[
+      {label:'Lyhennys', cat:'Vuokra — lainan lyhennys', type:'neutral', amount:lyh},
+      {label:'Korko ja kulut', cat:'Vuokra — lainan korko', type:'neutral', amount:korko}]};
+  }
+  if (/kauppahin|toimeksiantosopimu|konttorikaup/i.test(v)) return r('Asunnon myynti');
+  if (/asunto oy/i.test(p)) return r('Vuokra — vastikkeet');
+  if (s === 'ARVOPAPERI') return r('Sijoittaminen');
+  if (/kellberg/i.test(p)) return r('MobilePay & siirrot');
+  if (a > 0 && /vuokra/i.test(v)) return r('Vuokra — tulot');
+  if (/axa|pohjola|lähitapiola|if vahinko|fennia/i.test(p)) return r('Vuokra — vakuutukset');
+  if (a > 0) return r('Vuokra — tulot');        // tuntematon vuokranmaksaja: tarkista käsin jos ei vuokra
+  return r('Vuokra — kulut');
+}
 const CREDIT_ACCTS  = ['Finnair','OPCredit'];
 
 function categorize(tx, rules) {
   const txt = ((tx.payee||'')+' '+(tx.selitys||'')+' '+(tx.viesti||'')).toLowerCase();
+  if (RENTAL_ACCTS.includes(tx.account)) return categorizeRental(tx);
 
   // Luottokorttitilille tuleva positiivinen: oma maksu kortille (siirto) → neutral.
   // Kaupan palautus/hyvitys on myös positiivinen mutta EI maksu — ei pakoteta neutraaliksi,

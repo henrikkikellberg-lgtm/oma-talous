@@ -284,6 +284,7 @@ Suoja lisätty `categorize()`:en (API ja frontend, v1.13.1): **luottotilillä ne
 - **Positiivinen `savings`-rivi on sallittu ja netotetaan** (`monthSummary`, budjetit, API `/summary`). Älä laske savingsia `Math.abs`illa.
 - **Säännöt `kellberg hen` / `kaarlo henri`** osuvat kaikkiin ulosmeneviin siirtoihin näillä nimillä. Tarkista rivi riviltä ennen automaattikorjausta.
 
+- **Vuokratili (`Vuokra`, kind `rental`) ja lopetetut tilit (kind `closed`), v1.14.0.** Vuokratilin kaikki rivit ovat `neutral` (API `categorizeRental`, frontend säilyttää) → vuokratulot/-kulut eivät näy henkilökohtaisessa taloudessa. Lainaerät jaetaan splitsillä korkoon ja lyhennykseen OP:n viestistä. Lopetettu tili (Reissusäästötili, suljettu 18.9.2026) ei tuota tuoreusvaroitusta. Yhteinen käyttötili (…1976) EI ole kannassa.
 - **Käsin syötetyn rivin duplikaattihaku ±3 pv.** Tarkka päivävertailu päästi läpi Spotifyn (pankki 20.6. / käsin 22.6.) ja McDonald'sin (26.8. / 27.8.) → Perus-saldo 30,39 € pankkia pienempi. `findExistingDuplicate` hyväksyy nyt manual/receipt-rivin ±3 pv sisältä, lähin ensin, yksi CSV-rivi per käsin syötetty rivi. Saldon täsmäytys: pankin tiliotteen loppusaldo = `opening_balance + SUM(amount)`; Perus 23.9.2026 = 286,38 €.
 - **`GET /transactions` palauttaa KAIKKI rivit.** Aiempi `LIMIT 1000` pudotti vanhimmat rivit frontendistä, kun data ylitti 1 000 riviä (24.9.2026): Perus-saldo näytti 805,32 € liikaa, koska 1.–5.1.2026 rivit puuttuivat summasta. Älä lisää oletusrajaa — saldot lasketaan koko historiasta.
 
