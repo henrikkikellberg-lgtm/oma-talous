@@ -858,4 +858,5 @@ Vaihe 0 ✅
 - AVOIN: Niiralan ja B17:n rahoitusvastikkeen historia ennen noita kuukausia (yhtiökokousten vastikelaskelmat) → täydennä aikatauluun.
 - B10 −1 256,20 € 21.10.2025 tulkittu lainaosuuden kertasuoritukseksi (rahoitusvastikkeet).
 - Vakuuden pidätys kirjataan palautusrivin splitsillä (negatiivinen osa = tulo). Äikäksen 116,89 € meni suoraan taloyhtiölle 5.3.2024 → kirjattu vakuuksiin.
-- Kumpulaisen (B10) vakuutta ei löydy tiliotteilta.
+- Kumpulaisen (B10) vakuus 460 € on pankin vuokravakuustilillä (ei vuokratilillä). Äikäksen 116,89 € = vesilasku vakuudesta.
+- B17 rahoitusvastike 38,80 €/kk alkoi 3/2026 (vahvistettu); B10 maksoi osuutensa kerralla 1 256,20 € 10/2025.

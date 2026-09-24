@@ -788,7 +788,9 @@ function categorizeRental(tx) {
   if (/kauppahin|toimeksiantosopimu|konttorikaup/i.test(v)) return r('Asuntokauppa');
   if (/asunto oy/i.test(p)) return r('Vuokra — vastikkeet');
   if (s === 'ARVOPAPERI') return r('Sijoittaminen');
-  if (/kellberg/i.test(p)) return r('MobilePay & siirrot');
+  if (/op[- ]?rahastoyhti|op fund management/i.test(p)) return r('Sijoittaminen');
+  // Omistajan omat siirrot vuokratilille (+ pääomasijoitus) ja sieltä pois (− nosto)
+  if (/kellberg/i.test(p) || /oma siirto|asuntos[äa]{2}st/i.test(v)) return r('Vuokra — oma pääoma');
   if (a > 0 && /vuokra/i.test(v)) return r('Vuokra — tulot');
   if (/axa|pohjola|lähitapiola|if vahinko|fennia/i.test(p)) return r('Vuokra — vakuutukset');
   if (a > 0) return r('Vuokra — tulot');        // tuntematon vuokranmaksaja: tarkista käsin jos ei vuokra
