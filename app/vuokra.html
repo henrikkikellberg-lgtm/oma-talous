@@ -48,6 +48,13 @@ td{text-align:right;padding:6px 8px;border-bottom:.5px solid var(--surface2);whi
 .twrap{background:var(--surface);border:.5px solid var(--border);border-radius:var(--radius);overflow-x:auto}
 .bar{height:3px;background:var(--surface2);border-radius:2px;margin-top:3px;overflow:hidden}
 .bar>i{display:block;height:3px;border-radius:2px;transition:width .4s ease}
+.trow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;font-size:12px;color:var(--muted);padding:3px 0;border-bottom:.5px solid var(--surface2);height:22px;box-sizing:border-box}
+.trow span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.trow span:last-child{white-space:nowrap}
+.tblock{margin:6px 0 8px;min-height:var(--th)}@media(max-width:620px){.tblock{min-height:0}}
+.ysum{display:grid;grid-template-columns:150px minmax(0,1fr) 90px;gap:6px 10px;align-items:center;font-size:13px}
+.ybar{display:flex;gap:2px;height:14px}.ybar i{display:block;height:100%}.ybar i:first-child{border-radius:4px 0 0 4px}.ybar i:last-child{border-radius:0 4px 4px 0}
+.ylg{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted);margin-top:10px}.ylg b{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+@media(max-width:560px){.ysum{grid-template-columns:1fr 80px}.ysum .yn{grid-column:1/-1;margin-bottom:-4px}}
 .props{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px}
 .prow{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:.5px solid var(--surface2)}
 .prow:last-child{border-bottom:none}
@@ -70,7 +77,7 @@ select:focus,input:focus{border-color:var(--green)}
 <body>
 <header>
   <div class="hwrap">
-    <div class="logo">oma<span class="dot">·</span>talous<small>vuokratoiminta · v1.17.0</small></div>
+    <div class="logo">oma<span class="dot">·</span>talous<small>vuokratoiminta · v1.17.2</small></div>
     <a class="back" href="index.html">← Oma talous</a>
   </div>
   <div class="tabs" id="tabs"></div>
@@ -91,8 +98,8 @@ const PROPS = {
   // rahoitus: kuukausittaisen vastikkeen rahoitusvastikeosuus [alkaen kk, €/kk]. Loppuosa on hoitovastiketta.
   // Lähde: Tuottokartta kayttaja_asunnot (paaomavastike_kk). Aiempien vuosien osuudet puuttuvat.
   a3: {name:'Niiralankatu 19 B 37', city:'Kuopio', depOpen:710, rahoitus:[['2025-07',290.75]]},   // Kangas-Rahkon vakuus maksettu ennen 6/2020 (palautettu 27.8.2020)
-  a1: {name:'Riistakatu 15 B 17',  city:'Iisalmi', rahoitus:[['2026-03',38.8]]},
-  a2: {name:'Riistakatu 15 B 10',  city:'Iisalmi', depOpen:445, depNote:'460 € pankin vuokravakuustilillä'},   // Miettisen vakuus maksettu ennen 6/2020 (palautettu 12.10.2020)
+  a1: {name:'Riistakatu 15 B 17',  city:'Iisalmi', depOpen:445, rahoitus:[['2026-03',38.8]]},   // Miettisen vakuus maksettu ennen 6/2020 (palautettu 12.10.2020)
+  a2: {name:'Riistakatu 15 B 10',  city:'Iisalmi', depNote:'460 € pankin vakuustilillä'},   // ostettu 22.10.2020; Kumpulaisen vakuus pankin vuokravakuustilillä
 };
 const PROP_ORDER = ['a3','a1','a2'];
 const CAT = {
@@ -135,6 +142,7 @@ function parts(t){
     const r = rahoitusFor(t.property_id, t.date);
     if (r && -a >= r) { o.rah = r; o.vast = -a - r; } else o.vast = -a;
   }
+  else if (t.cat==='Vuokra — lainan korko') o.korko=-a;   // splitsien korko-osat (poismaksun korko, nostopalkkiot)
   else if (t.cat===CAT.korj) o.korj=-a;
   else if (t.cat===CAT.oma) o.oma=a;              // + omistaja sijoitti, − omistaja nosti
   else if (t.cat==='Sijoittaminen') o.sij=a;      // vuokratililtä rahastoihin = nosto sijoituksiin
@@ -347,9 +355,19 @@ function tenantsIn(id, months){
   return groups.map(g=>({name: tcase(g.names.sort((a,b)=>a.length-b.length)[0]), rent: median(g.amts), from:g.from, to:g.to}));
 }
 const mshort = k => `${+k.slice(5)}/${k.slice(0,4)}`;
+const YSEG = [['Vastikkeet','var(--gold)',s=>s.vast+s.rah+s.ylim],['Korot','var(--blue)',s=>s.korko],['Kulut ja korjaukset','var(--dim)',s=>s.kulut+s.korj],['Kassavirta','var(--green)',s=>Math.max(0,s.kv)]];
+function yearSummary(){
+  const rows = PROP_ORDER.map(id=>({id, s:sum(TX.filter(t=>t.property_id===id && inPeriod(t)))}));
+  const max = Math.max(1, ...rows.map(r=>Math.max(r.s.tulot, YSEG.slice(0,3).reduce((x,g)=>x+g[2](r.s),0))));
+  return `<div class="card" style="margin-bottom:12px"><div class="ptitle" style="margin-bottom:10px">Vuokratulon jakautuminen ${period==='all'?'koko historia':period}</div><div class="ysum">` +
+    rows.map(({id,s})=>`<span class="yn">${esc(PROPS[id].name)}</span><div class="ybar">${YSEG.map(([l,c,f])=>{const v=f(s); return v>0.5?`<i title="${l}: ${eur(v)}" style="width:${v/max*100}%;background:${c}"></i>`:'';}).join('')}</div>
+      <span style="text-align:right" title="Vuokratulot ${eur(s.tulot)}"><b class="${cls(s.kv)}">${eur(s.kv)}</b></span>`).join('') +
+    `</div><div class="ylg">${YSEG.map(([l,c])=>`<span><b style="background:${c}"></b>${l}</span>`).join('')}<span>· palkin pituus = vuokratulot, luku = kassavirta ennen lyhennyksiä</span></div></div>`;
+}
 function renderAsunnot(){
   const months = periodMonths();
-  let h = `<div class="props">`;
+  const maxT = Math.max(1, ...PROP_ORDER.map(id=>tenantsIn(id, months).length));
+  let h = yearSummary() + `<div class="props">`;
   PROP_ORDER.forEach(id=>{
     const P = PROPS[id];
     const all = TX.filter(t=>t.property_id===id);
@@ -371,21 +389,21 @@ function renderAsunnot(){
     h += `<div class="card t-green">
       <div class="ptitle">${esc(P.name)}</div>
       <div class="psub">${esc(P.city)}</div>
-      ${tenantsIn(id, months).map(v=>`<div class="prow mut" style="font-size:12px"><span>${esc(v.name)}</span><span>${v.from===v.to?`${eur(v.rent)} · ${mshort(v.from)}`:`${eur(v.rent)}/kk · ${mshort(v.from)}–${mshort(v.to)}`}</span></div>`).join('')}
+      <div class="tblock" style="--th:${maxT*22}px">${tenantsIn(id, months).map(v=>`<div class="trow" title="${esc(v.name)}"><span>${esc(v.name)}</span><span>${v.from===v.to?`${eur(v.rent)} · ${mshort(v.from)}`:`${eur(v.rent)}/kk · ${mshort(v.from)}–${mshort(v.to)}`}</span></div>`).join('')}</div>
       <div class="prow"><span>Vuokratulot</span><span>${eur(s.tulot)}</span></div>
       <div class="prow"><span>Hoitovastikkeet</span><span>${eur(-s.vast)}</span></div>
       <div class="prow"><span>Rahoitusvastikkeet</span><span>${eur(-s.rah)}</span></div>
-      ${s.ylim?`<div class="prow"><span>Ylimääräiset vastikkeet</span><span>${eur(-s.ylim)}</span></div>`:''}
+      <div class="prow"><span>Ylimääräiset vastikkeet</span><span>${eur(-s.ylim)}</span></div>
       <div class="prow"><span>Korot</span><span>${eur(-s.korko)}</span></div>
       <div class="prow"><span>Muut kulut</span><span>${eur(-s.kulut)}</span></div>
-      ${s.korj?`<div class="prow"><span>Korjaukset</span><span>${eur(-s.korj)}</span></div>`:''}
+      <div class="prow"><span>Korjaukset</span><span>${eur(-s.korj)}</span></div>
       <div class="prow"><b>Kassavirta</b><b class="${cls(s.kv)}">${eur(s.kv)}</b></div>
       <div class="prow"><span>Lyhennykset</span><span>${eur(s.lyh)}</span></div>
       <div class="prow"><span>Jää käteen</span><span class="${cls(s.kvl)}">${eur(s.kvl)}</span></div>
       ${strip(done, C)}
       ${Object.entries(C.extra).filter(([k])=>months.includes(k)).map(([k,v])=>`<div class="flag" style="background:var(--surface2);color:var(--muted)">Ylimaksu ${mlabel(k)}: +${eur(v)} (kaksi vuokraa samalle kuulle, jää tuloksi)</div>`).join('')}
       ${runs.length?runs.map(r=>`<div class="flag ${r.kind==='empty'?'r':'g'}">${r.kind==='empty'?'Tyhjä':'Vajaa'}: ${mlabel(r.from)}${r.to!==r.from?' – '+mlabel(r.to):''}${r.kind==='part'?` (${r.cov.map(c=>Math.round(c*100)+' %').join(', ')})`:''} · arviolta ${eur(r.loss)} vuokraa jäi saamatta</div>`).join(''):`<div class="flag" style="background:var(--green-light);color:var(--green)">Vuokra katettu jokaiselta kuukaudelta${period==='all'?'':' jaksolla'}</div>`}
-      <div class="prow" style="margin-top:8px"><span title="Maksetut − palautetut vakuudet">Vakuus hallussa</span><span style="white-space:nowrap">${Math.abs(dep)<0.5?(P.depNote||'ei kirjattua vakuutta'):eur2(dep)}</span></div>
+      <div class="prow" style="margin-top:8px"><span title="Maksetut − palautetut vakuudet" style="white-space:nowrap">Vakuus hallussa</span><span style="text-align:right">${Math.abs(dep)<0.5?(P.depNote||'ei kirjattua vakuutta'):eur2(dep)}</span></div>
       ${depEv.map(e=>`<div class="prow mut" style="font-size:12px"><span>${fdate(e.t.date)} ${esc(e.t.payee)}</span><span>${eur(e.d)}</span></div>`).join('')}
     </div>`;
   });

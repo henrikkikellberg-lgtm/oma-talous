@@ -859,6 +859,8 @@ Vaihe 0 ✅
 - B10 −1 256,20 € 21.10.2025 tulkittu lainaosuuden kertasuoritukseksi (rahoitusvastikkeet).
 - Vakuuden pidätys kirjataan palautusrivin splitsillä (negatiivinen osa = tulo). Äikäksen 116,89 € meni suoraan taloyhtiölle 5.3.2024 → kirjattu vakuuksiin.
 - Kumpulaisen (B10) vakuus 460 € on pankin vuokravakuustilillä (ei vuokratilillä). Äikäksen 116,89 € = vesilasku vakuudesta.
+- Miettinen (6–9/2020) asui B17:ssä. B10 ostettiin 22.10.2020 (EEPILA 59 000 € + varainsiirtovero 1 180 €, laina FI58) → ei tyhjä kk 10/2020.
+- Huom. työkalu: device_commit_files voi lähettää vanhan kopion, jos stagedPath-nimi on sama kuin aiemmin → käytä uniikkia tiedostonimeä ja tarkista koko device_list_dirillä.
 - B17 rahoitusvastike 38,80 €/kk alkoi 3/2026 (vahvistettu); B10 maksoi osuutensa kerralla 1 256,20 € 10/2025.
 
 ## Vuokra: analytiikkaideat (odottaa päätöstä, 9/2026)
