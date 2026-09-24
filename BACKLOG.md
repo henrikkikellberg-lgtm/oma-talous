@@ -860,3 +860,11 @@ Vaihe 0 ✅
 - Vakuuden pidätys kirjataan palautusrivin splitsillä (negatiivinen osa = tulo). Äikäksen 116,89 € meni suoraan taloyhtiölle 5.3.2024 → kirjattu vakuuksiin.
 - Kumpulaisen (B10) vakuus 460 € on pankin vuokravakuustilillä (ei vuokratilillä). Äikäksen 116,89 € = vesilasku vakuudesta.
 - B17 rahoitusvastike 38,80 €/kk alkoi 3/2026 (vahvistettu); B10 maksoi osuutensa kerralla 1 256,20 € 10/2025.
+
+## Vuokra: analytiikkaideat (odottaa päätöstä, 9/2026)
+1. **Vuokra vs. vastike -kehitys ja korotustarve** — vuokra 2020→2026 +0–6 %, vastikkeet +25–91 %, vuokra−vastike −17…−26 %. Näytä per asunto aikajana ja laske korotus, jolla kate palautuu (B10: Kumpulaisen vuokra 460 € ennallaan 11/2020 lähtien).
+2. **Verolaskelma vuosittain (7H)** — vuokratulot, hoitovastikkeet, korot, kulut ja vuosikorjaukset vähennyksinä; rahoitus- ja ylimääräiset vastikkeet erikseen (verokohtelu riippuu taloyhtiön tuloutuksesta), pidätetyt vakuudet tuloina.
+3. **Tuotto per asunto** — nettovuokratuotto % ja oman pääoman tuotto (cash-on-cash) Tuottokartan ostohinnasta/arviosta.
+4. **Käyttöaste ja vuokralaisvaihdot** — käyttöaste %, vuokrasuhteen keskikesto, vaihdon kustannus (tyhjät kk + välitys + luottotiedot + ilmoitukset).
+5. **Suunnitelma vs. toteuma** — Tuottokartan oletukset vs. toteutunut (= vaihe 4).
+6. **Omistusosuudet** — Niirala 50/50 ennen 1/2026, sen jälkeen 100 %; netto omistajalle per omistaja.

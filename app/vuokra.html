@@ -98,10 +98,10 @@ const PROP_ORDER = ['a3','a1','a2'];
 const CAT = {
   tulot:'Vuokra — tulot', vast:'Vuokra — vastikkeet', lyh:'Vuokra — lainan lyhennys',
   rah:'Vuokra — rahoitusvastikkeet', ylim:'Vuokra — ylimääräiset vastikkeet',
-  kulut:'Vuokra — kulut', vakuutus:'Vuokra — vakuutukset', vakuus:'Vuokra — vakuudet',
+  kulut:'Vuokra — kulut', korj:'Vuokra — korjaukset', oma:'Vuokra — oma pääoma', vakuutus:'Vuokra — vakuutukset', vakuus:'Vuokra — vakuudet',
   uudel:'Vuokra — uudelleenrahoitus',
 };
-const CAT_OPTS = [CAT.tulot,CAT.vast,CAT.rah,CAT.ylim,CAT.lyh,CAT.kulut,CAT.vakuutus,CAT.vakuus,CAT.uudel,'Asuntokauppa','Sijoittaminen','MobilePay & siirrot'];
+const CAT_OPTS = [CAT.tulot,CAT.vast,CAT.rah,CAT.ylim,CAT.lyh,CAT.kulut,CAT.korj,CAT.oma,CAT.vakuutus,CAT.vakuus,CAT.uudel,'Asuntokauppa','Sijoittaminen',];
 
 let TX = [], ACC = null, tab = 'yht', period = String(new Date().getFullYear());
 let fProp = 'all', fCat = '', fSearch = '', showN = 150, searchTimer = null;
@@ -119,7 +119,7 @@ function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg
 // kaikki muu kuin vuokratoiminnan kassavirta (vakuudet, uudelleenrahoitus, asuntokauppa,
 // omat siirrot, sijoitukset) menee "muut"-ämpäriin eikä vääristä kassavirtaa.
 function parts(t){
-  const o = {tulot:0,vast:0,rah:0,ylim:0,korko:0,kulut:0,lyh:0,muut:0};
+  const o = {tulot:0,vast:0,rah:0,ylim:0,korko:0,kulut:0,korj:0,lyh:0,oma:0,sij:0,muut:0};
   const a = +t.amount||0;
   // Jaettu rivi (esim. "takuuvuokra ja ensimmäinen vuokra" 890 € = 445 vakuus + 445 vuokra):
   // jokainen osa omaan ämpäriinsä rivin etumerkillä; negatiivinen osa kääntää suunnan
@@ -135,6 +135,9 @@ function parts(t){
     const r = rahoitusFor(t.property_id, t.date);
     if (r && -a >= r) { o.rah = r; o.vast = -a - r; } else o.vast = -a;
   }
+  else if (t.cat===CAT.korj) o.korj=-a;
+  else if (t.cat===CAT.oma) o.oma=a;              // + omistaja sijoitti, − omistaja nosti
+  else if (t.cat==='Sijoittaminen') o.sij=a;      // vuokratililtä rahastoihin = nosto sijoituksiin
   else if (t.cat===CAT.rah) o.rah=-a;
   else if (t.cat===CAT.ylim) o.ylim=-a;
   else if (t.cat===CAT.kulut || t.cat===CAT.vakuutus) o.kulut=-a;
@@ -151,10 +154,12 @@ function rahoitusFor(id, date){
   const sch = PROPS[id]?.rahoitus; if (!sch || !date) return 0;
   let v = 0; const k = date.slice(0,7); sch.forEach(([from,amt])=>{ if (k>=from) v=amt; }); return v;
 }
+function ownIn(list){ return list.filter(t=>t.cat===CAT.oma && +t.amount>0).reduce((x,t)=>x+(+t.amount),0); }
+function ownOut(list){ return list.filter(t=>t.cat===CAT.oma && +t.amount<0).reduce((x,t)=>x+(+t.amount),0); }
 function sum(list){
-  const s={tulot:0,vast:0,rah:0,ylim:0,korko:0,kulut:0,lyh:0,muut:0};
+  const s={tulot:0,vast:0,rah:0,ylim:0,korko:0,kulut:0,korj:0,lyh:0,oma:0,sij:0,muut:0};
   list.forEach(t=>{ const p=parts(t); for (const k in s) s[k]+=p[k]; });
-  s.kv = s.tulot - s.vast - s.rah - s.ylim - s.korko - s.kulut;   // kassavirta ennen lyhennyksiä
+  s.kv = s.tulot - s.vast - s.rah - s.ylim - s.korko - s.kulut - s.korj;   // kassavirta ennen lyhennyksiä
   s.kvl = s.kv - s.lyh;                           // kassavirta lyhennysten jälkeen
   return s;
 }
@@ -216,14 +221,21 @@ function renderYht(){
     ${kpi('Rahoitusvastikkeet', eur(-s.rah), 'taloyhtiölainan osuus', 't-gold')}
     ${kpi('Ylimääräiset vastikkeet', eur(-s.ylim), 'hallituksen valtuutuksella', 't-gold')}
     ${kpi('Korot', eur(-s.korko), 'lainaerien korko-osuus', 't-gold')}
-    ${kpi('Muut kulut', eur(-s.kulut), 'vakuutukset, korjaukset ym.', 't-gold')}
+    ${kpi('Muut kulut', eur(-s.kulut), 'vakuutukset, välitys ym.', 't-gold')}
+    ${kpi('Korjaukset', eur(-s.korj), 'remontit, kodinkoneet', 't-gold')}
     ${kpi('Kassavirta', `<span class="${cls(s.kv)}">${eur(s.kv)}</span>`, 'ennen lyhennyksiä', s.kv>=0?'t-green':'t-red')}
     ${kpi('Lyhennykset', eur(s.lyh), 'kasvattaa varallisuutta', 't-blue')}
     ${kpi('Jää käteen', `<span class="${cls(s.kvl)}">${eur(s.kvl)}</span>`, 'lyhennysten jälkeen', s.kvl>=0?'t-green':'t-red')}
   </div>
   <div class="note">Varallisuus kasvoi jaksolla <b>${eur(s.kv)}</b> (kassavirta ennen lyhennyksiä = käteen jäänyt + lainan lyhennys), olettaen asuntojen arvon ennallaan. Lisäksi rahoitusvastikkeet (${eur(s.rah)}) lyhentävät taloyhtiölainaa ja kasvattavat velattoman osuuden arvoa.
   Rahoitusvastikkeen osuus tunnetaan vasta Niiralankadulla 7/2025 ja B17:llä 3/2026 alkaen; aiemmin se sisältyy hoitovastikkeisiin.
-  Vakuudet, uudelleenrahoitukset, asuntokaupat ja omat siirrot (${eur(s.muut)}) eivät ole mukana kassavirrassa.</div>`;
+  Vakuudet, uudelleenrahoitukset ja asuntokaupat (${eur(s.muut)}) eivät ole mukana kassavirrassa.</div>
+  <h2>Omistajan rahavirrat</h2><div class="grid">
+    ${kpi('Omistaja sijoitti', eur(ownIn(list)), 'omista varoista vuokratilille', 't-blue')}
+    ${kpi('Omistaja nosti', eur(-ownOut(list)), 'omille tileille ja yksityiskuluihin', 't-blue')}
+    ${kpi('Rahastoihin', eur(-s.sij), 'vuokratililtä suoraan', 't-blue')}
+    ${kpi('Netto omistajalle', `<span class="${cls(-(s.oma+s.sij))}">${eur(-(s.oma+s.sij))}</span>`, 'nostot + rahastot − sijoitukset', 't-green')}
+  </div>`;
 
   // Kuukausi- tai vuosierittely
   const byKey = {};
@@ -233,8 +245,8 @@ function renderYht(){
   const rows = keys.map(k=>({k, s:sum(byKey[k])}));
   const maxAbs = Math.max(1, ...rows.map(r=>Math.abs(r.s.kv)));
   h += `<h2>${period==='all'?'Vuosittain':'Kuukausittain'}</h2><div class="twrap"><table>
-    <tr><th>${period==='all'?'Vuosi':'Kuukausi'}</th><th>Tulot</th><th>Hoitov.</th><th>Rahoitusv.</th><th>Ylim. v.</th><th>Korot</th><th>Kulut</th><th>Kassavirta</th><th>Lyhennys</th><th>Jää käteen</th>${period==='all'&&ACC?'<th>Tili 31.12.</th>':''}</tr>` +
-    rows.map(({k,s})=>`<tr><td>${period==='all'?k:mlabel(k)}</td><td>${eur(s.tulot)}</td><td>${eur(-s.vast)}</td><td>${eur(-s.rah)}</td><td>${eur(-s.ylim)}</td><td>${eur(-s.korko)}</td><td>${eur(-s.kulut)}</td>
+    <tr><th>${period==='all'?'Vuosi':'Kuukausi'}</th><th>Tulot</th><th>Hoitov.</th><th>Rahoitusv.</th><th>Ylim. v.</th><th>Korot</th><th>Kulut</th><th>Korjaukset</th><th>Kassavirta</th><th>Lyhennys</th><th>Jää käteen</th>${period==='all'&&ACC?'<th>Tili 31.12.</th>':''}</tr>` +
+    rows.map(({k,s})=>`<tr><td>${period==='all'?k:mlabel(k)}</td><td>${eur(s.tulot)}</td><td>${eur(-s.vast)}</td><td>${eur(-s.rah)}</td><td>${eur(-s.ylim)}</td><td>${eur(-s.korko)}</td><td>${eur(-s.kulut)}</td><td>${eur(-s.korj)}</td>
       <td><span class="${cls(s.kv)}">${eur(s.kv)}</span><div class="bar"><i style="width:${Math.abs(s.kv)/maxAbs*100}%;background:${s.kv>=0?'var(--green)':'var(--red)'}"></i></div></td>
       <td>${eur(s.lyh)}</td><td class="${cls(s.kvl)}">${eur(s.kvl)}</td>${period==='all'&&ACC?`<td>${eur(balanceAt(k===String(new Date().getFullYear())?'9999-12-31':`${k}-12-31`))}</td>`:''}</tr>`).join('') +
     `</table></div>`;
@@ -366,6 +378,7 @@ function renderAsunnot(){
       ${s.ylim?`<div class="prow"><span>Ylimääräiset vastikkeet</span><span>${eur(-s.ylim)}</span></div>`:''}
       <div class="prow"><span>Korot</span><span>${eur(-s.korko)}</span></div>
       <div class="prow"><span>Muut kulut</span><span>${eur(-s.kulut)}</span></div>
+      ${s.korj?`<div class="prow"><span>Korjaukset</span><span>${eur(-s.korj)}</span></div>`:''}
       <div class="prow"><b>Kassavirta</b><b class="${cls(s.kv)}">${eur(s.kv)}</b></div>
       <div class="prow"><span>Lyhennykset</span><span>${eur(s.lyh)}</span></div>
       <div class="prow"><span>Jää käteen</span><span class="${cls(s.kvl)}">${eur(s.kvl)}</span></div>
@@ -381,6 +394,8 @@ function renderAsunnot(){
     <div class="psub">${un.length} riviä jaksolla</div>
     <div class="prow"><span>Vuokratulot</span><span>${eur(su.tulot)}</span></div>
     <div class="prow"><span>Kulut ja vakuutukset</span><span>${eur(-su.kulut)}</span></div>
+    ${su.korj?`<div class="prow"><span>Korjaukset</span><span>${eur(-su.korj)}</span></div>`:''}
+    <div class="prow"><span>Omistajan siirrot ja rahastot</span><span>${eur(su.oma+su.sij)}</span></div>
     <div class="prow"><span>Muut rahaliikkeet</span><span>${eur(su.muut)}</span></div>
     ${un.some(t=>t.cat===CAT.tulot||t.cat===CAT.kulut)?`<div class="flag g">Kohdista rivit asuntoon Tapahtumat-välilehdellä, niin ne näkyvät asuntokohtaisissa luvuissa.</div>`:''}
   </div></div>

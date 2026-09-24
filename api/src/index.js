@@ -778,8 +778,25 @@ function categorizeRental(tx) {
   if (/takuu\s*-?\s*vuokra|vuokra\s*-?\s*vakuu/i.test(v)) return r('Vuokra — vakuudet');
   if (s === 'LUOTON MAKSU' || s === 'LUOTON NOSTO') {
     const m = v.match(/Lyhennys ([\d\s]+,\d+) euroa Korko ([\d\s]+,\d+) euroa/);
-    // Kertalyhennys/uudelleenrahoitus (esim. vanhan lainan poismaksu uudella) ei ole kuukausierä
-    if (s === 'LUOTON NOSTO' || !m || a >= 0 || N(m[1]) > 5000) return r('Vuokra — uudelleenrahoitus');
+    const split = (rest, restLabel, korko, korkoLabel) => ({cat:'Vuokra — uudelleenrahoitus', type:'neutral', splits:[
+      {label:restLabel, cat:'Vuokra — uudelleenrahoitus', type:'neutral', amount:rest},
+      {label:korkoLabel, cat:'Vuokra — lainan korko', type:'neutral', amount:korko}]});
+    // Lainan nosto: palkkiot (bonusten jälkeen) ovat kulua, loppu rahoitusta
+    if (s === 'LUOTON NOSTO' || (a > 0 && /nosto/i.test(v))) {
+      const n = v.match(/nosto ([\d\s]+,\d+) euroa/i);
+      if (n && a > 0) { const gross = N(n[1]), fee = Math.round((gross - a) * 100) / 100;
+        if (fee > 0) return split(gross, 'Lainan nosto', -fee, 'Palkkiot'); }
+      return r('Vuokra — uudelleenrahoitus');
+    }
+    // Korkoerä ilman lyhennystä (lyhennysvapaa): koko erä on korkoa ja kuluja
+    if (!m && a < 0 && a > -1000 && /Korko [\d\s]+,\d+ euroa/.test(v)) {
+      return {cat:'Vuokra — lainan lyhennys', type:'neutral', splits:[
+        {label:'Korko ja kulut', cat:'Vuokra — lainan korko', type:'neutral', amount:-a}]};
+    }
+    // Kertalyhennys/uudelleenrahoitus (vanhan lainan poismaksu uudella): korko-osa kuluksi
+    if (!m || a >= 0) return r('Vuokra — uudelleenrahoitus');
+    if (N(m[1]) > 5000) { const korko = Math.round((-a - N(m[1])) * 100) / 100;
+      return korko > 0 ? split(N(m[1]), 'Lainan poismaksu', korko, 'Korko') : r('Vuokra — uudelleenrahoitus'); }
     const lyh = N(m[1]), korko = Math.round((-a - lyh) * 100) / 100;
     return {cat:'Vuokra — lainan lyhennys', type:'neutral', splits:[
       {label:'Lyhennys', cat:'Vuokra — lainan lyhennys', type:'neutral', amount:lyh},
