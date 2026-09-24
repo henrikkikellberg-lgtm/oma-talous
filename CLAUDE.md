@@ -284,6 +284,9 @@ Suoja lisätty `categorize()`:en (API ja frontend, v1.13.1): **luottotilillä ne
 - **Positiivinen `savings`-rivi on sallittu ja netotetaan** (`monthSummary`, budjetit, API `/summary`). Älä laske savingsia `Math.abs`illa.
 - **Säännöt `kellberg hen` / `kaarlo henri`** osuvat kaikkiin ulosmeneviin siirtoihin näillä nimillä. Tarkista rivi riviltä ennen automaattikorjausta.
 
+- **Käsin syötetyn rivin duplikaattihaku ±3 pv.** Tarkka päivävertailu päästi läpi Spotifyn (pankki 20.6. / käsin 22.6.) ja McDonald'sin (26.8. / 27.8.) → Perus-saldo 30,39 € pankkia pienempi. `findExistingDuplicate` hyväksyy nyt manual/receipt-rivin ±3 pv sisältä, lähin ensin, yksi CSV-rivi per käsin syötetty rivi. Saldon täsmäytys: pankin tiliotteen loppusaldo = `opening_balance + SUM(amount)`; Perus 23.9.2026 = 286,38 €.
+- **`GET /transactions` palauttaa KAIKKI rivit.** Aiempi `LIMIT 1000` pudotti vanhimmat rivit frontendistä, kun data ylitti 1 000 riviä (24.9.2026): Perus-saldo näytti 805,32 € liikaa, koska 1.–5.1.2026 rivit puuttuivat summasta. Älä lisää oletusrajaa — saldot lasketaan koko historiasta.
+
 ### Tarkistuslista ennen kuin vastaat "mihin raha meni"
 
 1. **`MAX(transactions.date)` EI kerro datan tuoreutta.** Tili jolla ei ole ollut tapahtumia (Revolut, säästötili) näyttää täsmälleen samalta kuin tili jonka tiliotetta ei ole tuotu kuukauteen. Ensimmäinen on kunnossa, toinen tekee kaikista luvuista hiljaa liian pieniä. Ainoa luotettava signaali on `accounts.last_import_at` — leima siitä milloin tiliote tuotiin, päivittyy myös kun tiedostossa ei ollut yhtään riviä.

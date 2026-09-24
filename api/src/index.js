@@ -220,7 +220,14 @@ async function handleTxList(req, env, url) {
   const params = [];
   if (month) { query += ' AND month = ?'; params.push(month); }
   if (type)  { query += ' AND type = ?';  params.push(type); }
-  query += ' ORDER BY date DESC, created_at DESC LIMIT 1000';
+  query += ' ORDER BY date DESC, created_at DESC';
+  // EI oletusrajaa. Frontend laskee tilien saldot opening_balance + SUM(kaikki
+  // rivit opening_daten jälkeen), joten jokainen pois jäävä vanha rivi vääristää
+  // saldoa hiljaa. LIMIT 1000 katkaisi syyskuussa 2026 (1 035 riviä) 13 vanhinta
+  // Perus-riviä (−805,32 €) → "Tili nyt" näytti 1 061 € kun oikea oli ~256 €.
+  // Rajaus vain eksplisiittisellä ?limit=-parametrilla.
+  const lim = parseInt(url.searchParams.get('limit'), 10);
+  if (lim > 0) { query += ' LIMIT ?'; params.push(lim); }
   const { results } = await env.DB.prepare(query).bind(...params).all();
   return ok(results.map(r => ({ ...r, splits: safeParse(r.splits) })));
 }
@@ -348,9 +355,10 @@ async function handleCSVImport(req, env) {
   const { results: rulesRows } = await env.DB.prepare('SELECT kw,cat,type,splits FROM rules ORDER BY priority DESC').all();
   let added = 0;
   let skippedDuplicates = 0;
+  const claimed = new Set();   // käsin syötetyt rivit jotka jo kuittasivat yhden CSV-rivin
   for (const row of rows) {
     if (ids.has(row.id)) continue;
-    if (findExistingDuplicate(row, existing)) { skippedDuplicates++; continue; }
+    if (findExistingDuplicate(row, existing, claimed)) { skippedDuplicates++; continue; }
     const cat = categorize(row, rulesRows);
     row.month = row.date.substring(0,7);
     await env.DB.prepare(
@@ -394,7 +402,7 @@ async function stampImport(env, rows, accountParam) {
 // Pelkkä sama päivä + sama summa riittää, kunhan päivä on korjattu oikeaksi
 // ostopäiväksi (ks. extractOstopvm) — kahden eri ostoksen osuminen samaan
 // päivään ja täsmälleen samaan summaan on käytännössä harvinaista.
-function findExistingDuplicate(row, existing) {
+function findExistingDuplicate(row, existing, claimed = new Set()) {
   // Vertailu VAIN saman tilin sisällä. Sama päivä ja summa eri tileillä on
   // normaali sisäinen siirto, ei duplikaatti — ja siirron molemmat puolet
   // tarvitaan jotta kummankin tilin saldo täsmää pankkiin.
@@ -404,6 +412,21 @@ function findExistingDuplicate(row, existing) {
     if (Math.abs(e.amount - row.amount) > 0.005) continue;
     return true;
   }
+  // Käsin syötetyn rivin päivä ei aina osu pankin ostopäivään: tilaus veloitetaan
+  // eri päivänä kuin se kirjattiin (Spotify 20.6. pankissa / 22.6. käsin) tai
+  // ostos kirjataan seuraavana päivänä (McDonald's 26.8. / 27.8.). Tarkka
+  // päivävertailu päästi molemmat läpi → Perus-saldo 30,39 € pankkia pienempi.
+  // Siksi manual/receipt-riville ±3 pv ikkuna, lähin päivä ensin. Kukin käsin
+  // syötetty rivi voi kuitata vain YHDEN CSV-rivin, jotta kaksi samanhintaista
+  // ostosta peräkkäisinä päivinä ei sulaudu yhdeksi.
+  const DAY = 86400000, rowT = Date.parse(row.date);
+  const near = existing
+    .filter(e => (e.account || 'Perus') === (row.account || 'Perus')
+      && (e.source === 'manual' || e.source === 'receipt') && !claimed.has(e.id)
+      && Math.abs(e.amount - row.amount) <= 0.005
+      && Math.abs(Date.parse(e.date) - rowT) <= 3 * DAY)
+    .sort((a, b) => Math.abs(Date.parse(a.date) - rowT) - Math.abs(Date.parse(b.date) - rowT));
+  if (near.length) { claimed.add(near[0].id); return true; }
   // Kuitin skannaus voi pilkkoa yhden ostoksen useaan kategoriariviin (esim.
   // päivittäistavarat + alkoholi erikseen alkoholiseurannan vuoksi), kun pankin
   // kortti veloittaa koko ostoksen yhtenä rivinä. Etsitään löytyykö samalta
