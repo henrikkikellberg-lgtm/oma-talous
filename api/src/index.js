@@ -220,6 +220,8 @@ async function handleTxList(req, env, url) {
   const params = [];
   if (month) { query += ' AND month = ?'; params.push(month); }
   if (type)  { query += ' AND type = ?';  params.push(type); }
+  const account = url.searchParams.get('account');
+  if (account) { query += ' AND account = ?'; params.push(account); }
   query += ' ORDER BY date DESC, created_at DESC';
   // EI oletusrajaa. Frontend laskee tilien saldot opening_balance + SUM(kaikki
   // rivit opening_daten jälkeen), joten jokainen pois jäävä vanha rivi vääristää
@@ -246,7 +248,7 @@ async function handleTxCreate(req, env) {
 async function handleTxUpdate(req, env, id) {
   const decodedId = decodeURIComponent(id);
   const updates = await req.json();
-  const fields = ['cat','type','payee','amount','date','account','splits'].filter(f=>updates[f]!==undefined);
+  const fields = ['cat','type','payee','amount','date','account','splits','property_id'].filter(f=>updates[f]!==undefined);
   if (!fields.length) return err('Nothing to update');
   const sets = fields.map(f=>`${f}=?`).join(',');
   const vals = fields.map(f => f==='splits' ? (updates[f]?JSON.stringify(updates[f]):null) : updates[f]);
@@ -352,18 +354,31 @@ async function handleCSVImport(req, env) {
   const rows = parseCSV(csv, filename || '', account || null);
   const { results: existing } = await env.DB.prepare('SELECT id,date,amount,payee,source,account FROM transactions').all();
   const ids = new Set(existing.map(r=>r.id));
+  const byId = new Map(existing.map(r=>[r.id, r]));
   const { results: rulesRows } = await env.DB.prepare('SELECT kw,cat,type,splits FROM rules ORDER BY priority DESC').all();
   let added = 0;
   let skippedDuplicates = 0;
   const claimed = new Set();   // käsin syötetyt rivit jotka jo kuittasivat yhden CSV-rivin
   for (const row of rows) {
-    if (ids.has(row.id)) continue;
+    // OP käyttää toistuvan tilisiirron JOKAISELLA kerralla samaa
+    // arkistointitunnusta (esim. "Asuntosäästö" 100 €/kk: 20200825/593619/2B3784
+    // toistui 7 kk). Pelkkä id-vertailu ohitti 6 riviä duplikaattina → vuokratilin
+    // 2020–21 saldo 600 € pielessä. Sama id + eri päivä/summa = eri tapahtuma:
+    // annetaan sille päiväkohtainen id.
+    if (ids.has(row.id)) {
+      const e = byId.get(row.id);
+      if (e && e.date === row.date && Math.abs(e.amount - row.amount) < 0.005) continue;
+      row.id = `${row.id}_${row.date}`;
+      if (ids.has(row.id)) continue;
+    }
+    ids.add(row.id); byId.set(row.id, {id:row.id, date:row.date, amount:row.amount});
     if (findExistingDuplicate(row, existing, claimed)) { skippedDuplicates++; continue; }
     const cat = categorize(row, rulesRows);
     row.month = row.date.substring(0,7);
+    const propertyId = RENTAL_ACCTS.includes(row.account) ? rentalProperty(row) : null;
     await env.DB.prepare(
-      'INSERT INTO transactions (id,date,payee,selitys,viesti,amount,cat,type,source,account,month,splits) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
-    ).bind(row.id,row.date,row.payee,row.selitys,row.viesti,row.amount,cat.cat,cat.type,row.source,row.account||'Perus',row.month,cat.splits?JSON.stringify(cat.splits):null).run();
+      'INSERT INTO transactions (id,date,payee,selitys,viesti,amount,cat,type,source,account,month,splits,property_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
+    ).bind(row.id,row.date,row.payee,row.selitys,row.viesti,row.amount,cat.cat,cat.type,row.source,row.account||'Perus',row.month,cat.splits?JSON.stringify(cat.splits):null,propertyId).run();
     added++;
   }
   await stampImport(env, rows, account);
@@ -638,7 +653,10 @@ function parseCSV(text, fname, acctOverride) {
       if (c.length<6) continue;
       const amt = parseFloat((c[2]||'').replace(',','.'));
       if (isNaN(amt)) continue;
-      const viesti = ((c[9]||'') + (c[6] ? ' ' + c[6] : '')).trim();   // sis. saajan tilinumero
+      // Viite (c[8]) mukaan: vuokratilillä se on ainoa tapa erottaa saman taloyhtiön
+      // kaksi vastiketta asunnoittain (Riistakatu 15: 15012122 = B10, 15012193 = B17).
+      const viite = (c[8] && c[8] !== 'ref=') ? ' ' + c[8] : '';
+      const viesti = ((c[9]||'') + (c[6] ? ' ' + c[6] : '') + viite).trim();   // sis. saajan tilinumero + viite
       // Korttiostoissa Kirjauspäivä (c[0]) on pankin veloituspäivä, joka voi olla
       // 1-3 pv ostopäivää myöhempi (viikonloppu/pyhä venyttää). Viesti-kentässä on
       // todellinen ostopäivä OSTOPVM-tunnisteena (YYMMDD) — käytetään sitä kun löytyy,
@@ -727,6 +745,29 @@ const SAVINGS_ACCTS = ['Saasto','Lipas'];
 // mutta saavat vuokratoiminnan kategorian ja lainaerät jaetaan korkoon ja
 // lyhennykseen OP:n viestikentästä. Saldo lasketaan normaalisti.
 const RENTAL_ACCTS = ['Vuokra'];
+// Kohdistus asuntoon (Tuottokartan kayttaja_asunnot.id). Ks. migrations/008_property_id.sql.
+// Järjestys: vastike (viite) → laina (tilinumero) → osoite viestissä → vuokralaisen nimi.
+// Vuokralaislista on historiallinen; uusi vuokralainen kohdistuu viestin osoitteesta
+// tai jää NULLiksi ja kohdistetaan käsin vuokrasivulla.
+const RENTAL_TENANTS = {
+  a3: ['MALM','VARTIAINEN','RASCHKA','MUSTONEN','KIVILUOTO','KANGAS-RAHKO','ÄIKÄS'],
+  a2: ['KUMPULAINEN','MIETTINEN'],
+  a1: ['KAUPPINEN','LEHTO','SILVENNOINEN','SOTTINEN','KORHONEN','LYLY'],
+};
+function rentalProperty(tx) {
+  const P = (tx.payee || '').toUpperCase(), v = (tx.viesti || '').toLowerCase();
+  if (P.includes('TURONTÄHTI') || v.includes('niirala')) return 'a3';
+  if (/^FI(89 5600 0580 9007 70|11 5600 0580 8761 78|03 5600 0580 6256 74)/.test(P)) return 'a3';
+  if (P.startsWith('FI58 5600 0580 7751 31')) return 'a2';
+  if (P.includes('RIISTAKATU')) {
+    if (/15012122|ref=000009101/.test(v)) return 'a2';
+    if (/15012193|ref=000003101/.test(v)) return 'a1';
+  }
+  if (/15\s*b\s*(as\s*)?10\b/.test(v)) return 'a2';
+  if (/15\s*b\s*a?\s*17\b/.test(v)) return 'a1';
+  for (const [id, names] of Object.entries(RENTAL_TENANTS)) if (names.some(n => P.includes(n))) return id;
+  return null;
+}
 function categorizeRental(tx) {
   const p = tx.payee || '', v = tx.viesti || '', s = (tx.selitys || '').toUpperCase(), a = tx.amount;
   const N = x => parseFloat(String(x).replace(/\s/g,'').replace(',','.'));
@@ -741,7 +782,7 @@ function categorizeRental(tx) {
       {label:'Lyhennys', cat:'Vuokra — lainan lyhennys', type:'neutral', amount:lyh},
       {label:'Korko ja kulut', cat:'Vuokra — lainan korko', type:'neutral', amount:korko}]};
   }
-  if (/kauppahin|toimeksiantosopimu|konttorikaup/i.test(v)) return r('Asunnon myynti');
+  if (/kauppahin|toimeksiantosopimu|konttorikaup/i.test(v)) return r('Asuntokauppa');
   if (/asunto oy/i.test(p)) return r('Vuokra — vastikkeet');
   if (s === 'ARVOPAPERI') return r('Sijoittaminen');
   if (/kellberg/i.test(p)) return r('MobilePay & siirrot');

@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1B6B3A">
+<title>oma·talous · vuokratoiminta</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+/* Sama design-järjestelmä kuin index.html (CLAUDE.md → Design-järjestelmä). */
+:root{
+  --bg:#F2F6FA;--surface:#FFFFFF;--surface2:#EAF0F6;--border:#D8E4EE;
+  --green:#1B6B3A;--green-mid:#2D8A52;--green-light:#E5F2EB;
+  --gold:#B5883E;--gold-light:#FAF3E6;--blue:#1A5BAB;--blue-light:#E8F0FA;
+  --text:#0E1C2D;--muted:#5A6E82;--dim:#9AAAB8;--red:#C0322A;--red-light:#FBECEB;
+  --radius:10px;--radius-sm:7px;--radius-lg:16px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);font-size:15px;min-height:100vh}
+a{color:var(--blue);text-decoration:none}
+header{position:sticky;top:0;z-index:20;background:var(--surface);border-bottom:.5px solid var(--border)}
+.hwrap{max-width:980px;margin:0 auto;padding:0 16px;height:52px;display:flex;align-items:center;gap:12px}
+.logo{font-size:14px;font-weight:500;white-space:nowrap}.logo .dot{color:var(--gold)}
+.logo small{font-weight:400;color:var(--muted);margin-left:6px}
+.back{margin-left:auto;font-size:13px;color:var(--muted)}
+.tabs{max-width:980px;margin:0 auto;padding:0 16px;display:flex;gap:4px;overflow-x:auto}
+.tab{padding:0 12px;height:40px;border:none;background:none;color:var(--muted);font:500 13px 'Inter',sans-serif;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+.tab.on{color:var(--green);border-bottom-color:var(--green)}
+main{max-width:980px;margin:0 auto;padding:16px 16px 60px}
+.lbl{font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--dim)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+.chip{height:30px;padding:0 12px;border-radius:15px;border:.5px solid var(--border);background:var(--surface);color:var(--muted);font:500 13px 'Inter',sans-serif;cursor:pointer}
+.chip.on{background:var(--green);border-color:var(--green);color:#fff}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.card{background:var(--surface);border:.5px solid var(--border);border-radius:var(--radius);padding:14px 16px}
+.kpi .v{font-size:22px;font-weight:300;margin-top:4px;font-variant-numeric:tabular-nums}
+.kpi .s{font-size:12px;color:var(--muted);margin-top:2px}
+.t-green{border-top:2.5px solid var(--green)}.t-gold{border-top:2.5px solid var(--gold)}.t-blue{border-top:2.5px solid var(--blue)}.t-red{border-top:2.5px solid var(--red)}
+.pos{color:var(--green)}.neg{color:var(--red)}.mut{color:var(--muted)}
+h2{font-size:18px;font-weight:500;margin:22px 0 10px}
+table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+th{text-align:right;font-weight:500;color:var(--muted);padding:6px 8px;border-bottom:.5px solid var(--border);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+td{text-align:right;padding:6px 8px;border-bottom:.5px solid var(--surface2);white-space:nowrap}
+.twrap{background:var(--surface);border:.5px solid var(--border);border-radius:var(--radius);overflow-x:auto}
+.bar{height:3px;background:var(--surface2);border-radius:2px;margin-top:3px;overflow:hidden}
+.bar>i{display:block;height:3px;border-radius:2px;transition:width .4s ease}
+.props{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px}
+.prow{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:.5px solid var(--surface2)}
+.prow:last-child{border-bottom:none}
+.ptitle{font-size:15px;font-weight:500}.psub{font-size:12px;color:var(--muted);margin:2px 0 10px}
+.flag{font-size:12px;padding:6px 10px;border-radius:var(--radius-sm);margin-top:8px}
+.flag.r{background:var(--red-light);color:var(--red)}.flag.g{background:var(--gold-light);color:var(--gold)}
+.tx{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border:.5px solid var(--border);border-radius:var(--radius-sm);margin-bottom:6px}
+.tx .i{flex:1;min-width:0}.tx .p{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tx .m{font-size:12px;color:var(--muted);margin-top:2px}
+.tx .a{font-size:14px;font-variant-numeric:tabular-nums;white-space:nowrap}
+select,input[type=search]{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;color:var(--text);font:13px 'Inter',sans-serif;outline:none}
+select:focus,input:focus{border-color:var(--green)}
+.tx select{font-size:12px;padding:4px 6px;max-width:150px}
+.btn{height:40px;padding:0 16px;border-radius:var(--radius);border:.5px solid var(--border);background:var(--surface);font:500 14px 'Inter',sans-serif;cursor:pointer}
+.note{font-size:12px;color:var(--muted);margin:6px 0 14px;line-height:1.5}
+.empty{padding:40px 0;text-align:center;color:var(--muted)}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--text);color:#fff;padding:10px 16px;border-radius:var(--radius);font-size:13px;opacity:0;transition:opacity .25s ease;pointer-events:none}
+</style>
+</head>
+<body>
+<header>
+  <div class="hwrap">
+    <div class="logo">oma<span class="dot">·</span>talous<small>vuokratoiminta</small></div>
+    <a class="back" href="index.html">← Oma talous</a>
+  </div>
+  <div class="tabs" id="tabs"></div>
+</header>
+<main id="main"><div class="empty">Ladataan…</div></main>
+<div id="toast"></div>
+
+<script>
+// ── Vuokratoiminta (v1.15.0) ─────────────────────────────────────────────────
+// Erillinen näkymä vuokratilille (accounts.kind = 'rental'). Sama API, sama
+// kirjautuminen (localStorage 'ot_secret'). Asuntojen master-data on Tuottokartan
+// kayttaja_asunnot (id a1/a2/a3); tässä vaiheessa nimet ovat kovakoodattuna —
+// vaihe 4 lukee ne Tuottokartasta ja tuo suunnitellut arvot vertailuun.
+const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
+const SECRET = (()=>{ try { return localStorage.getItem('ot_secret')||''; } catch(e){ return ''; } })();
+const HDR = {'Content-Type':'application/json','Authorization':`Bearer ${SECRET}`};
+const PROPS = {
+  a3: {name:'Niiralankatu 19 B 37', city:'Kuopio'},
+  a1: {name:'Riistakatu 15 B 17',  city:'Iisalmi'},
+  a2: {name:'Riistakatu 15 B 10',  city:'Iisalmi'},
+};
+const PROP_ORDER = ['a3','a1','a2'];
+const CAT = {
+  tulot:'Vuokra — tulot', vast:'Vuokra — vastikkeet', lyh:'Vuokra — lainan lyhennys',
+  kulut:'Vuokra — kulut', vakuutus:'Vuokra — vakuutukset', vakuus:'Vuokra — vakuudet',
+  uudel:'Vuokra — uudelleenrahoitus',
+};
+const CAT_OPTS = [CAT.tulot,CAT.vast,CAT.lyh,CAT.kulut,CAT.vakuutus,CAT.vakuus,CAT.uudel,'Asuntokauppa','Sijoittaminen','MobilePay & siirrot'];
+
+let TX = [], ACC = null, tab = 'yht', period = String(new Date().getFullYear());
+let fProp = 'all', fCat = '', fSearch = '', showN = 150, searchTimer = null;
+
+const esc = s => String(s??'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const eur = (n, d=0) => (n<0?'−':'') + Math.abs(n).toLocaleString('fi-FI',{minimumFractionDigits:d,maximumFractionDigits:d}) + ' €';
+const eur2 = n => eur(n,2);
+const cls = n => n>0.005?'pos':n<-0.005?'neg':'mut';
+const fdate = d => { const [y,m,dd]=d.split('-'); return `${+dd}.${+m}.${y}`; };
+const MON = ['tammi','helmi','maalis','huhti','touko','kesä','heinä','elo','syys','loka','marras','joulu'];
+const mlabel = k => { const [y,m]=k.split('-'); return `${MON[+m-1]} ${y}`; };
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.style.opacity=1; clearTimeout(toast._t); toast._t=setTimeout(()=>t.style.opacity=0,2200); }
+
+// Yhden rivin jako mittareihin. Lainaerä jaetaan splitsillä korkoon ja lyhennykseen;
+// kaikki muu kuin vuokratoiminnan kassavirta (vakuudet, uudelleenrahoitus, asuntokauppa,
+// omat siirrot, sijoitukset) menee "muut"-ämpäriin eikä vääristä kassavirtaa.
+function parts(t){
+  const o = {tulot:0,vast:0,korko:0,kulut:0,lyh:0,muut:0};
+  const a = +t.amount||0;
+  if (t.cat===CAT.tulot) o.tulot=a;
+  else if (t.cat===CAT.vast) o.vast=-a;
+  else if (t.cat===CAT.kulut || t.cat===CAT.vakuutus) o.kulut=-a;
+  else if (t.cat===CAT.lyh) {
+    const sp = Array.isArray(t.splits) ? t.splits : null;
+    const k = sp && sp.find(s=>/korko/i.test(s.cat||s.label||''));
+    const l = sp && sp.find(s=>/lyhennys/i.test(s.cat||s.label||''));
+    if (k || l) { o.korko=+(k?.amount||0); o.lyh=+(l?.amount||0); }
+    else o.lyh=-a;
+  } else o.muut=a;
+  return o;
+}
+function sum(list){
+  const s={tulot:0,vast:0,korko:0,kulut:0,lyh:0,muut:0};
+  list.forEach(t=>{ const p=parts(t); for (const k in s) s[k]+=p[k]; });
+  s.kv = s.tulot - s.vast - s.korko - s.kulut;   // kassavirta ennen lyhennyksiä
+  s.kvl = s.kv - s.lyh;                           // kassavirta lyhennysten jälkeen
+  return s;
+}
+function inPeriod(t){ return period==='all' || t.date.startsWith(period); }
+function years(){ return [...new Set(TX.map(t=>t.date.slice(0,4)))].sort().reverse(); }
+function balance(){
+  if (!ACC) return null;
+  return ACC.opening_balance + TX.filter(t=>t.date>ACC.opening_date).reduce((s,t)=>s+(+t.amount||0),0);
+}
+// Kuukaudet jaksolla, joilla on jo ollut toimintaa (ei tulevia kuukausia).
+function periodMonths(){
+  const now = new Date(); const cur = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const first = TX.length ? TX.map(t=>t.date.slice(0,7)).sort()[0] : cur;
+  let start = period==='all' ? first : `${period}-01`; if (start < first) start = first;
+  let end = period==='all' ? cur : `${period}-12`; if (end > cur) end = cur;
+  const out = []; let [y,m] = start.split('-').map(Number);
+  for (let i=0; i<400; i++) { const k=`${y}-${String(m).padStart(2,'0')}`; if (k>end) break; out.push(k); if (++m>12){m=1;y++;} }
+  return out;
+}
+
+// ── Välilehdet ───────────────────────────────────────────────────────────────
+const TABS = [['yht','Yleiskatsaus'],['asunnot','Asunnot'],['lainat','Lainat'],['tap','Tapahtumat']];
+function renderTabs(){
+  document.getElementById('tabs').innerHTML = TABS.map(([k,l])=>`<button class="tab ${tab===k?'on':''}" onclick="setTab('${k}')">${l}</button>`).join('');
+}
+function setTab(k){ tab=k; showN=150; renderTabs(); render(); try{localStorage.setItem('ot_vuokra_tab',k);}catch(e){} }
+function setPeriod(p){ period=p; showN=150; render(); }
+function periodChips(){
+  return `<div class="chips"><span class="lbl" style="margin-right:4px">Jakso</span>` +
+    years().map(y=>`<button class="chip ${period===y?'on':''}" onclick="setPeriod('${y}')">${y}</button>`).join('') +
+    `<button class="chip ${period==='all'?'on':''}" onclick="setPeriod('all')">Kaikki</button></div>`;
+}
+function render(){
+  const el=document.getElementById('main');
+  if (tab==='yht') el.innerHTML = periodChips()+renderYht();
+  else if (tab==='asunnot') el.innerHTML = periodChips()+renderAsunnot();
+  else if (tab==='lainat') el.innerHTML = renderLainat();
+  else { el.innerHTML = periodChips()+renderTapHeader()+'<div id="txList"></div>'; renderTxList(); }
+}
+
+// ── Yleiskatsaus ─────────────────────────────────────────────────────────────
+function kpi(label, v, sub, tone){ return `<div class="card kpi ${tone||''}"><div class="lbl">${label}</div><div class="v">${v}</div>${sub?`<div class="s">${sub}</div>`:''}</div>`; }
+function renderYht(){
+  const list = TX.filter(inPeriod), s = sum(list), bal = balance();
+  const pl = period==='all' ? 'koko historia' : period;
+  let h = `<div class="grid">
+    ${kpi('Tili nyt', bal==null?'–':eur2(bal), 'laskettu tiliotteista', 't-blue')}
+    ${kpi('Vuokratulot', eur(s.tulot), pl, 't-green')}
+    ${kpi('Vastikkeet', eur(-s.vast), pl, 't-gold')}
+    ${kpi('Korot', eur(-s.korko), 'lainaerien korko-osuus', 't-gold')}
+    ${kpi('Muut kulut', eur(-s.kulut), 'vakuutukset, korjaukset ym.', 't-gold')}
+    ${kpi('Kassavirta', `<span class="${cls(s.kv)}">${eur(s.kv)}</span>`, 'ennen lyhennyksiä', s.kv>=0?'t-green':'t-red')}
+    ${kpi('Lyhennykset', eur(s.lyh), 'kasvattaa varallisuutta', 't-blue')}
+    ${kpi('Jää käteen', `<span class="${cls(s.kvl)}">${eur(s.kvl)}</span>`, 'lyhennysten jälkeen', s.kvl>=0?'t-green':'t-red')}
+  </div>
+  <div class="note">Varallisuus kasvoi jaksolla <b>${eur(s.kv)}</b> (kassavirta ennen lyhennyksiä = käteen jäänyt + lainan lyhennys), olettaen asuntojen arvon ennallaan.
+  Vakuudet, uudelleenrahoitukset, asuntokaupat ja omat siirrot (${eur(s.muut)}) eivät ole mukana kassavirrassa.</div>`;
+
+  // Kuukausi- tai vuosierittely
+  const byKey = {};
+  const keyOf = t => period==='all' ? t.date.slice(0,4) : t.date.slice(0,7);
+  list.forEach(t=>{ (byKey[keyOf(t)] ||= []).push(t); });
+  const keys = Object.keys(byKey).sort().reverse();
+  const rows = keys.map(k=>({k, s:sum(byKey[k])}));
+  const maxAbs = Math.max(1, ...rows.map(r=>Math.abs(r.s.kv)));
+  h += `<h2>${period==='all'?'Vuosittain':'Kuukausittain'}</h2><div class="twrap"><table>
+    <tr><th>${period==='all'?'Vuosi':'Kuukausi'}</th><th>Tulot</th><th>Vastikkeet</th><th>Korot</th><th>Kulut</th><th>Kassavirta</th><th>Lyhennys</th><th>Jää käteen</th></tr>` +
+    rows.map(({k,s})=>`<tr><td>${period==='all'?k:mlabel(k)}</td><td>${eur(s.tulot)}</td><td>${eur(-s.vast)}</td><td>${eur(-s.korko)}</td><td>${eur(-s.kulut)}</td>
+      <td><span class="${cls(s.kv)}">${eur(s.kv)}</span><div class="bar"><i style="width:${Math.abs(s.kv)/maxAbs*100}%;background:${s.kv>=0?'var(--green)':'var(--red)'}"></i></div></td>
+      <td>${eur(s.lyh)}</td><td class="${cls(s.kvl)}">${eur(s.kvl)}</td></tr>`).join('') +
+    `</table></div>`;
+  return h;
+}
+
+// ── Asunnot ──────────────────────────────────────────────────────────────────
+function median(a){ if(!a.length) return 0; const b=[...a].sort((x,y)=>x-y); const m=b.length>>1; return b.length%2?b[m]:(b[m-1]+b[m])/2; }
+function renderAsunnot(){
+  const months = periodMonths();
+  let h = `<div class="props">`;
+  PROP_ORDER.forEach(id=>{
+    const P = PROPS[id];
+    const all = TX.filter(t=>t.property_id===id);
+    const list = all.filter(inPeriod);
+    const s = sum(list);
+    // Vuokralainen ja vuokra = viimeisin vuokratulorivi (koko historiasta)
+    const rents = all.filter(t=>t.cat===CAT.tulot && t.amount>0).sort((a,b)=>b.date.localeCompare(a.date));
+    const last = rents[0];
+    // Tyhjät kuukaudet: jakson kuukaudet joilta ei vuokratuloa tälle asunnolle
+    const rentMonths = new Set(rents.map(t=>t.date.slice(0,7)));
+    const firstRent = rents.length ? rents[rents.length-1].date.slice(0,7) : null;
+    const now = new Date(); const curKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    const empty = months.filter(k=>firstRent && k>=firstRent && k<curKey && !rentMonths.has(k));
+    // Ylimääräinen vastike: kuukauden vastikesumma > 1,3 × asunnon vastikkeiden mediaani
+    const vByM = {}; all.filter(t=>t.cat===CAT.vast).forEach(t=>{ const k=t.date.slice(0,7); vByM[k]=(vByM[k]||0)-t.amount; });
+    const med = median(Object.values(vByM));
+    const extra = Object.entries(vByM).filter(([k,v])=>months.includes(k) && med>0 && v>med*1.3).sort();
+    h += `<div class="card t-green">
+      <div class="ptitle">${esc(P.name)}</div>
+      <div class="psub">${esc(P.city)}${last?` · ${esc(last.payee)} · ${eur(last.amount)}/kk (${fdate(last.date)})`:''}</div>
+      <div class="prow"><span>Vuokratulot</span><span>${eur(s.tulot)}</span></div>
+      <div class="prow"><span>Vastikkeet</span><span>${eur(-s.vast)}</span></div>
+      <div class="prow"><span>Korot</span><span>${eur(-s.korko)}</span></div>
+      <div class="prow"><span>Muut kulut</span><span>${eur(-s.kulut)}</span></div>
+      <div class="prow"><b>Kassavirta</b><b class="${cls(s.kv)}">${eur(s.kv)}</b></div>
+      <div class="prow"><span>Lyhennykset</span><span>${eur(s.lyh)}</span></div>
+      <div class="prow"><span>Jää käteen</span><span class="${cls(s.kvl)}">${eur(s.kvl)}</span></div>
+      ${empty.length?`<div class="flag r">Ei vuokratuloa: ${empty.map(mlabel).join(', ')}</div>`:''}
+      ${extra.length?`<div class="flag g">Tavallista suurempi vastike (mediaani ${eur(med)}/kk): ${extra.map(([k,v])=>`${mlabel(k)} ${eur(v)}`).join(', ')}</div>`:''}
+    </div>`;
+  });
+  const un = TX.filter(t=>!t.property_id && inPeriod(t)); const su = sum(un);
+  h += `<div class="card"><div class="ptitle">Yleiset / kohdistamattomat</div>
+    <div class="psub">${un.length} riviä jaksolla</div>
+    <div class="prow"><span>Vuokratulot</span><span>${eur(su.tulot)}</span></div>
+    <div class="prow"><span>Kulut ja vakuutukset</span><span>${eur(-su.kulut)}</span></div>
+    <div class="prow"><span>Muut rahaliikkeet</span><span>${eur(su.muut)}</span></div>
+    ${un.some(t=>t.cat===CAT.tulot||t.cat===CAT.kulut)?`<div class="flag g">Kohdista rivit asuntoon Tapahtumat-välilehdellä, niin ne näkyvät asuntokohtaisissa luvuissa.</div>`:''}
+  </div></div>
+  <div class="note">Vastikkeet kohdistuvat vastikeviitteestä, lainat tilinumerosta ja vuokrat viestin osoitteesta tai vuokralaisen nimestä. Tyhjä kuukausi tarkoittaa, ettei tälle asunnolle kirjattu vuokratuloa — vuokra voi myös olla maksettu myöhässä seuraavalla kuulla.</div>`;
+  return h;
+}
+
+// ── Lainat ───────────────────────────────────────────────────────────────────
+// Saldo luetaan OP:n viestistä ("Jäljellä 52 257,03 euroa") — mitattu havainto, ei laskettu.
+function renderLainat(){
+  const loans = {};
+  TX.filter(t=>t.cat===CAT.lyh || t.cat===CAT.uudel).forEach(t=>{
+    const m = (t.viesti||'').match(/Jäljellä\s+([\d\s]+,\d+)\s*euroa/);
+    const key = (t.payee||'').slice(0,22);
+    const L = loans[key] ||= {key, obs:[], prop:t.property_id, pays:[]};
+    if (m) L.obs.push({date:t.date, bal:parseFloat(m[1].replace(/\s/g,'').replace(',','.'))});
+    if (t.cat===CAT.lyh) L.pays.push(t);
+    if (!L.prop && t.property_id) L.prop=t.property_id;
+  });
+  const list = Object.values(loans).map(L=>{
+    L.obs.sort((a,b)=>b.date.localeCompare(a.date)); L.pays.sort((a,b)=>b.date.localeCompare(a.date));
+    L.last = L.obs[0]; L.closed = !L.last || L.last.bal<0.5;
+    const yAgo = new Date(); yAgo.setFullYear(yAgo.getFullYear()-1); const yk = yAgo.toISOString().slice(0,10);
+    const prev = L.obs.find(o=>o.date<=yk);
+    L.chg12 = (L.last && prev) ? L.last.bal - prev.bal : null;
+    const p = L.pays[0] ? parts(L.pays[0]) : null;
+    L.era = L.pays[0] ? -L.pays[0].amount : null; L.korko = p?.korko||0; L.lyh = p?.lyh||0;
+    return L;
+  }).sort((a,b)=>(a.closed-b.closed) || ((b.last?.bal||0)-(a.last?.bal||0)));
+  const open = list.filter(l=>!l.closed), closed = list.filter(l=>l.closed);
+  const tot = open.reduce((s,l)=>s+l.last.bal,0);
+  let h = `<div class="grid">${kpi('Lainaa yhteensä', eur(tot), `${open.length} lainaa`, 't-blue')}
+    ${kpi('Kuukausierät', eur(open.reduce((s,l)=>s+(l.era||0),0)), 'viimeisimmät erät', 't-gold')}
+    ${kpi('Lyhennys 12 kk', open.some(l=>l.chg12!=null) ? eur(-open.reduce((s,l)=>s+(l.chg12||0),0)) : '–', 'saldojen muutos', 't-green')}</div>`;
+  h += `<div class="twrap"><table><tr><th>Laina</th><th>Asunto</th><th>Jäljellä</th><th>Havainto</th><th>Erä</th><th>Korko / lyh.</th><th>Muutos 12 kk</th></tr>` +
+    open.map(l=>`<tr><td>${esc(l.key)}</td><td>${esc(PROPS[l.prop]?.name||'–')}</td><td><b>${eur2(l.last.bal)}</b></td><td>${fdate(l.last.date)}</td>
+      <td>${l.era!=null?eur2(l.era):'–'}</td><td>${eur2(l.korko)} / ${eur2(l.lyh)}</td><td class="${cls(-(l.chg12||0))}">${l.chg12!=null?eur(l.chg12):'–'}</td></tr>`).join('') +
+    `</table></div>`;
+  if (closed.length) h += `<h2>Päättyneet</h2><div class="twrap"><table><tr><th>Laina</th><th>Asunto</th><th>Viimeinen havainto</th></tr>` +
+    closed.map(l=>`<tr><td>${esc(l.key)}</td><td>${esc(PROPS[l.prop]?.name||'–')}</td><td>${l.last?fdate(l.last.date):'–'}</td></tr>`).join('') + `</table></div>`;
+  h += `<div class="note">Saldo on pankin ilmoittama "Jäljellä"-luku viimeisimmästä lainaerästä, ei laskennallinen arvio. Korko sisältää erän kulut.</div>`;
+  return h;
+}
+
+// ── Tapahtumat ───────────────────────────────────────────────────────────────
+function renderTapHeader(){
+  const pc = id => TX.filter(t=>inPeriod(t) && (id==='none'? !t.property_id : t.property_id===id)).length;
+  return `<div class="chips"><span class="lbl" style="margin-right:4px">Asunto</span>
+    <button class="chip ${fProp==='all'?'on':''}" onclick="setProp('all')">Kaikki</button>` +
+    PROP_ORDER.map(id=>`<button class="chip ${fProp===id?'on':''}" onclick="setProp('${id}')">${esc(PROPS[id].name)} <span style="opacity:.6">${pc(id)}</span></button>`).join('') +
+    `<button class="chip ${fProp==='none'?'on':''}" onclick="setProp('none')">Kohdistamaton <span style="opacity:.6">${pc('none')}</span></button></div>
+    <div class="chips"><select onchange="fCat=this.value;showN=150;renderTxList()"><option value="">Kaikki kategoriat</option>${CAT_OPTS.map(c=>`<option ${fCat===c?'selected':''}>${esc(c)}</option>`).join('')}</select>
+    <input type="search" placeholder="Hae…" value="${esc(fSearch)}" oninput="onSearch(this.value)" autocomplete="off" style="flex:1;min-width:140px"></div>`;
+}
+function setProp(p){ fProp=p; showN=150; render(); }
+function onSearch(v){ fSearch=v; clearTimeout(searchTimer); searchTimer=setTimeout(()=>{ showN=150; renderTxList(); },150); }
+function filtered(){
+  const q = fSearch.toLowerCase();
+  return TX.filter(t=>inPeriod(t)
+    && (fProp==='all' || (fProp==='none' ? !t.property_id : t.property_id===fProp))
+    && (!fCat || t.cat===fCat)
+    && (!q || ((t.payee||'')+' '+(t.viesti||'')+' '+(t.cat||'')).toLowerCase().includes(q)))
+    .sort((a,b)=>b.date.localeCompare(a.date));
+}
+function renderTxList(){
+  const box=document.getElementById('txList'); if(!box) return;
+  const list=filtered(), shown=list.slice(0,showN), s=sum(list);
+  let h = `<div class="note">${list.length} riviä · tulot ${eur(s.tulot)} · kassavirta <span class="${cls(s.kv)}">${eur(s.kv)}</span></div>`;
+  if (!list.length) { box.innerHTML = h+'<div class="empty">Ei tapahtumia.</div>'; return; }
+  h += shown.map(t=>`<div class="tx">
+    <div class="i"><div class="p">${esc(t.payee||t.selitys)}</div>
+      <div class="m">${fdate(t.date)} · ${esc(t.cat||'–')}${t.viesti?` · <span title="${esc(t.viesti)}">${esc(t.viesti.slice(0,60))}</span>`:''}</div></div>
+    <select onchange="setTxProp('${esc(t.id)}',this.value)" title="Kohdista asuntoon">
+      <option value="">— yleinen —</option>${PROP_ORDER.map(id=>`<option value="${id}" ${t.property_id===id?'selected':''}>${esc(PROPS[id].name)}</option>`).join('')}
+    </select>
+    <div class="a ${cls(t.amount)}">${eur2(t.amount)}</div></div>`).join('');
+  if (list.length>shown.length) h += `<button class="btn" style="width:100%;margin-top:8px" onclick="showN+=150;renderTxList()">Näytä lisää (${list.length-shown.length} jäljellä)</button>`;
+  box.innerHTML = h;
+}
+async function setTxProp(id, val){
+  const t = TX.find(x=>x.id===id); if(!t) return;
+  const prev = t.property_id; t.property_id = val || null;
+  try {
+    const r = await fetch(`${API_BASE}/transactions/${encodeURIComponent(id)}`, {method:'PUT', headers:HDR, body:JSON.stringify({property_id: val || null})});
+    if (!r.ok) throw new Error(r.status);
+    toast(val ? `Kohdistettu: ${PROPS[val].name}` : 'Merkitty yleiseksi');
+  } catch(e) { t.property_id = prev; toast('Tallennus epäonnistui'); }
+  renderTxList();
+}
+
+// ── Käynnistys ───────────────────────────────────────────────────────────────
+async function init(){
+  if (!SECRET) { document.getElementById('main').innerHTML = `<div class="empty">Kirjaudu ensin <a href="index.html">oma·talous-sovellukseen</a>.</div>`; return; }
+  try { const t=localStorage.getItem('ot_vuokra_tab'); if (t && TABS.some(x=>x[0]===t)) tab=t; } catch(e){}
+  renderTabs();
+  try {
+    const [rt, ra] = await Promise.all([
+      fetch(`${API_BASE}/transactions?account=Vuokra`, {headers:HDR}),
+      fetch(`${API_BASE}/accounts`, {headers:HDR}),
+    ]);
+    if (rt.status===401 || ra.status===401) throw new Error('Kirjautuminen vanhentunut — kirjaudu uudelleen oma·talous-sovelluksessa.');
+    TX = (await rt.json()).map(t=>({...t, splits: typeof t.splits==='string' ? JSON.parse(t.splits||'null') : t.splits}));
+    ACC = (await ra.json()).find(a=>a.key==='Vuokra') || null;
+    if (!years().includes(period)) period = years()[0] || 'all';
+    render();
+  } catch(e) {
+    document.getElementById('main').innerHTML = `<div class="empty">${esc(e.message||'Lataus epäonnistui')}</div>`;
+  }
+}
+init();
+</script>
+</body>
+</html>

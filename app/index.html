@@ -295,6 +295,7 @@ tr:hover td{background:var(--surface2)}
     <button class="dnav-btn" data-tab="analytiikka" onclick="switchTab('analytiikka')">Analytiikka</button>
     <button class="dnav-btn" data-tab="tapahtumat" onclick="switchTab('tapahtumat')">Tapahtumat</button>
     <button class="dnav-btn" data-tab="saannot" onclick="switchTab('saannot')">Säännöt</button>
+    <a class="dnav-btn" href="vuokra.html" style="text-decoration:none;display:inline-flex;align-items:center">Vuokratoiminta ↗</a>
   </nav>
   <div class="desk-actions">
     <label class="btn btn-secondary" style="cursor:pointer">↑ CSV<input type="file" accept=".csv" multiple hidden onchange="handleCSVInput(event)"></label>
@@ -632,7 +633,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.14.1';
+const APP_VERSION = '1.15.0';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -680,7 +681,6 @@ const CATS = [
   {name:'Vuokra — vakuudet',       type:'neutral', icon:'🔐'},
   {name:'Vuokra — vakuutukset',    type:'neutral', icon:'🛡️'},
   {name:'Vuokra — kulut',          type:'neutral', icon:'🧾'},
-  {name:'Asunnon myynti',          type:'neutral', icon:'🏷️'},
 ];
 
 const GROUP_CAT_MAP = {
@@ -1066,9 +1066,22 @@ async function normalizeStoredCats() {
 
 // ── HELPERS ─────────────────────────────────────────────────────────────────
 function fmtMonthKey(d) { return d.toISOString().substring(0,7); }
-function allMonths() { return [...new Set(txs.map(t=>t.date.substring(0,7)))].sort().reverse(); }
-function txsForMonth(m) { return txs.filter(t=>t.date.startsWith(m)); }
-function txsForWindow(start, end) { return txs.filter(t=>t.date>=start && t.date<=end); }
+// Henkilökohtainen talous = kaikki paitsi erilliset vuokratilit (kind 'rental').
+// Vuokratilin rivit ovat kannassa ja mukana saldoissa (computeBalances käyttää txs:ää),
+// mutta eivät kuukausilistassa, tapahtumalistassa, haussa eivätkä laskureissa —
+// niille on oma sivu vuokra.html. Välimuisti mitätöityy kun txs vaihtuu tai kasvaa.
+let _ptxRef = null, _ptxLen = -1, _ptxAcc = null, _ptx = [];
+function isRentalAcct(key) { return accountByKey(key)?.kind === 'rental'; }
+function ptxs() {
+  if (_ptxRef !== txs || _ptxLen !== txs.length || _ptxAcc !== accounts) {
+    _ptx = txs.filter(t => !isRentalAcct(t.account));
+    _ptxRef = txs; _ptxLen = txs.length; _ptxAcc = accounts;
+  }
+  return _ptx;
+}
+function allMonths() { return [...new Set(ptxs().map(t=>t.date.substring(0,7)))].sort().reverse(); }
+function txsForMonth(m) { return ptxs().filter(t=>t.date.startsWith(m)); }
+function txsForWindow(start, end) { return ptxs().filter(t=>t.date>=start && t.date<=end); }
 // ── PALKKAJAKSONÄKYMÄ (view mode) ──────────────────────────────────────────────
 // Palkkajaksonäkymä on käytössä Yhteenvedossa JA Kategorioissa: kategoriarajat
 // elävät palkkajaksossa, joten niiden selaus on pakko toimia samalla akselilla.
@@ -1116,7 +1129,7 @@ function dashWindow() {
 function periodIncomeForOffset(off) {
   const { startPay, endPay } = periodBounds(off);
   const startISO = isoLocal(startPay), endISO = isoLocal(endPay);
-  const inc = txs.filter(t=>t.type==='income' && t.date>=startISO && t.date<endISO).reduce((s,t)=>s+t.amount, 0);
+  const inc = ptxs().filter(t=>t.type==='income' && t.date>=startISO && t.date<endISO).reduce((s,t)=>s+t.amount, 0);
   const note = 'palkkajakso '+ddmm(startISO)+'–'+ddmm(endISO);
   const minSal = (settings.monthly_salary||0)*0.4;
   if (inc>0 && (minSal===0 || inc>=minSal)) return { income: inc, note, isEstimate:false };
@@ -1158,13 +1171,13 @@ function budgetGovernedAt(b, off) {
 // synkassa. expandList purkaa splitit, joten taloyhtiölaskun osat osuvat oikein.
 function budgetSpentWindow(b, startISO, endISO) {
   const set = new Set(budgetCats(b));
-  return expandList(txs.filter(t => t.date>=startISO && t.date<endISO))
+  return expandList(ptxs().filter(t => t.date>=startISO && t.date<endISO))
     .filter(t => t.type!=='income' && t.type!=='neutral' && t.type!=='flag' && set.has(stripIcon(t.cat)))
     .reduce((sum,t) => sum + catAmount(t), 0);
 }
 function budgetCountWindow(b, startISO, endISO) {
   const set = new Set(budgetCats(b));
-  return txs.filter(t => t.date>=startISO && t.date<endISO && t.amount<0 && set.has(stripIcon(t.cat))).length;
+  return ptxs().filter(t => t.date>=startISO && t.date<endISO && t.amount<0 && set.has(stripIcon(t.cat))).length;
 }
 function budgetSpent(b, off) {
   const { startPay, endPay } = periodBounds(off);
@@ -1981,7 +1994,7 @@ const TX_PAGE = 150;
 let txShowN = TX_PAGE, txSearchTimer = null;
 
 function filteredTxList() {
-  let list = [...txs].sort((a,b)=>b.date.localeCompare(a.date));
+  let list = [...ptxs()].sort((a,b)=>b.date.localeCompare(a.date));
   if (curCatFilter) {
     list = list.filter(t=>t.cat===curCatFilter);
   } else if (curFilter !== 'all') {
@@ -2000,7 +2013,7 @@ function renderTapahtumat() {
   const catBanner = curCatFilter ? `<div id="txCatBanner" style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);margin-bottom:8px;font-size:13px"></div>` : '';
   const filterBtns = `
     <div class="${isDesktop?'table-filters':'filters'}">
-      <button class="filter-btn ${curFilter==='all'?'fa':''}" onclick="setCurFilter('all')">Kaikki <span style="color:var(--dim);font-size:11px">${txs.length}</span></button>
+      <button class="filter-btn ${curFilter==='all'?'fa':''}" onclick="setCurFilter('all')">Kaikki <span style="color:var(--dim);font-size:11px">${ptxs().length}</span></button>
       <button class="filter-btn ${curFilter==='needs'?'fn':''}" onclick="setCurFilter('needs')">Needs</button>
       <button class="filter-btn ${curFilter==='wants'?'fw':''}" onclick="setCurFilter('wants')">Wants</button>
       <button class="filter-btn ${curFilter==='savings'?'fs':''}" onclick="setCurFilter('savings')">Savings</button>
@@ -2600,9 +2613,9 @@ function renderLoansSection() {
 
 function avgNeedsMonthly(nMonths = 3) {
   const curMk = fmtMonthKey(new Date());
-  const completed = [...new Set(txs.map(t => t.month))].sort().reverse().filter(m => m < curMk).slice(0, nMonths);
+  const completed = [...new Set(ptxs().map(t => t.month))].sort().reverse().filter(m => m < curMk).slice(0, nMonths);
   if (!completed.length) return null;
-  const total = txs.filter(t => completed.includes(t.month) && t.type === 'needs' && t.amount < 0)
+  const total = ptxs().filter(t => completed.includes(t.month) && t.type === 'needs' && t.amount < 0)
     .reduce((s, t) => s + Math.abs(t.amount), 0);
   return { avg: total / completed.length, months: completed.length };
 }
@@ -3043,7 +3056,7 @@ function renderAnalytiikka() {
   const past  = monthData.filter(d => !d.isCurrent);
 
   // YTD top kategoriat (needs + wants)
-  const ytdTxs = txs.filter(t => t.date.startsWith(curYear));
+  const ytdTxs = ptxs().filter(t => t.date.startsWith(curYear));
   const catTotals = {};
   ytdTxs.forEach(tx => expandTx(tx).forEach(e => {
     if (e.type==='needs'||e.type==='wants') catTotals[e.cat] = (catTotals[e.cat] || 0) - e.amount;
@@ -3204,13 +3217,14 @@ function renderLisaa() {
       <button class="add-option" onclick="switchTab('vertailu')">📅 Kuukausivertailu</button>
       <button class="add-option" onclick="switchTab('saannot')">⚙️ Kategorisointisäännöt</button>
       <button class="add-option" onclick="switchTab('saldot')">🏦 Saldot &amp; nettovarallisuus</button>
+      <button class="add-option" onclick="location.href='vuokra.html'">🏘️ Vuokratoiminta</button>
     </div>
     <div style="margin-top:24px;display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-secondary" onclick="exportJSON()">💾 Vie JSON</button>
       <label class="btn btn-secondary" style="cursor:pointer">📂 Tuo JSON<input type="file" accept=".json" hidden onchange="handleJSONInput(event)"></label>
       <button class="btn btn-secondary" onclick="logout()">🚪 Kirjaudu ulos</button>
     </div>
-    <p style="font-size:12px;color:var(--dim);margin-top:12px">${txs.length} tapahtumaa · ${allMonths().length} kk</p>`;
+    <p style="font-size:12px;color:var(--dim);margin-top:12px">${ptxs().length} tapahtumaa · ${allMonths().length} kk</p>`;
 }
 
 function setCurCatFilter(cat) {
