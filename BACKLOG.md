@@ -80,6 +80,7 @@ Avoimet suunnitteluasiat:
 1. Pushaa repo → CF Pages deployaa
 
 ## Pienempiä parannuksia (jonossa)
+- **Inkrementaalinen synkka (`GET /transactions?since=`)** — nyt jokainen käynnistys hakee kaikki rivit ja tallentaa ne localStorageen (`ot_tx`). 9/2026: 1 033 riviä ≈ 390 kt, kasvu ~0,5 Mt/v. Safarin localStorage-raja ~5 Mt (UTF-16 → käytännössä ~2,5 Mt tekstiä) tulee vastaan ~4–5 v päästä, ja silloin `saveLocalState` kaatuu ("Tallennusvirhe"). Toteutus: API palauttaa rivit joiden `created_at`/`updated_at` > viimeisin synkka + poistettujen id:t (tombstone-taulu tai `deleted_at`), frontend yhdistää välimuistiin. Vaihtoehto: siirrä välimuisti IndexedDB:hen. Ei kiireellinen.
 - Kategoriat: Harkinnanvaraiset-blokin swaippaus muihin kategorioihin / donitsikaavio kulutuksesta
 - Yhteenveto: yläkulman "käytetty"-summan integrointi selkeämmin
 

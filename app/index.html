@@ -632,7 +632,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.13.2';
+const APP_VERSION = '1.13.3';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -1951,29 +1951,33 @@ function renderYhteenveto() {
 }
 
 // ── TAPAHTUMAT ────────────────────────────────────────────────────────────────
-function renderTapahtumat() {
-  const isDesktop = window.innerWidth >= 768;
-  const catOpts = catOptionsGrouped('');
+// Suorituskyky: hakukenttä ja suodatinnapit piirretään VAIN renderTapahtumat()-
+// kutsussa. Haku päivittää pelkän #txList-alueen (renderTxList), joten kenttä
+// ei tuhoudu kesken kirjoituksen (iOS-näppäimistö takelteli ja hukkasi
+// merkkejä). Listaan piirretään kerralla TX_PAGE riviä + "Näytä lisää":
+// 1–2 kirjaimen haku osui ~1000 riviin ja työpöydällä jokainen rivi toi
+// ~40 <option>-elementtiä → ~40 000 elementtiä per näppäilyä.
+const TX_PAGE = 150;
+let txShowN = TX_PAGE, txSearchTimer = null;
 
+function filteredTxList() {
   let list = [...txs].sort((a,b)=>b.date.localeCompare(a.date));
   if (curCatFilter) {
     list = list.filter(t=>t.cat===curCatFilter);
-  } else {
-    if (curFilter==='needs')        list=list.filter(t=>t.type==='needs');
-    else if(curFilter==='wants')    list=list.filter(t=>t.type==='wants');
-    else if(curFilter==='savings')  list=list.filter(t=>t.type==='savings');
-    else if(curFilter==='income')   list=list.filter(t=>t.type==='income');
-    else if(curFilter==='flag')       list=list.filter(t=>t.type==='flag');
-  else if(curFilter==='financing')  list=list.filter(t=>t.type==='financing');
+  } else if (curFilter !== 'all') {
+    list = list.filter(t=>t.type===curFilter);
   }
-  if (curSearch) { const s=curSearch.toLowerCase(); list=list.filter(t=>(t.payee||'').toLowerCase().includes(s)||(t.selitys||'').toLowerCase().includes(s)||(t.cat||'').toLowerCase().includes(s)); }
-  const catBanner = curCatFilter ? `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);margin-bottom:8px;font-size:13px">
-    <span>${catObj(curCatFilter).icon}</span>
-    <span style="font-weight:500;color:var(--text)">${esc(curCatFilter)}</span>
-    <span style="color:var(--muted);font-size:12px">${list.length} tapahtumaa · ${eur(list.reduce((s,t)=>s+catAmount(t),0))}</span>
-    <button onclick="setCurCatFilter('')" style="margin-left:auto;background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:0 4px">✕</button>
-  </div>` : '';
+  if (curSearch) {
+    const s = curSearch.toLowerCase();
+    list = list.filter(t=>((t.payee||'')+'\u0001'+(t.selitys||'')+'\u0001'+(t.cat||'')).toLowerCase().includes(s));
+  }
+  return list;
+}
 
+function renderTapahtumat() {
+  const isDesktop = window.innerWidth >= 768;
+  const el = document.getElementById('txContent'); if (!el) return;
+  const catBanner = curCatFilter ? `<div id="txCatBanner" style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);margin-bottom:8px;font-size:13px"></div>` : '';
   const filterBtns = `
     <div class="${isDesktop?'table-filters':'filters'}">
       <button class="filter-btn ${curFilter==='all'?'fa':''}" onclick="setCurFilter('all')">Kaikki <span style="color:var(--dim);font-size:11px">${txs.length}</span></button>
@@ -1983,16 +1987,36 @@ function renderTapahtumat() {
       <button class="filter-btn ${curFilter==='income'?'fi':''}" onclick="setCurFilter('income')">Tulot</button>
       <button class="filter-btn ${curFilter==='flag'?'ff':''}" onclick="setCurFilter('flag')">⚠️ Kategorisoimatta</button>
       <button class="filter-btn ${curFilter==='financing'?'ffi':''}" onclick="setCurFilter('financing')">🏦 Rahoitus</button>
-      <input class="search-in" placeholder="Hae..." value="${curSearch}" oninput="onSearchInput(this)">
+      <input class="search-in" type="search" placeholder="Hae..." value="${esc(curSearch)}" oninput="onSearchInput(this)" autocomplete="off" autocorrect="off" spellcheck="false">
     </div>`;
+  el.innerHTML = catBanner + filterBtns + '<div id="txList"></div>';
+  renderTxList();
+}
+
+function renderTxList() {
+  const box = document.getElementById('txList'); if (!box) return;
+  const isDesktop = window.innerWidth >= 768;
+  const list = filteredTxList();
+  const banner = document.getElementById('txCatBanner');
+  if (banner) banner.innerHTML = `
+    <span>${catObj(curCatFilter).icon}</span>
+    <span style="font-weight:500;color:var(--text)">${esc(curCatFilter)}</span>
+    <span style="color:var(--muted);font-size:12px">${list.length} tapahtumaa · ${eur(list.reduce((s,t)=>s+catAmount(t),0))}</span>
+    <button onclick="setCurCatFilter('')" style="margin-left:auto;background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:0 4px">✕</button>`;
 
   if (!list.length) {
-    document.getElementById('txContent').innerHTML = catBanner + filterBtns + `<div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">Ei tapahtumia.</div></div>`;
+    box.innerHTML = `<div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">Ei tapahtumia.</div></div>`;
     return;
   }
+  const shown = list.slice(0, txShowN);
+  const countLbl = (curSearch || list.length > shown.length)
+    ? `<div style="font-size:12px;color:var(--muted);margin:4px 2px 8px">${list.length} osumaa${list.length>shown.length?` · näytetään ${shown.length}`:''}</div>` : '';
+  const more = list.length > shown.length
+    ? `<button class="btn btn-secondary" style="width:100%;margin:12px 0 24px" onclick="showMoreTxs()">Näytä lisää (${Math.min(TX_PAGE, list.length-shown.length)} / ${list.length-shown.length} jäljellä)</button>` : '';
 
   if (isDesktop) {
-    const rows = list.map(tx => `
+    const catOpts = catOptionsGrouped('');
+    const rows = shown.map(tx => `
       <tr>
         <td style="color:var(--muted);white-space:nowrap;font-size:12px">${tx.date}</td>
         <td>${tx.type==='flag'?'<span style="color:var(--gold)">⚠ </span>':''}${esc(tx.payee.substring(0,36))}</td>
@@ -2007,23 +2031,25 @@ function renderTapahtumat() {
         </td>
         <td><button onclick="deleteTx('${esc(tx.id)}')" style="background:none;border:none;color:var(--dim);font-size:16px;cursor:pointer;padding:0 4px;line-height:1" title="Poista">✕</button></td>
       </tr>`).join('');
-    document.getElementById('txContent').innerHTML = catBanner + filterBtns +
-      `<div class="table-wrap"><table><thead><tr><th>Päivä</th><th>Saaja</th><th>Lähde</th><th>Kategoria</th><th style="text-align:right">Summa</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
-    document.getElementById('txContent').querySelectorAll('.inline-sel').forEach((sel,i) => {
-      if (list[i]?.cat) sel.value = list[i].cat;
+    box.innerHTML = countLbl +
+      `<div class="table-wrap"><table><thead><tr><th>Päivä</th><th>Saaja</th><th>Lähde</th><th>Kategoria</th><th style="text-align:right">Summa</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` + more;
+    box.querySelectorAll('.inline-sel').forEach((sel,i) => {
+      if (shown[i]?.cat) sel.value = shown[i].cat;
     });
   } else {
     const groups = {};
-    list.forEach(t => { if(!groups[t.date]) groups[t.date]=[]; groups[t.date].push(t); });
-    let html = catBanner + filterBtns;
+    shown.forEach(t => { (groups[t.date] ||= []).push(t); });
+    let html = countLbl;
     Object.entries(groups).forEach(([date,items]) => {
       html += `<div class="section-lbl">${fmtDateLbl(date)}</div><div class="tx-list">`;
       items.forEach(t => { html += txItemHTML(t); });
       html += '</div>';
     });
-    document.getElementById('txContent').innerHTML = html;
+    box.innerHTML = html + more;
   }
 }
+
+function showMoreTxs() { txShowN += TX_PAGE; renderTxList(); }
 
 function txItemHTML(t) {
   const hasSplit = t.splits && t.splits.length > 0;
@@ -3168,6 +3194,7 @@ function renderLisaa() {
 
 function setCurCatFilter(cat) {
   curCatFilter = cat;
+  txShowN = TX_PAGE;
   if (cat) { curFilter = 'all'; curSearch = ''; switchTab('tapahtumat'); }
   else renderTapahtumat();
 }
@@ -3229,11 +3256,11 @@ function renderCatDetail() {
 
 // ── NAVIGATION ────────────────────────────────────────────────────────────────
 function onSearchInput(el) {
+  // Kenttää ei piirretä uudelleen → fokus ja kursori pysyvät. Debounce 150 ms,
+  // jotta nopea kirjoitus ei laukaise listan piirtoa jokaisella merkillä.
   curSearch = el.value;
-  const pos = el.selectionStart;
-  renderTapahtumat();
-  const ns = document.querySelector('#txContent .search-in');
-  if (ns) { ns.focus(); try { ns.setSelectionRange(pos, pos); } catch(e){} }
+  clearTimeout(txSearchTimer);
+  txSearchTimer = setTimeout(() => { txShowN = TX_PAGE; renderTxList(); }, 150);
 }
 
 function switchTab(tab) {
@@ -3279,6 +3306,7 @@ function changeMonth(dir) {
 
 function setCurFilter(f) {
   curFilter = f;
+  txShowN = TX_PAGE;
   renderTapahtumat();
 }
 
