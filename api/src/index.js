@@ -772,7 +772,10 @@ function categorizeRental(tx) {
   const p = tx.payee || '', v = tx.viesti || '', s = (tx.selitys || '').toUpperCase(), a = tx.amount;
   const N = x => parseFloat(String(x).replace(/\s/g,'').replace(',','.'));
   const r = cat => ({cat, type:'neutral'});
-  if (/vuokravakuus/i.test(v)) return r('Vuokra — vakuudet');
+  // Vakuus molempiin suuntiin (maksu ja palautus). Vuokralaiset kirjoittavat sen monella
+  // tavalla: "Vuokravakuus", "takuuvuokra", "Takuu vuokra", "Vuokravakuuden palautus".
+  // "Vakuutusmaksun palautus" EI ole vakuus → vaaditaan vuokra-sana vieressä.
+  if (/takuu\s*-?\s*vuokra|vuokra\s*-?\s*vakuu/i.test(v)) return r('Vuokra — vakuudet');
   if (s === 'LUOTON MAKSU' || s === 'LUOTON NOSTO') {
     const m = v.match(/Lyhennys ([\d\s]+,\d+) euroa Korko ([\d\s]+,\d+) euroa/);
     // Kertalyhennys/uudelleenrahoitus (esim. vanhan lainan poismaksu uudella) ei ole kuukausierä

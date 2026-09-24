@@ -88,9 +88,9 @@ const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 const SECRET = (()=>{ try { return localStorage.getItem('ot_secret')||''; } catch(e){ return ''; } })();
 const HDR = {'Content-Type':'application/json','Authorization':`Bearer ${SECRET}`};
 const PROPS = {
-  a3: {name:'Niiralankatu 19 B 37', city:'Kuopio'},
+  a3: {name:'Niiralankatu 19 B 37', city:'Kuopio', depOpen:710},   // Kangas-Rahkon vakuus maksettu ennen 6/2020 (palautettu 27.8.2020)
   a1: {name:'Riistakatu 15 B 17',  city:'Iisalmi'},
-  a2: {name:'Riistakatu 15 B 10',  city:'Iisalmi'},
+  a2: {name:'Riistakatu 15 B 10',  city:'Iisalmi', depOpen:445},   // Miettisen vakuus maksettu ennen 6/2020 (palautettu 12.10.2020)
 };
 const PROP_ORDER = ['a3','a1','a2'];
 const CAT = {
@@ -118,6 +118,13 @@ function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg
 function parts(t){
   const o = {tulot:0,vast:0,korko:0,kulut:0,lyh:0,muut:0};
   const a = +t.amount||0;
+  // Jaettu rivi (esim. "takuuvuokra ja ensimmäinen vuokra" 890 € = 445 vakuus + 445 vuokra):
+  // jokainen osa omaan ämpäriinsä rivin etumerkillä. Lainaerän splitsit käsitellään alla.
+  if (Array.isArray(t.splits) && t.splits.length && t.cat!==CAT.lyh) {
+    const sg = a<0?-1:1;
+    t.splits.forEach(sp=>{ const q=parts({cat:sp.cat, amount:sg*Math.abs(+sp.amount||0)}); for (const k in o) o[k]+=q[k]; });
+    return o;
+  }
   if (t.cat===CAT.tulot) o.tulot=a;
   else if (t.cat===CAT.vast) o.vast=-a;
   else if (t.cat===CAT.kulut || t.cat===CAT.vakuutus) o.kulut=-a;
@@ -210,6 +217,76 @@ function renderYht(){
 
 // ── Asunnot ──────────────────────────────────────────────────────────────────
 function median(a){ if(!a.length) return 0; const b=[...a].sort((x,y)=>x-y); const m=b.length>>1; return b.length%2?b[m]:(b[m-1]+b[m])/2; }
+// ── Vuokrakattavuus ──────────────────────────────────────────────────────────
+// Maksupäivä ei kerro minkä kuukauden vuokra on kyseessä: osa maksaa edellisen kuun
+// lopussa, osa kertasummana useamman kuukauden (Raschka 27.1.2022: 3 180 € = 4 × 795 €),
+// osa puolikkaan (Lehto 15.7.2026: 235 €). Kohdekuukausi päätellään:
+//   1) kuukauden nimi viestissä ("Tammikuun vuokra", "vuokra huhtikuu"),
+//   2) muuten maksupäivä ≥ 20. → seuraava kuukausi, muuten sama kuukausi.
+// Summa jaetaan maksajan tyypillisellä vuokralla (mediaani): n × vuokra kattaa n kuukautta,
+// alle 90 % on vajaa kuukausi. Jos kuukausi on jo katettu, ylijäämä siirtyy seuraavaan
+// (ennakkomaksu). Vakuudet ovat omassa kategoriassaan eivätkä kata kuukausia.
+const MN = {tammi:1,helmi:2,maalis:3,huhti:4,touko:5,'kesä':6,'heinä':7,elo:8,syys:9,loka:10,marras:11,joulu:12};
+const addM = (k,n) => { let [y,m]=k.split('-').map(Number); m+=n; while(m>12){m-=12;y++;} while(m<1){m+=12;y--;} return `${y}-${String(m).padStart(2,'0')}`; };
+const mdiff = (a,b) => { const [y1,m1]=a.split('-').map(Number), [y2,m2]=b.split('-').map(Number); return (y2-y1)*12+(m2-m1); };
+function rentItems(id){
+  const out=[];
+  TX.filter(t=>t.property_id===id).forEach(t=>{
+    const p=parts(t); if (p.tulot>0.5) out.push({t, amount:p.tulot});
+  });
+  return out.sort((a,b)=>a.t.date.localeCompare(b.t.date));
+}
+function targetMonth(t){
+  const pk=t.date.slice(0,7), day=+t.date.slice(8,10);
+  const m=(t.viesti||'').toLowerCase().match(/(tammi|helmi|maalis|huhti|touko|kesä|heinä|elo|syys|loka|marras|joulu)kuu/);
+  if (m) {
+    const mm=MN[m[1]], y=+pk.slice(0,4);
+    const c=[y-1,y,y+1].map(yy=>`${yy}-${String(mm).padStart(2,'0')}`).sort((a,b)=>Math.abs(mdiff(pk,a))-Math.abs(mdiff(pk,b)));
+    return c[0];
+  }
+  return day>=20 ? addM(pk,1) : pk;
+}
+function rentCoverage(id){
+  const items=rentItems(id); const cov={}, typ={}, extra={};
+  const DAY=864e5, ts=d=>Date.parse(d);
+  items.forEach(i=>{
+    // Tyypillinen vuokra = asunnon vuokramaksujen mediaani ±6 kk (kestää kertasummat ja puolikkaat)
+    const r = median(items.filter(j=>Math.abs(ts(j.t.date)-ts(i.t.date))<=183*DAY).map(j=>j.amount)) || i.amount;
+    const n = i.amount / r, k = targetMonth(i.t);
+    if (n >= 1.5) { for (let q=0;q<Math.round(n);q++){ const kk=addM(k,q); cov[kk]=(cov[kk]||0)+1; typ[kk]=r; } }
+    else { cov[k]=(cov[k]||0)+n; typ[k]=r; }
+  });
+  // Tuplamaksu samalle kuukaudelle siirtyy lähimpään tyhjään kuukauteen (±2 kk), muuten jää ylimaksuksi
+  Object.keys(cov).sort().forEach(k=>{
+    while (cov[k] >= 1.5) {
+      const cand=[1,-1,2,-2].map(d=>addM(k,d)).find(m=>(cov[m]||0)<0.05 && typ[k]);
+      if (!cand) { extra[k]=(extra[k]||0)+(cov[k]-1)*typ[k]; cov[k]=1; break; }
+      cov[k]-=1; cov[cand]=1; typ[cand]=typ[k];
+    }
+  });
+  return {cov, typ, extra, first: items.length ? targetMonth(items[0].t) : null};
+}
+function coverageRuns(months, C){
+  // yhtenäiset tyhjät/vajaat jaksot + arvioitu menetys
+  const runs=[]; let prevTyp=0;
+  months.forEach(k=>{
+    if (C.typ[k]) prevTyp=C.typ[k];
+    const c=C.cov[k]||0; if (!C.first || k<C.first) return;
+    const kind = c<0.05?'empty':c<0.95?'part':null; if(!kind) return;
+    const loss=(1-c)*(C.typ[k]||prevTyp);
+    const last=runs[runs.length-1];
+    if (last && last.kind===kind && addM(last.to,1)===k) { last.to=k; last.loss+=loss; last.cov.push(c); }
+    else runs.push({kind, from:k, to:k, loss, cov:[c]});
+  });
+  return runs;
+}
+function strip(months, C){
+  return `<div style="display:flex;flex-wrap:wrap;gap:2px;margin:8px 0 2px">`+months.map(k=>{
+    const c=C.cov[k]||0, pre=!C.first||k<C.first;
+    const bg = pre?'var(--surface2)':c>=0.95?'var(--green)':c>=0.05?'var(--gold)':'var(--red)';
+    return `<span title="${mlabel(k)}: ${pre?'ei vuokralaista vielä':Math.round(c*100)+' %'}" style="width:9px;height:9px;border-radius:2px;background:${bg}"></span>`;
+  }).join('')+`</div>`;
+}
 function renderAsunnot(){
   const months = periodMonths();
   let h = `<div class="props">`;
@@ -222,10 +299,16 @@ function renderAsunnot(){
     const rents = all.filter(t=>t.cat===CAT.tulot && t.amount>0).sort((a,b)=>b.date.localeCompare(a.date));
     const last = rents[0];
     // Tyhjät kuukaudet: jakson kuukaudet joilta ei vuokratuloa tälle asunnolle
-    const rentMonths = new Set(rents.map(t=>t.date.slice(0,7)));
-    const firstRent = rents.length ? rents[rents.length-1].date.slice(0,7) : null;
     const now = new Date(); const curKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-    const empty = months.filter(k=>firstRent && k>=firstRent && k<curKey && !rentMonths.has(k));
+    const C = rentCoverage(id);
+    const done = months.filter(k=>k<curKey || (C.cov[k]||0)>0);   // kuluvaa kk:ta ei merkitä tyhjäksi ennen eräpäivää
+    const runs = coverageRuns(done, C);
+    const lost = runs.reduce((s,r)=>s+r.loss,0);
+    // Vakuudet: hallussa oleva summa koko historiasta (maksut − palautukset)
+    let dep=P.depOpen||0; const depEv=[];
+    all.forEach(t=>{ const sg=(+t.amount<0)?-1:1;
+      const d = Array.isArray(t.splits)&&t.splits.length ? t.splits.filter(s=>s.cat===CAT.vakuus).reduce((x,s)=>x+sg*Math.abs(+s.amount||0),0) : (t.cat===CAT.vakuus?+t.amount:0);
+      if (Math.abs(d)>0.005) { dep+=d; if (inPeriod(t)) depEv.push({t,d}); } });
     // Ylimääräinen vastike: kuukauden vastikesumma > 1,3 × asunnon vastikkeiden mediaani
     const vByM = {}; all.filter(t=>t.cat===CAT.vast).forEach(t=>{ const k=t.date.slice(0,7); vByM[k]=(vByM[k]||0)-t.amount; });
     const med = median(Object.values(vByM));
@@ -240,7 +323,11 @@ function renderAsunnot(){
       <div class="prow"><b>Kassavirta</b><b class="${cls(s.kv)}">${eur(s.kv)}</b></div>
       <div class="prow"><span>Lyhennykset</span><span>${eur(s.lyh)}</span></div>
       <div class="prow"><span>Jää käteen</span><span class="${cls(s.kvl)}">${eur(s.kvl)}</span></div>
-      ${empty.length?`<div class="flag r">Ei vuokratuloa: ${empty.map(mlabel).join(', ')}</div>`:''}
+      ${strip(done, C)}
+      ${Object.entries(C.extra).filter(([k])=>months.includes(k)).map(([k,v])=>`<div class="flag g">Tuplamaksu ${mlabel(k)} (+${eur(v)}) — ennakko, vakuus vai virhe? Tarkista ja jaa rivi tarvittaessa.</div>`).join('')}
+      ${runs.length?runs.map(r=>`<div class="flag ${r.kind==='empty'?'r':'g'}">${r.kind==='empty'?'Tyhjä':'Vajaa'}: ${mlabel(r.from)}${r.to!==r.from?' – '+mlabel(r.to):''}${r.kind==='part'?` (${r.cov.map(c=>Math.round(c*100)+' %').join(', ')})`:''} · arviolta ${eur(r.loss)} vuokraa jäi saamatta</div>`).join(''):`<div class="flag" style="background:var(--green-light);color:var(--green)">Vuokra katettu jokaiselta kuukaudelta${period==='all'?'':' jaksolla'}</div>`}
+      <div class="prow" style="margin-top:8px"><span>Vakuudet hallussa (maksetut − palautetut)</span><span>${eur(dep)}</span></div>
+      ${depEv.map(e=>`<div class="prow mut" style="font-size:12px"><span>${fdate(e.t.date)} ${esc(e.t.payee)}</span><span>${eur(e.d)}</span></div>`).join('')}
       ${extra.length?`<div class="flag g">Tavallista suurempi vastike (mediaani ${eur(med)}/kk): ${extra.map(([k,v])=>`${mlabel(k)} ${eur(v)}`).join(', ')}</div>`:''}
     </div>`;
   });
@@ -252,7 +339,7 @@ function renderAsunnot(){
     <div class="prow"><span>Muut rahaliikkeet</span><span>${eur(su.muut)}</span></div>
     ${un.some(t=>t.cat===CAT.tulot||t.cat===CAT.kulut)?`<div class="flag g">Kohdista rivit asuntoon Tapahtumat-välilehdellä, niin ne näkyvät asuntokohtaisissa luvuissa.</div>`:''}
   </div></div>
-  <div class="note">Vastikkeet kohdistuvat vastikeviitteestä, lainat tilinumerosta ja vuokrat viestin osoitteesta tai vuokralaisen nimestä. Tyhjä kuukausi tarkoittaa, ettei tälle asunnolle kirjattu vuokratuloa — vuokra voi myös olla maksettu myöhässä seuraavalla kuulla.</div>`;
+  <div class="note">Kuukausipalkki: vihreä = vuokra katettu, kulta = vajaa kuukausi, punainen = tyhjä. Maksu kohdistetaan kuukauteen viestin kuukauden nimen perusteella, muuten maksupäivästä (20. päivästä eteenpäin seuraavalle kuulle); useamman kuukauden kertasumma ja ennakkomaksut jaetaan eteenpäin. Vakuudet eivät kata kuukausia.</div>`;
   return h;
 }
 
