@@ -4,6 +4,8 @@
 
 ## v1.18.0 — Toteutettu 6.10.2026
 
+- ✅ v1.19.1: palkkajaksonäkymän ikkuna päättyy palkkapäivää edeltävään päivään (`dashWindow`). Aiemmin palkkapäivän rivit olivat kahdessa jaksossa.
+
 - ✅ v1.19.0: kortti muutettu muotoon säästöaste + lähteet/käytöt. Elisan erämaksusaldot päivitetty laskun 9/2026 mukaan (iPhone 104,04 · Huawei 78,47 · Roborock 486,54 · MacBook 2 886,18), iPhonen päättymiskk 2026-12.
 - [ ] Yhteenvedon Savings-kortti, vinkit ja Analytiikka näyttävät yhä vanhaa tapahtumapohjaista säästöastetta — yhtenäistä uuden kortin kanssa.
 - [ ] Kassavirta-kortti käyttää budjettituloa (palkkajakso), säästöaste-kortti jakson toteutuneita tuloja → kalenterinäkymässä luvut voivat erota.

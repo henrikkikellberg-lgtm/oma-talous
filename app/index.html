@@ -634,7 +634,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.19.0';
+const APP_VERSION = '1.19.1';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -1127,7 +1127,12 @@ function dashWindow() {
   const startISO = isoLocal(startPay), endPayISO = isoLocal(endPay);
   const today = new Date(); today.setHours(0,0,0,0);
   const spendEnd = (isCurrent && today < endPay) ? today : endPay;
-  return { mode:'period', start: startISO, end: isoLocal(spendEnd), endPay: endPayISO,
+  // Suljetun jakson viimeinen päivä on palkkapäivää EDELTÄVÄ päivä: palkkapäivä aloittaa
+  // seuraavan jakson. Ennen v1.19.1 ikkuna päättyi palkkapäivään (<=), jolloin palkkapäivän
+  // rivit laskettiin kahteen jaksoon ja jakson tuloissa oli kaksi palkkaa (säästöaste ~50 %).
+  const lastDay = new Date(endPay); lastDay.setDate(lastDay.getDate() - 1);
+  const endDay = (isCurrent && today < endPay) ? today : lastDay;
+  return { mode:'period', start: startISO, end: isoLocal(endDay), endPay: endPayISO,
            periodLen: Math.max(daysBetween(startPay, endPay), 1),
            daysElapsed: Math.max(daysBetween(startPay, spendEnd), 1),
            isCurrent, label: ddmm(startISO)+'–'+ddmm(endPayISO) };
