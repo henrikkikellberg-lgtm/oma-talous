@@ -4,6 +4,8 @@
 
 ## v1.18.0 — Toteutettu 6.10.2026
 
+- ✅ v1.20.1: vinkit ja Analytiikka (N/W/S-kaavio, 3 kk hälytys) käyttävät säästöä = tulot − kulutus. Asuntolainan erän jako valmiina (API + frontend): lyhennys → `Asuntolaina — lyhennys` / `savings`, korko → `Luotot — korko` / `needs`. **Tarkista ensimmäisestä erästä (11/2026) että OP:n viesti on muotoa `Lyhennys X euroa Korko Y euroa`** — oletus perustuu vuokralainojen viesteihin.
+
 - ✅ v1.20.0: Säästö-kortti näyttää saman luvun kuin erittely (tulot − kulutus). Erittely avautuu kortista ja tila muistetaan (`ot_savopen`). Yhteensä-rivit samalla tasolla. Vinkit ja Analytiikka käyttävät yhä vanhaa lukua.
 
 - ✅ v1.19.2: palkkajakson otsikko näyttää viimeisen mukaan lasketun päivän (27.8.–24.9.), Muut siirrot eritellään kategorioittain, keskeneräinen jakso merkitään.

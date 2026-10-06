@@ -634,7 +634,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.20.0';
+const APP_VERSION = '1.20.1';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -643,6 +643,7 @@ let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('o
 const CATS = [
   {name:'Palkka ja tulot',        type:'income',  icon:'💰'},
   {name:'Lainan nosto',           type:'financing',icon:'🏦'},
+  {name:'Asuntolaina — lyhennys', type:'savings',  icon:'🏠'},
   {name:'Asuminen — remontti',    type:'needs',    icon:'🔨'},
   {name:'Asuminen — kalustus',    type:'wants',   icon:'🛋️'},
   {name:'Sijoittaminen',          type:'savings', icon:'📈'},
@@ -1473,6 +1474,18 @@ function hasCardPaymentPair(tx) {
     && Math.abs(c.amount + tx.amount) < 0.005
     && Math.abs(new Date(c.date).getTime() - d) <= 3*86400000);
 }
+function mortgageSplit(tx) {
+  if (!(tx.amount < 0) || String(tx.selitys||'').toUpperCase() !== 'LUOTON MAKSU') return null;
+  const m = String(tx.viesti||'').match(/Lyhennys ([\d\s]+,\d+) euroa/);
+  if (!m) return null;                       // pelkkä korkoerä → säännöt (Luotot — korko)
+  const total = Math.round(-tx.amount*100)/100;
+  const lyh = parseFloat(m[1].replace(/\s/g,'').replace(',','.'));
+  const korko = Math.round((total - lyh)*100)/100;
+  if (!(lyh > 0) || korko < 0) return null;
+  const splits = [{label:'Lyhennys', cat:'Asuntolaina — lyhennys', type:'savings', amount:lyh}];
+  if (korko > 0) splits.push({label:'Korko ja kulut', cat:'Luotot — korko', type:'needs', amount:korko});
+  return {cat:'Asuntolaina — lyhennys', type:'savings', splits};
+}
 function categorizeTx(tx) {
   const txt = ((tx.payee||'')+' '+(tx.selitys||'')+' '+(tx.viesti||'')).toLowerCase();
   // Vuokratili pidetään erillään henkilökohtaisesta analytiikasta: kategoria
@@ -1480,6 +1493,9 @@ function categorizeTx(tx) {
   if (accountByKey(tx.account)?.kind === 'rental') {
     return {cat: tx.cat || 'Vuokra — kulut', type: 'neutral', ...(tx.splits ? {splits: tx.splits} : {})};
   }
+  // Oman asuntolainan erä: jako OP:n viestistä. Lyhennys kasvattaa varallisuutta eikä ole
+  // kulutusta → savings; korko ja kulut → needs. Sama logiikka API:n categorize()-funktiossa.
+  { const ms = mortgageSplit(tx); if (ms) return ms; }
   // Kortin laskun maksu käyttö-/säästötililtä → neutral (ks. CARD_PAYMENT_IBANS).
   if (tx.amount < 0 && accountByKey(tx.account)?.kind !== 'credit') {
     const flat = txt.replace(/\s/g, '');
@@ -1872,8 +1888,12 @@ function buildTips(month) {
   const s = monthSummary(txsForMonth(month));
   const bInc = budgetIncomeForMonth(month).income;
   if (bInc > 0) {
-    const sp = Math.round(s.sav/bInc*100);
-    if (sp < 20) tips.push(`Säästöaste ${sp}% (tavoite 20%) — lisää ~${eur(bInc*0.2 - s.sav)} päästäksesi tavoitteeseen.`);
+    // Säästöaste = (tulot − kulutus) / tulot, sama laskenta kuin Säästö-kortissa (v1.20.1).
+    const inc = s.income > 0 ? s.income : bInc;
+    const saved = inc - s.needs - s.wants;
+    const sp = Math.round(saved/inc*100);
+    if (saved < 0) tips.push(`Kulutus ylitti tulot <b>${eur(saved)}</b> (säästöaste −${Math.abs(sp)}%).`);
+    else if (sp < 20) tips.push(`Säästöaste ${sp}% (tavoite 20%) — kulutusta ~${eur(inc*0.2 - saved)} vähemmän veisi tavoitteeseen.`);
     const wp = Math.round(s.wants/bInc*100);
     if (wp > 30) tips.push(`Wants ${wp}% tuloista (tavoite 30%) — karsi harkinnanvaraisia ${eur(s.wants - bInc*0.3)}.`);
   }
@@ -1988,7 +2008,10 @@ function varallisuusCardHTML(win, s, bInc) {
   const w = wealthChange(win.start, win.end);
   const saved = s.income - s.needs - s.wants;
   // Jäännös: neutraalit rivit talouden ulkopuolelle, vuokratili, rahoitus, tarkistamattomat.
-  const other = saved - w.savAccts - w.checking - w.credit - w.invested;
+  // Asuntolainan lyhennys: raha lähtee tililtä mutta velka pienenee saman verran.
+  const LOAN_CAT = 'Asuntolaina — lyhennys';
+  const loanPaid = -expandList(txsForWindow(win.start, win.end)).filter(t => stripIcon(t.cat) === LOAN_CAT).reduce((a,t) => a + (+t.amount||0), 0);
+  const other = saved - w.savAccts - w.checking - w.credit - w.invested - loanPaid;
   const EPS = 0.005;
   // Erittely: mistä jäännös koostuu. Kategorian nettosumma riveistä jotka eivät ole tuloa,
   // kulutusta eivätkä sijoitusta. Sisäiset siirrot kumoavat toisensa (−40 Perus / +40 Lipas),
@@ -1996,7 +2019,7 @@ function varallisuusCardHTML(win, s, bInc) {
   // vastapuolen tiliotetta ei ole vielä tuotu.
   const om = {};
   expandList(txsForWindow(win.start, win.end))
-    .filter(t => !['income','needs','wants'].includes(t.type) && stripIcon(t.cat) !== 'Sijoittaminen')
+    .filter(t => !['income','needs','wants'].includes(t.type) && stripIcon(t.cat) !== 'Sijoittaminen' && stripIcon(t.cat) !== LOAN_CAT)
     .forEach(t => { const k = stripIcon(t.cat) || '—'; (om[k] = om[k] || {v:0, type:t.type}).v -= (+t.amount||0); });
   const otherRows = Object.entries(om).filter(([,o]) => Math.abs(o.v) > EPS).sort((a,b) => Math.abs(b[1].v) - Math.abs(a[1].v));
   const otherDiff = other - otherRows.reduce((a,[,o]) => a + o.v, 0);
@@ -2020,6 +2043,7 @@ function varallisuusCardHTML(win, s, bInc) {
     [-w.checking, 'Käyttötileiltä',                'Käyttötileille jäi'],
     [-w.credit,   'Luottokorteilta · velka kasvoi','Luottokorttien lyhennys'],
     [-w.invested, 'Sijoituksista purettu',         'Sijoitukset'],
+    [-loanPaid,   'Asuntolainan oikaisu',          'Asuntolainan lyhennys'],
     [-other,      'Muut siirrot sisään',           'Muut siirrot ulos'],
   ];
   const src  = flows.filter(f => f[0] >  EPS).map(f => [f[1],  f[0]]);
@@ -2066,7 +2090,7 @@ function varallisuusCardHTML(win, s, bInc) {
       ${note}
       ${w.financing > 0 ? `<div style="margin-top:8px;padding:8px 10px;background:var(--gold-light);border-radius:var(--radius-sm);font-size:12px;color:var(--gold)">Jaksolla rahoitustapahtumia ${eur(w.financing)} — näkyvät rivillä Muut siirrot</div>` : ''}
       <div style="text-align:right;margin-top:10px"><span onclick="toggleSavDetail()" style="cursor:pointer;font-size:12px;font-weight:500;color:var(--blue)">Sulje erittely</span></div>
-      <div style="font-size:11px;color:var(--dim);margin-top:8px">Jakson toteutuneet tulot ja kulutus. Ei sisällä lainojen lyhennyksiä eikä sijoitusten arvonmuutosta.</div>
+      <div style="font-size:11px;color:var(--dim);margin-top:8px">Jakson toteutuneet tulot ja kulutus. Ei sisällä erämaksujen lyhennyksiä (lasketaan kulutukseksi) eikä sijoitusten arvonmuutosta.</div>
     </div>`;
 }
 
@@ -3206,8 +3230,9 @@ function renderAnalytiikka() {
       needs: s.needs, wants: s.wants, sav: s.sav,
       np: bInc > 0 ? Math.round(s.needs / bInc * 100) : 0,
       wp: bInc > 0 ? Math.round(s.wants / bInc * 100) : 0,
-      sp: bInc > 0 ? Math.round(s.sav   / bInc * 100) : 0,
-      savRate: bInc > 0 ? s.sav / bInc * 100 : 0,
+      // v1.20.1: säästö = tulot − kulutus (kv), ei savings-tyyppisten rivien summa
+      sp: bInc > 0 ? Math.round(kv / bInc * 100) : 0,
+      savRate: bInc > 0 ? kv / bInc * 100 : 0,
     };
   });
 
@@ -3322,7 +3347,7 @@ function renderAnalytiikka() {
           datasets: [
             { label: 'Needs (50%)',   data: nws6.map(d => d.np), backgroundColor: 'rgba(27,107,58,0.8)',  borderRadius: 3 },
             { label: 'Wants (30%)',   data: nws6.map(d => d.wp), backgroundColor: 'rgba(181,136,62,0.8)', borderRadius: 3 },
-            { label: 'Savings (20%)', data: nws6.map(d => d.sp), backgroundColor: 'rgba(26,91,171,0.8)',  borderRadius: 3 },
+            { label: 'Säästö (20%)', data: nws6.map(d => d.sp), backgroundColor: 'rgba(26,91,171,0.8)',  borderRadius: 3 },
           ],
         },
         options: {

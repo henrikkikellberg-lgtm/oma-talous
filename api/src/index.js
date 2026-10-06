@@ -828,6 +828,23 @@ function categorize(tx, rules) {
   const txt = ((tx.payee||'')+' '+(tx.selitys||'')+' '+(tx.viesti||'')).toLowerCase();
   if (RENTAL_ACCTS.includes(tx.account)) return categorizeRental(tx);
 
+  // Oman asuntolainan erä (LUOTON MAKSU, ei vuokratili): jako OP:n viestistä
+  // "Lyhennys X euroa Korko Y euroa …". Lyhennys kasvattaa varallisuutta eikä ole kulutusta
+  // → savings; korko ja kulut → needs. Pelkkä korkoerä (lyhennysvapaa, ei "Lyhennys"-sanaa)
+  // jatkaa sääntöihin → Luotot — korko. Summia ei ole kovakoodattu: jako luetaan joka riviltä.
+  if (tx.amount < 0 && String(tx.selitys||'').toUpperCase() === 'LUOTON MAKSU') {
+    const m = String(tx.viesti||'').match(/Lyhennys ([\d\s]+,\d+) euroa/);
+    if (m) {
+      const total = Math.round(-tx.amount*100)/100;
+      const lyh = parseFloat(m[1].replace(/\s/g,'').replace(',','.'));
+      const korko = Math.round((total - lyh)*100)/100;
+      if (lyh > 0 && korko >= 0) {
+        const splits = [{label:'Lyhennys', cat:'Asuntolaina — lyhennys', type:'savings', amount:lyh}];
+        if (korko > 0) splits.push({label:'Korko ja kulut', cat:'Luotot — korko', type:'needs', amount:korko});
+        return {cat:'Asuntolaina — lyhennys', type:'savings', splits};
+      }
+    }
+  }
   // Kortin laskun maksu käyttö-/säästötililtä → neutral (ks. CARD_PAYMENT_IBANS).
   if (tx.amount < 0 && !CREDIT_ACCTS.includes(tx.account)) {
     const flat = txt.replace(/\s/g, '');
