@@ -103,7 +103,7 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 .kv-l{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);font-weight:500;margin-bottom:4px}
 .kv-v{font-size:20px;font-weight:300;line-height:1.1}
 .kv-c{font-size:11px;color:var(--muted);margin-top:3px}
-@media(max-width:560px){.kv-flow{flex-direction:column;gap:3px}.kv-op{height:12px;font-size:15px}}
+@media(max-width:560px){.kv-flow{flex-direction:column;gap:3px}.kv-op{height:12px;font-size:15px}.sav-fill{display:none}}
 
 /* ── TRANSACTION LIST ────────────────────────────────── */
 .section-lbl{font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--dim);margin:16px 0 8px}
@@ -634,7 +634,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.19.3';
+const APP_VERSION = '1.20.0';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -2028,10 +2028,13 @@ function varallisuusCardHTML(win, s, bInc) {
   const line = (lbl, v, strong, color) => `
         <div style="display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:8px 0;border-top:0.5px solid var(--border);${strong?'font-weight:500;':''}">
           <span style="color:var(--text)">${lbl}</span><span style="white-space:nowrap;color:${color||'var(--text)'}">${eur(v)}</span></div>`;
+  const nRows = Math.max(src.length, uses.length, 1);
+  const filler = '<div class="sav-fill" style="font-size:13px;padding:8px 0;border-top:0.5px solid transparent">&nbsp;</div>';
   const col = (title, rows) => `
       <div style="flex:1 1 220px;min-width:0">
         <div style="font-size:11px;font-weight:500;letter-spacing:0.07em;text-transform:uppercase;color:var(--dim);padding-bottom:6px">${title}</div>
         ${rows.length ? rows.map(r => line(r[0], r[1], false, r[0]==='Tuloista säästetty'?'var(--green)':r[0]==='Kulutus yli tulojen'?'var(--red)':'')).join('') : line('—', 0)}
+        ${filler.repeat(nRows - Math.max(rows.length, 1))}
         ${line('Yhteensä', sum(rows), true)}
       </div>`;
   const rate = s.income > 0 ? Math.round(saved / s.income * 100) : null;
@@ -2062,8 +2065,18 @@ function varallisuusCardHTML(win, s, bInc) {
       ${otherHTML}
       ${note}
       ${w.financing > 0 ? `<div style="margin-top:8px;padding:8px 10px;background:var(--gold-light);border-radius:var(--radius-sm);font-size:12px;color:var(--gold)">Jaksolla rahoitustapahtumia ${eur(w.financing)} — näkyvät rivillä Muut siirrot</div>` : ''}
+      <div style="text-align:right;margin-top:10px"><span onclick="toggleSavDetail()" style="cursor:pointer;font-size:12px;font-weight:500;color:var(--blue)">Sulje erittely</span></div>
       <div style="font-size:11px;color:var(--dim);margin-top:8px">Jakson toteutuneet tulot ja kulutus. Ei sisällä lainojen lyhennyksiä eikä sijoitusten arvonmuutosta.</div>
     </div>`;
+}
+
+// Säästöasteen erittely (lähteet ja käytöt) avataan Säästö-kortista; tila muistetaan.
+let savOpen = false; try { savOpen = localStorage.getItem('ot_savopen') === '1'; } catch(e) {}
+function toggleSavDetail() {
+  savOpen = !savOpen;
+  try { localStorage.setItem('ot_savopen', savOpen ? '1' : '0'); } catch(e) {}
+  renderYhteenveto();
+  if (savOpen) { const el = document.getElementById('varallisuusCard'); if (el && el.scrollIntoView) el.scrollIntoView({behavior:'smooth', block:'nearest'}); }
 }
 
 function renderYhteenveto() {
@@ -2084,7 +2097,10 @@ function renderYhteenveto() {
   const recent = [...list].filter(t=>t.type!=='neutral').sort((a,b)=>b.date.localeCompare(a.date)).slice(0,20);
 
   document.getElementById('kassavirtaCard').innerHTML = kassavirtaCardHTML(s, bInc, bi.isEstimate, list);
-  const vc = document.getElementById('varallisuusCard'); if (vc) vc.innerHTML = varallisuusCardHTML(win, s, bInc);
+  // Säästö = tulot − kulutus jakson toteutuneista riveistä: sama luku Säästö-kortissa ja erittelyssä.
+  const savedAmt = s.income - s.needs - s.wants;
+  const savRate = s.income > 0 ? Math.round(savedAmt / s.income * 100) : null;
+  const vc = document.getElementById('varallisuusCard'); if (vc) vc.innerHTML = savOpen ? varallisuusCardHTML(win, s, bInc) : '';
   document.getElementById('sumGrid').innerHTML = `
     <div class="sum-card sum-income">
       <div class="sum-label">Tulot</div>
@@ -2104,11 +2120,11 @@ function renderYhteenveto() {
       <div class="sum-sub">${wp}% budjetista</div>
       <div class="sum-bar"><div class="sum-bar-fill" style="width:${Math.min(wp/30*100,100)}%;background:${wp>30?'var(--red)':'var(--gold)'}"></div></div>
     </div>
-    <div class="sum-card sum-savings">
-      <div class="sum-label">Savings · tavoite 20%</div>
-      <div class="sum-value">${eur(s.sav)}</div>
-      <div class="sum-sub">${sp}% · säästöaste ${bInc>0?Math.round(s.sav/bInc*100):0}%</div>
-      <div class="sum-bar"><div class="sum-bar-fill" style="width:${Math.min(sp/20*100,100)}%"></div></div>
+    <div class="sum-card sum-savings" onclick="toggleSavDetail()" style="cursor:pointer">
+      <div class="sum-label">Säästö · tavoite 20%</div>
+      <div class="sum-value" style="${savedAmt<0?'color:var(--red)':''}">${savedAmt<0?'−':''}${eur(savedAmt)}</div>
+      <div class="sum-sub">${savRate===null?'–':(savRate<0?'−':'')+Math.abs(savRate)+'%'} tuloista · <span style="color:var(--blue)">${savOpen?'sulje erittely':'erittely ›'}</span></div>
+      <div class="sum-bar"><div class="sum-bar-fill" style="width:${Math.max(0,Math.min((savRate||0)/20*100,100))}%"></div></div>
     </div>
   `;
 
