@@ -814,10 +814,25 @@ function categorizeRental(tx) {
   return r('Vuokra — kulut');
 }
 const CREDIT_ACCTS  = ['Finnair','OPCredit'];
+// Luottokortin laskun maksu käyttötililtä = siirto omalle korttitilille → neutral,
+// koska kortin ostot, korot ja kulut tuodaan omana tilinään (Finnair, OPCredit).
+// Kuluna maksu laskisi korot ja ostot kahdesti (v1.18.0: OP Visa 2026 → 551,46 € liikaa).
+// Tunnistus kortin laskutus-IBANista, EI maksunsaajan nimestä: "OP Vähittäisasiakkaat Oyj"
+// laskuttaa muutakin kuin OP Visaa. Sama lista frontendin categorizeTx()-funktiossa.
+const CARD_PAYMENT_IBANS = [
+  'fi1050000120337471',   // OP Visa Credit (OP Vähittäisasiakkaat Oyj)
+  'fi6240553320003403',   // Finnair Visa (Aktia Bank Abp)
+];
 
 function categorize(tx, rules) {
   const txt = ((tx.payee||'')+' '+(tx.selitys||'')+' '+(tx.viesti||'')).toLowerCase();
   if (RENTAL_ACCTS.includes(tx.account)) return categorizeRental(tx);
+
+  // Kortin laskun maksu käyttö-/säästötililtä → neutral (ks. CARD_PAYMENT_IBANS).
+  if (tx.amount < 0 && !CREDIT_ACCTS.includes(tx.account)) {
+    const flat = txt.replace(/\s/g, '');
+    if (CARD_PAYMENT_IBANS.some(i => flat.includes(i))) return {cat:'MobilePay & siirrot', type:'neutral'};
+  }
 
   // Luottokorttitilille tuleva positiivinen: oma maksu kortille (siirto) → neutral.
   // Kaupan palautus/hyvitys on myös positiivinen mutta EI maksu — ei pakoteta neutraaliksi,

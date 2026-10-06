@@ -264,7 +264,7 @@ Jos kortin omia tapahtumia ei tuoda, sen laskun maksu on ainoa jälki kulutukses
 | Tiliotteen maksunsaaja | Tili `accounts`-taulussa | Sääntö |
 |---|---|---|
 | `Aktia Bank Abp` | `Finnair` (Finnair Visa) | `neutral` ✓ oikein — Aktia laskuttaa Finnair Visan |
-| `OP Vähittäisasiakkaat Oyj` | `OPCredit` (OP Visa Credit) | tarkista tapauskohtaisesti — sama nimi laskuttaa myös muuta |
+| `OP Vähittäisasiakkaat Oyj` + IBAN `FI10 5000 0120 3374 71` | `OPCredit` (OP Visa Credit) | `neutral` ✓ (v1.18.0) — tunnistus IBANista, koska sama nimi laskuttaa myös muuta |
 
 Aktia-maksu Perus-tililtä muodostaa parin Finnair-tilin positiivisen rivin kanssa (sama päivä, sama summa, `selitys = "Finnair Visa"`). Molemmat `neutral`, ostot laskettu kertaalleen Finnair-tilillä. Esim. 31.8.2026 −200 € / +200 € ja 3.9.2026 −1 000 € / +1 000 €.
 
@@ -281,6 +281,8 @@ Suoja lisätty `categorize()`:en (API ja frontend, v1.13.1): **luottotilillä ne
 - **CAT_DEST-arvio** lisätään säästötilin saldoon vain jos tililtä EI ole omaa tiliotedataa. Oma data voittaa aina arvion.
 - **Duplikaattihaku** vertaa vain saman tilin sisällä. Sama päivä + sama summa eri tileillä on normaali sisäinen siirto, ja molemmat puolet tarvitaan.
 - **Revolutin sijoitustili (v1.13.2).** Menosuunta `Sijoitustilille` / `To Robo portfolio` on `savings`. Paluusuunta — Revolut-rivi jonka kuvaus on pelkkä `Rahanlisäys` ilman lähdettä — on sijoitusten purkua ja kirjataan `Sijoittaminen` / `savings` **plussalla**, jolloin se vähentää säästöä nettona. Neutraalina sama euro laskettiin säästöksi kahdesti (6.7. −200 / 11.8. +200 / 11.8. −209,72). Oikeat rahanlisäykset nimeävät aina lähteensä (`Avoimen pankkitoiminnan lisämaksu`, `Apple Pay:n rahanlisäys kortilla *XXXX`). Arvopaperitilin omaa otetta (`CC…csv`, sarakkeet `Ticker,Type,Quantity…`) **ei tuoda** — se on säästöjen sisäistä liikettä ja laskisi saman rahan uudelleen.
+- **Kortin laskun maksu tunnistetaan IBANista (v1.18.0).** `CARD_PAYMENT_IBANS` (API `categorize()` ja frontend `categorizeTx()`) → `MobilePay & siirrot` / `neutral` ennen sääntöjä. Frontendissä lisäksi parihaku (`hasCardPaymentPair`: korttitilillä sama summa plussalla ±3 pv) vanhoille riveille joilta viesti puuttuu. Ennen tätä OP Visan maksu oli `Luotot — lyhennys` / `needs`, jolloin kortin korot ja ostot laskettiin kahdesti (2026: 551,46 € liikaa). 10 riviä korjattu kannassa 6.10.2026. Vanhan velan lyhennys ei ole kulutusta — se näkyy velan pienenemisenä.
+- **Varallisuuden muutos -kortti (v1.18.0, Yhteenveto).** `wealthChange(start,end)` laskee jakson muutoksen SALDOISTA: säästötilit (kind `savings` + `closed`) + sijoituksiin siirretty (kategoria `Sijoittaminen`, tyypistä riippumatta — myös Säästötili→Nordnet) + luottovelka + käyttötilit. Vanha tapahtumapohjainen säästöaste (`monthSummary().sav`) näkyy rinnalla vertailuna; se laskee panot muttei nostoja (6–9/2026: 2 667 € vs. saldoista −64 €, velka samalla −2 998 €). Lipasnostot pysyvät `neutral`ina — niitä EI muuteta positiivisiksi savings-riveiksi. Budjetit, NWS-jakauma ja Analytiikka käyttävät yhä vanhaa lukua.
 - **Positiivinen `savings`-rivi on sallittu ja netotetaan** (`monthSummary`, budjetit, API `/summary`). Älä laske savingsia `Math.abs`illa.
 - **Säännöt `kellberg hen` / `kaarlo henri`** osuvat kaikkiin ulosmeneviin siirtoihin näillä nimillä. Tarkista rivi riviltä ennen automaattikorjausta.
 

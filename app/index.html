@@ -358,6 +358,7 @@ tr:hover td{background:var(--surface2)}
     <div id="runwayCard"></div>
     <div class="sum-grid" id="sumGrid"></div>
     <div id="kassavirtaCard"></div>
+    <div id="varallisuusCard"></div>
     <div id="tipsCard"></div>
     <div id="recentTxs"></div>
   </div>
@@ -633,7 +634,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.17.2';
+const APP_VERSION = '1.18.0';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -719,7 +720,7 @@ const DEF_RULES = [
   {kw:'overdue interest',cat:'Luotot — korko',type:'needs'},
   {kw:'visa credit korko',cat:'Luotot — korko',type:'needs'},
   {kw:'visa credit suoritus',cat:'MobilePay & siirrot',type:'neutral'},
-  {kw:'aktia bank',cat:'Luotot — lyhennys',type:'needs'},
+  {kw:'aktia bank',cat:'MobilePay & siirrot',type:'neutral'},
   {kw:'op yrityspankki',cat:'Luotot — lyhennys',type:'needs'},
   {kw:'op vähittäis',cat:'Luotot — lyhennys',type:'needs'},
   {kw:'kaarlo henri',cat:'Luotot — lyhennys',type:'needs'},
@@ -1449,12 +1450,35 @@ function budgetIncomeForMonth(month) {
 }
 
 // ── CATEGORIZE ──────────────────────────────────────────────────────────────
+// Luottokortin laskun maksu käyttötililtä = siirto omalle korttitilille → neutral,
+// koska kortin ostot, korot ja kulut tuodaan omana tilinään. Tunnistus kortin
+// laskutus-IBANista, ei maksunsaajan nimestä. Sama lista API:n categorize()-funktiossa.
+const CARD_PAYMENT_IBANS = [
+  'fi1050000120337471',   // OP Visa Credit (OP Vähittäisasiakkaat Oyj)
+  'fi6240553320003403',   // Finnair Visa (Aktia Bank Abp)
+];
+// Vanhoissa riveissä viesti (ja siten IBAN) voi puuttua: silloin maksu tunnistetaan
+// parista — korttitilillä sama summa plussalla ±3 pv sisällä.
+function hasCardPaymentPair(tx) {
+  if (!/op vähittäis|aktia bank/i.test(tx.payee||'')) return false;
+  const d = new Date(tx.date).getTime();
+  return txs.some(c => accountByKey(c.account)?.kind === 'credit' && c.amount > 0
+    && Math.abs(c.amount + tx.amount) < 0.005
+    && Math.abs(new Date(c.date).getTime() - d) <= 3*86400000);
+}
 function categorizeTx(tx) {
   const txt = ((tx.payee||'')+' '+(tx.selitys||'')+' '+(tx.viesti||'')).toLowerCase();
   // Vuokratili pidetään erillään henkilökohtaisesta analytiikasta: kategoria
   // (API:n categorizeRental) säilyy, tyyppi on aina neutral. Ks. CLAUDE.md.
   if (accountByKey(tx.account)?.kind === 'rental') {
     return {cat: tx.cat || 'Vuokra — kulut', type: 'neutral', ...(tx.splits ? {splits: tx.splits} : {})};
+  }
+  // Kortin laskun maksu käyttö-/säästötililtä → neutral (ks. CARD_PAYMENT_IBANS).
+  if (tx.amount < 0 && accountByKey(tx.account)?.kind !== 'credit') {
+    const flat = txt.replace(/\s/g, '');
+    if (CARD_PAYMENT_IBANS.some(i => flat.includes(i)) || hasCardPaymentPair(tx)) {
+      return {cat:'MobilePay & siirrot', type:'neutral'};
+    }
   }
   // Revolutin sijoitustililtä palaava raha = sijoitusten purku → savings plussalla
   // (vähentää säästöä nettona). Oikea rahanlisäys nimeää aina lähteensä; pelkkä
@@ -1927,6 +1951,61 @@ function kassavirtaCardHTML(s, bInc, isEstimate, list) {
     </div>`;
 }
 
+// ── VARALLISUUDEN MUUTOS (v1.18.0) ───────────────────────────────────────────
+// Säästöaste tapahtumista laskee vain siirrot säästöön (savings-rivit), ei nostoja:
+// lippaaseen pantu 40 € on säästöä, mutta sieltä nostettu 1 000 € on neutral.
+// Tämä laskee saman asian SALDOISTA: mitä tileille oikeasti jäi jakson aikana.
+// Sijoituksiin siirretty raha (kategoria Sijoittaminen, myös säästötililtä suoraan
+// Nordnetiin) lasketaan säästöksi, koska se poistuu tileiltä mutta ei varallisuudesta.
+// Vuokratili ei ole mukana. Lainojen lyhennykset ja sijoitusten arvonmuutos eivät näy.
+function wealthChange(startISO, endISO) {
+  const d0 = new Date(startISO + 'T00:00:00'); d0.setDate(d0.getDate() - 1);
+  const before = computeBalances(isoLocal(d0)), after = computeBalances(endISO);
+  const sumKinds = (bals, kinds) => bals.filter(b => kinds.includes(b.kind)).reduce((a,b) => a + b.balance, 0);
+  const delta = kinds => sumKinds(after, kinds) - sumKinds(before, kinds);
+  const list = txsForWindow(startISO, endISO);
+  const invested = -list.filter(t => stripIcon(t.cat) === 'Sijoittaminen').reduce((a,t) => a + (+t.amount||0), 0);
+  const financing = list.filter(t => t.type === 'financing').reduce((a,t) => a + Math.abs(+t.amount||0), 0);
+  const savAccts = delta(['savings','closed']);
+  const credit   = delta(['credit']);       // positiivinen = velka pieneni
+  const checking = delta(['checking']);
+  return { savAccts, invested, credit, checking, financing,
+           saving: savAccts + invested,
+           total:  savAccts + invested + credit + checking };
+}
+function varallisuusCardHTML(win, s, bInc) {
+  if (!accounts.length || !txs.length) return '';
+  const w = wealthChange(win.start, win.end);
+  const zero = v => Math.abs(v) < 0.005;
+  const col = v => zero(v) ? 'var(--muted)' : v > 0 ? 'var(--green)' : 'var(--red)';
+  const pctOf = v => bInc > 0 ? Math.round(v / bInc * 100) : 0;
+  const row = (lbl, sub, v) => `
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:8px 0;border-top:0.5px solid var(--border)">
+        <div><div style="font-size:13px;color:var(--text)">${lbl}</div>
+          <div style="font-size:11px;color:var(--muted)">${sub}</div></div>
+        <div style="font-size:15px;font-weight:300;color:${col(v)};white-space:nowrap">${esigned(v)}</div>
+      </div>`;
+  const oldPct = pctOf(s.sav), newPct = pctOf(w.saving), debtPct = pctOf(w.saving + w.credit);
+  return `
+    <div class="sum-card" style="border-top:2.5px solid ${col(w.total)};margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:10px">
+        <div class="sum-label">Varallisuuden muutos</div>
+        <div style="font-size:22px;font-weight:300;color:${col(w.total)};white-space:nowrap">${esigned(w.total)}</div>
+      </div>
+      ${row('Säästötilit', 'saldojen muutos', w.savAccts)}
+      ${row('Sijoitukset', 'siirretty rahastoihin ja arvopaperitileille', w.invested)}
+      ${row('Luottokortit', zero(w.credit) ? 'ei muutosta' : w.credit > 0 ? 'velka pieneni' : 'velka kasvoi', w.credit)}
+      ${row('Käyttötilit', 'saldojen muutos', w.checking)}
+      <div style="margin-top:6px;padding:8px 10px;background:var(--surface2);border-radius:var(--radius-sm);font-size:12px;color:var(--muted);line-height:1.6">
+        Säästöaste tapahtumista <b style="color:var(--text);font-weight:500">${oldPct} %</b>
+        · saldoista <b style="color:${col(w.saving)};font-weight:500">${newPct} %</b>
+        · velan lyhennys mukaan <b style="color:${col(w.saving + w.credit)};font-weight:500">${debtPct} %</b>
+      </div>
+      ${w.financing > 0 ? `<div style="margin-top:8px;padding:8px 10px;background:var(--gold-light);border-radius:var(--radius-sm);font-size:12px;color:var(--gold)">Jaksolla rahoitustapahtumia ${eur(w.financing)} — luvut eivät ole vertailukelpoisia muihin jaksoihin</div>` : ''}
+      <div style="font-size:11px;color:var(--dim);margin-top:8px">Ei sisällä vuokratiliä, lainojen lyhennyksiä eikä sijoitusten arvonmuutosta.</div>
+    </div>`;
+}
+
 function renderYhteenveto() {
   renderWeekCard();
   renderRunwayCard();
@@ -1945,6 +2024,7 @@ function renderYhteenveto() {
   const recent = [...list].filter(t=>t.type!=='neutral').sort((a,b)=>b.date.localeCompare(a.date)).slice(0,20);
 
   document.getElementById('kassavirtaCard').innerHTML = kassavirtaCardHTML(s, bInc, bi.isEstimate, list);
+  const vc = document.getElementById('varallisuusCard'); if (vc) vc.innerHTML = varallisuusCardHTML(win, s, bInc);
   document.getElementById('sumGrid').innerHTML = `
     <div class="sum-card sum-income">
       <div class="sum-label">Tulot</div>
