@@ -634,7 +634,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.19.2';
+const APP_VERSION = '1.19.3';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -643,7 +643,7 @@ let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('o
 const CATS = [
   {name:'Palkka ja tulot',        type:'income',  icon:'💰'},
   {name:'Lainan nosto',           type:'financing',icon:'🏦'},
-  {name:'Asuminen — remontti',    type:'financing',icon:'🔨'},
+  {name:'Asuminen — remontti',    type:'needs',    icon:'🔨'},
   {name:'Asuminen — kalustus',    type:'wants',   icon:'🛋️'},
   {name:'Sijoittaminen',          type:'savings', icon:'📈'},
   {name:'Säästötili',             type:'savings', icon:'🏦'},

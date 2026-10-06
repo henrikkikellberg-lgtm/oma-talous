@@ -5,7 +5,8 @@
 ## v1.18.0 — Toteutettu 6.10.2026
 
 - ✅ v1.19.2: palkkajakson otsikko näyttää viimeisen mukaan lasketun päivän (27.8.–24.9.), Muut siirrot eritellään kategorioittain, keskeneräinen jakso merkitään.
-- [ ] `Lainan nosto` −158,02 € (31.7.) ja Netrauta −721,90 € ovat `financing` → eivät näy kulutuksessa eivätkä säästöasteessa. Päätä kuuluuko remonttiostos kulutukseen.
+- ✅ v1.19.3: remonttiostot ovat kulutusta — `Asuminen — remontti` on nyt `needs` (CATS + säännöt `ptl*netrauta.fi`, `k-rauta` + 3 riviä). Asuntolainan korkoerä 31.7. korjattu `Luotot — korko`; sääntö `fi65 5600 0580 9057 61` → `Luotot — korko` / `needs` (oli `Lainan nosto` / `financing`).
+- [ ] **Asuntolaina lyhennysvapaalla 10/2026 loppuun.** Marraskuusta alkaen erässä on lyhennys + korko. Nykyinen sääntö kirjaa koko erän koroksi → lyhennys näkyisi kulutuksena. Tarvitaan jako OP:n viestistä (`Lyhennys X euroa Korko Y euroa`, sama parseri kuin `categorizeRental`) ja päätös lyhennyksen tyypistä (ei kulutusta: varallisuus kasvaa).
 
 - ✅ v1.19.1: palkkajaksonäkymän ikkuna päättyy palkkapäivää edeltävään päivään (`dashWindow`). Aiemmin palkkapäivän rivit olivat kahdessa jaksossa.
 
