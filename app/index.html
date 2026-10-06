@@ -634,7 +634,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.19.1';
+const APP_VERSION = '1.19.2';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -1135,14 +1135,14 @@ function dashWindow() {
   return { mode:'period', start: startISO, end: isoLocal(endDay), endPay: endPayISO,
            periodLen: Math.max(daysBetween(startPay, endPay), 1),
            daysElapsed: Math.max(daysBetween(startPay, spendEnd), 1),
-           isCurrent, label: ddmm(startISO)+'–'+ddmm(endPayISO) };
+           isCurrent, label: ddmm(startISO)+'–'+ddmm(isoLocal(lastDay)) };
 }
 // Palkkajakson tulot: jaksoon saapunut palkka (palkkapäivästä alkaen, seuraavaan palkkapäivään asti pois lukien)
 function periodIncomeForOffset(off) {
   const { startPay, endPay } = periodBounds(off);
   const startISO = isoLocal(startPay), endISO = isoLocal(endPay);
   const inc = ptxs().filter(t=>t.type==='income' && t.date>=startISO && t.date<endISO).reduce((s,t)=>s+t.amount, 0);
-  const note = 'palkkajakso '+ddmm(startISO)+'–'+ddmm(endISO);
+  const note = 'palkkajakso '+ddmm(startISO)+'–'+ddmm(isoLocal(new Date(endPay.getTime()-86400000)));
   const minSal = (settings.monthly_salary||0)*0.4;
   if (inc>0 && (minSal===0 || inc>=minSal)) return { income: inc, note, isEstimate:false };
   const sal = settings.monthly_salary||0;
@@ -1218,7 +1218,7 @@ function budgetStatus(b, off) {
            perDay: daysLeft > 0 ? remaining/daysLeft : null,
            over: remaining < 0,
            pct: effLimit > 0 ? Math.min(spent/effLimit*100, 100) : 0,
-           label: ddmm(isoLocal(startPay))+'–'+ddmm(isoLocal(endPay)) };
+           label: ddmm(isoLocal(startPay))+'–'+ddmm(isoLocal(new Date(endPay.getTime()-86400000))) };
 }
 // Frekvenssi euromäärän rinnalle: 44 ostosta à 20,62 € ei ole yksi päätös vaan 44.
 // Summa yksinään piilottaa sen, että kyse on tottumuksesta eikä yksittäisestä valinnasta.
@@ -1990,6 +1990,30 @@ function varallisuusCardHTML(win, s, bInc) {
   // Jäännös: neutraalit rivit talouden ulkopuolelle, vuokratili, rahoitus, tarkistamattomat.
   const other = saved - w.savAccts - w.checking - w.credit - w.invested;
   const EPS = 0.005;
+  // Erittely: mistä jäännös koostuu. Kategorian nettosumma riveistä jotka eivät ole tuloa,
+  // kulutusta eivätkä sijoitusta. Sisäiset siirrot kumoavat toisensa (−40 Perus / +40 Lipas),
+  // joten jäljelle jää vain raha joka oikeasti ylitti talouden rajan — tai siirto jonka
+  // vastapuolen tiliotetta ei ole vielä tuotu.
+  const om = {};
+  expandList(txsForWindow(win.start, win.end))
+    .filter(t => !['income','needs','wants'].includes(t.type) && stripIcon(t.cat) !== 'Sijoittaminen')
+    .forEach(t => { const k = stripIcon(t.cat) || '—'; (om[k] = om[k] || {v:0, type:t.type}).v -= (+t.amount||0); });
+  const otherRows = Object.entries(om).filter(([,o]) => Math.abs(o.v) > EPS).sort((a,b) => Math.abs(b[1].v) - Math.abs(a[1].v));
+  const otherDiff = other - otherRows.reduce((a,[,o]) => a + o.v, 0);
+  if (Math.abs(otherDiff) > 0.01) otherRows.push(['Erittelemätön', {v: otherDiff, type: ''}]);
+  const otherHint = (k, o) => CAT_DEST[k] ? 'vastapuolen tiliote tuomatta'
+    : o.type === 'financing' ? 'rahoitus, ei laskettu kulutukseksi'
+    : o.type === 'flag' ? 'kategorisoimatta'
+    : k === 'Erittelemätön' ? '' : 'siirto talouden ulkopuolelle';
+  const otherHTML = otherRows.length ? `
+      <div style="margin-top:12px">
+        <div style="font-size:11px;font-weight:500;letter-spacing:0.07em;text-transform:uppercase;color:var(--dim);padding-bottom:4px">Muut siirrot eriteltynä</div>
+        ${otherRows.map(([k,o]) => `<div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:5px 0;border-top:0.5px solid var(--border)">
+          <span style="color:var(--text)">${esc(k)} <span style="color:var(--muted)">${otherHint(k,o) ? '· '+otherHint(k,o) : ''}</span></span>
+          <span style="white-space:nowrap;color:var(--muted)">${o.v > 0 ? 'ulos' : 'sisään'} ${eur(o.v)}</span></div>`).join('')}
+      </div>` : '';
+  const partial = win.mode === 'period' ? (win.isCurrent ? `jakso kesken · ${win.daysElapsed}/${win.periodLen} pv` : '')
+    : (curMonth === fmtMonthKey(new Date()) ? 'kuukausi kesken' : '');
   const flows = [
     [saved,       'Tuloista säästetty',            'Kulutus yli tulojen'],
     [-w.savAccts, 'Säästötileiltä',                'Säästötileille'],
@@ -2024,6 +2048,7 @@ function varallisuusCardHTML(win, s, bInc) {
         <div>
           <div class="sum-label">Säästöaste</div>
           <div style="font-size:28px;font-weight:300;line-height:1.2;color:${rateColor}">${rate===null ? '–' : (rate<0?'−':'')+Math.abs(rate)+' %'}</div>
+          ${partial ? `<div style="font-size:11px;color:var(--gold);margin-top:2px">${partial} — laskee kun kulutusta kertyy</div>` : ''}
         </div>
         <div style="text-align:right;font-size:12px;color:var(--muted);line-height:1.6">
           Tulot ${eur(s.income)}<br>− kulutus ${eur(s.needs + s.wants)}<br>
@@ -2034,9 +2059,10 @@ function varallisuusCardHTML(win, s, bInc) {
         ${col('Mistä raha tuli', src)}
         ${col('Mihin se meni', uses)}
       </div>
+      ${otherHTML}
       ${note}
       ${w.financing > 0 ? `<div style="margin-top:8px;padding:8px 10px;background:var(--gold-light);border-radius:var(--radius-sm);font-size:12px;color:var(--gold)">Jaksolla rahoitustapahtumia ${eur(w.financing)} — näkyvät rivillä Muut siirrot</div>` : ''}
-      <div style="font-size:11px;color:var(--dim);margin-top:8px">Jakson toteutuneet tulot ja kulutus. Muut siirrot = neutraalit rivit talouden ulkopuolelle, vuokratili ja rahoitus. Ei sisällä lainojen lyhennyksiä eikä sijoitusten arvonmuutosta.</div>
+      <div style="font-size:11px;color:var(--dim);margin-top:8px">Jakson toteutuneet tulot ja kulutus. Ei sisällä lainojen lyhennyksiä eikä sijoitusten arvonmuutosta.</div>
     </div>`;
 }
 

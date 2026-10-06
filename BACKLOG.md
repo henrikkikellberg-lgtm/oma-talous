@@ -4,6 +4,9 @@
 
 ## v1.18.0 — Toteutettu 6.10.2026
 
+- ✅ v1.19.2: palkkajakson otsikko näyttää viimeisen mukaan lasketun päivän (27.8.–24.9.), Muut siirrot eritellään kategorioittain, keskeneräinen jakso merkitään.
+- [ ] `Lainan nosto` −158,02 € (31.7.) ja Netrauta −721,90 € ovat `financing` → eivät näy kulutuksessa eivätkä säästöasteessa. Päätä kuuluuko remonttiostos kulutukseen.
+
 - ✅ v1.19.1: palkkajaksonäkymän ikkuna päättyy palkkapäivää edeltävään päivään (`dashWindow`). Aiemmin palkkapäivän rivit olivat kahdessa jaksossa.
 
 - ✅ v1.19.0: kortti muutettu muotoon säästöaste + lähteet/käytöt. Elisan erämaksusaldot päivitetty laskun 9/2026 mukaan (iPhone 104,04 · Huawei 78,47 · Roborock 486,54 · MacBook 2 886,18), iPhonen päättymiskk 2026-12.
