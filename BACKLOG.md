@@ -4,6 +4,8 @@
 
 ## v1.18.0 — Toteutettu 6.10.2026
 
+- ✅ v1.18.1: `lastDayOfMonth` ja `fmtMonthKey` käyttivät `toISOString()`a → Suomen ajassa kalenterikuukauden viimeinen päivä puuttui Yhteenvedosta ja Saldot-välilehden kuunvaihteen saldosta, ja `prevMonthKey` palautti kaksi kuukautta taaksepäin. Syyskuussa 30.9. rivit (202,12 €) puuttuivat. Palkkajaksonäkymä ei ollut rikki.
+
 - ✅ OP Visan laskun maksu → `neutral` (IBAN-tunnistus `CARD_PAYMENT_IBANS`, API + frontend). Sulkee kohdan "Luottokortti-kirjanpito: double-counting bugi" avoimen askeleen `OP Vähittäisasiakkaat`-rivien osalta. 10 riviä korjattu D1:ssä.
 - ✅ Varallisuuden muutos -kortti Yhteenvedossa: säästöaste saldoista tapahtumapohjaisen rinnalle (ks. "Säästötilin CSV-tuonti — arkkitehtuurimuutos").
 - [ ] Jos saldopohjainen luku osoittautuu oikeaksi: vaihda se Savings-korttiin, vinkkeihin (20 % tavoite), Analytiikan säästöaste-hälytykseen ja NWS-kaavioon. Nyt ne käyttävät vanhaa lukua.

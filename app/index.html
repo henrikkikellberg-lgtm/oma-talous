@@ -634,7 +634,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.18.0';
+const APP_VERSION = '1.18.1';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -881,7 +881,9 @@ function computeBalances(asOf) {
   });
 }
 function balanceOf(key, asOf) { const b = computeBalances(asOf).find(x=>x.key===key); return b ? b.balance : 0; }
-function lastDayOfMonth(mk) { const [y,m]=mk.split('-').map(Number); return new Date(y,m,0).toISOString().split('T')[0]; }
+// Paikallinen aika, EI toISOString(): Suomen aikavyöhykkeellä keskiyö on UTC:ssä edellinen
+// vuorokausi, jolloin kuun viimeinen päivä putosi kalenterinäkymästä pois (korjattu v1.18.1).
+function lastDayOfMonth(mk) { const [y,m]=mk.split('-').map(Number); return mk+'-'+String(new Date(y,m,0).getDate()).padStart(2,'0'); }
 
 // ── PALKKAPÄIVÄ & RUNWAY ──────────────────────────────────────────────────────
 const FIXED_HOLIDAYS = ['01-01','01-06','05-01','12-06','12-24','12-25','12-26'];
@@ -1070,7 +1072,7 @@ async function normalizeStoredCats() {
 }
 
 // ── HELPERS ─────────────────────────────────────────────────────────────────
-function fmtMonthKey(d) { return d.toISOString().substring(0,7); }
+function fmtMonthKey(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }   // paikallinen aika, ks. lastDayOfMonth
 // Henkilökohtainen talous = kaikki paitsi erilliset vuokratilit (kind 'rental').
 // Vuokratilin rivit ovat kannassa ja mukana saldoissa (computeBalances käyttää txs:ää),
 // mutta eivät kuukausilistassa, tapahtumalistassa, haussa eivätkä laskureissa —
