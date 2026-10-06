@@ -4,6 +4,10 @@
 
 ## v1.18.0 — Toteutettu 6.10.2026
 
+- ✅ v1.19.0: kortti muutettu muotoon säästöaste + lähteet/käytöt. Elisan erämaksusaldot päivitetty laskun 9/2026 mukaan (iPhone 104,04 · Huawei 78,47 · Roborock 486,54 · MacBook 2 886,18), iPhonen päättymiskk 2026-12.
+- [ ] Yhteenvedon Savings-kortti, vinkit ja Analytiikka näyttävät yhä vanhaa tapahtumapohjaista säästöastetta — yhtenäistä uuden kortin kanssa.
+- [ ] Kassavirta-kortti käyttää budjettituloa (palkkajakso), säästöaste-kortti jakson toteutuneita tuloja → kalenterinäkymässä luvut voivat erota.
+
 - ✅ v1.18.1: `lastDayOfMonth` ja `fmtMonthKey` käyttivät `toISOString()`a → Suomen ajassa kalenterikuukauden viimeinen päivä puuttui Yhteenvedosta ja Saldot-välilehden kuunvaihteen saldosta, ja `prevMonthKey` palautti kaksi kuukautta taaksepäin. Syyskuussa 30.9. rivit (202,12 €) puuttuivat. Palkkajaksonäkymä ei ollut rikki.
 
 - ✅ OP Visan laskun maksu → `neutral` (IBAN-tunnistus `CARD_PAYMENT_IBANS`, API + frontend). Sulkee kohdan "Luottokortti-kirjanpito: double-counting bugi" avoimen askeleen `OP Vähittäisasiakkaat`-rivien osalta. 10 riviä korjattu D1:ssä.

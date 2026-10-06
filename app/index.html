@@ -634,7 +634,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.18.1';
+const APP_VERSION = '1.19.0';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -1977,34 +1977,61 @@ function wealthChange(startISO, endISO) {
 }
 function varallisuusCardHTML(win, s, bInc) {
   if (!accounts.length || !txs.length) return '';
+  // v1.19.0: lähteet ja käytöt. Säästöaste = (tulot − kulutus) / tulot jakson TOTEUTUNEISTA
+  // riveistä (ei budjettitulosta), jotta sarakkeet täsmäävät: jokainen euro joka tuli
+  // jostain meni johonkin. Velan lyhennys ja sijoitus ovat säästön KÄYTTÖÄ, eivät lisäsäästöä.
   const w = wealthChange(win.start, win.end);
-  const zero = v => Math.abs(v) < 0.005;
-  const col = v => zero(v) ? 'var(--muted)' : v > 0 ? 'var(--green)' : 'var(--red)';
-  const pctOf = v => bInc > 0 ? Math.round(v / bInc * 100) : 0;
-  const row = (lbl, sub, v) => `
-      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:8px 0;border-top:0.5px solid var(--border)">
-        <div><div style="font-size:13px;color:var(--text)">${lbl}</div>
-          <div style="font-size:11px;color:var(--muted)">${sub}</div></div>
-        <div style="font-size:15px;font-weight:300;color:${col(v)};white-space:nowrap">${esigned(v)}</div>
+  const saved = s.income - s.needs - s.wants;
+  // Jäännös: neutraalit rivit talouden ulkopuolelle, vuokratili, rahoitus, tarkistamattomat.
+  const other = saved - w.savAccts - w.checking - w.credit - w.invested;
+  const EPS = 0.005;
+  const flows = [
+    [saved,       'Tuloista säästetty',            'Kulutus yli tulojen'],
+    [-w.savAccts, 'Säästötileiltä',                'Säästötileille'],
+    [-w.checking, 'Käyttötileiltä',                'Käyttötileille jäi'],
+    [-w.credit,   'Luottokorteilta · velka kasvoi','Luottokorttien lyhennys'],
+    [-w.invested, 'Sijoituksista purettu',         'Sijoitukset'],
+    [-other,      'Muut siirrot sisään',           'Muut siirrot ulos'],
+  ];
+  const src  = flows.filter(f => f[0] >  EPS).map(f => [f[1],  f[0]]);
+  const uses = flows.filter(f => f[0] < -EPS).map(f => [f[2], -f[0]]);
+  const sum = rows => rows.reduce((a,r) => a + r[1], 0);
+  const line = (lbl, v, strong, color) => `
+        <div style="display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:8px 0;border-top:0.5px solid var(--border);${strong?'font-weight:500;':''}">
+          <span style="color:var(--text)">${lbl}</span><span style="white-space:nowrap;color:${color||'var(--text)'}">${eur(v)}</span></div>`;
+  const col = (title, rows) => `
+      <div style="flex:1 1 220px;min-width:0">
+        <div style="font-size:11px;font-weight:500;letter-spacing:0.07em;text-transform:uppercase;color:var(--dim);padding-bottom:6px">${title}</div>
+        ${rows.length ? rows.map(r => line(r[0], r[1], false, r[0]==='Tuloista säästetty'?'var(--green)':r[0]==='Kulutus yli tulojen'?'var(--red)':'')).join('') : line('—', 0)}
+        ${line('Yhteensä', sum(rows), true)}
       </div>`;
-  const oldPct = pctOf(s.sav), newPct = pctOf(w.saving), debtPct = pctOf(w.saving + w.credit);
+  const rate = s.income > 0 ? Math.round(saved / s.income * 100) : null;
+  const rateColor = saved < -EPS ? 'var(--red)' : 'var(--green)';
+  const drawn = -w.savAccts;
+  const note = saved < -EPS
+    ? `<div style="margin-top:12px;padding:8px 10px;background:var(--red-light);border-radius:var(--radius-sm);font-size:12px;color:var(--red)">Kulutus ylitti tulot ${eur(saved)} — erotus katettiin säästöistä, tililtä tai luotolla</div>`
+    : drawn > EPS
+      ? `<div style="margin-top:12px;padding:8px 10px;background:var(--gold-light);border-radius:var(--radius-sm);font-size:12px;color:var(--gold)">Säästötilit pienenivät ${eur(drawn)}, mutta kulutus ei ylittänyt tuloja — raha vaihtoi paikkaa</div>`
+      : '';
   return `
-    <div class="sum-card" style="border-top:2.5px solid ${col(w.total)};margin-bottom:12px">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:10px">
-        <div class="sum-label">Varallisuuden muutos</div>
-        <div style="font-size:22px;font-weight:300;color:${col(w.total)};white-space:nowrap">${esigned(w.total)}</div>
+    <div class="sum-card" style="border-top:2.5px solid ${rateColor};margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+        <div>
+          <div class="sum-label">Säästöaste</div>
+          <div style="font-size:28px;font-weight:300;line-height:1.2;color:${rateColor}">${rate===null ? '–' : (rate<0?'−':'')+Math.abs(rate)+' %'}</div>
+        </div>
+        <div style="text-align:right;font-size:12px;color:var(--muted);line-height:1.6">
+          Tulot ${eur(s.income)}<br>− kulutus ${eur(s.needs + s.wants)}<br>
+          <span style="color:var(--text);font-weight:500">= ${saved < -EPS ? 'alijäämä' : 'säästö'} ${eur(saved)}</span>
+        </div>
       </div>
-      ${row('Säästötilit', 'saldojen muutos', w.savAccts)}
-      ${row('Sijoitukset', 'siirretty rahastoihin ja arvopaperitileille', w.invested)}
-      ${row('Luottokortit', zero(w.credit) ? 'ei muutosta' : w.credit > 0 ? 'velka pieneni' : 'velka kasvoi', w.credit)}
-      ${row('Käyttötilit', 'saldojen muutos', w.checking)}
-      <div style="margin-top:6px;padding:8px 10px;background:var(--surface2);border-radius:var(--radius-sm);font-size:12px;color:var(--muted);line-height:1.6">
-        Säästöaste tapahtumista <b style="color:var(--text);font-weight:500">${oldPct} %</b>
-        · saldoista <b style="color:${col(w.saving)};font-weight:500">${newPct} %</b>
-        · velan lyhennys mukaan <b style="color:${col(w.saving + w.credit)};font-weight:500">${debtPct} %</b>
+      <div style="display:flex;flex-wrap:wrap;gap:16px;margin-top:14px">
+        ${col('Mistä raha tuli', src)}
+        ${col('Mihin se meni', uses)}
       </div>
-      ${w.financing > 0 ? `<div style="margin-top:8px;padding:8px 10px;background:var(--gold-light);border-radius:var(--radius-sm);font-size:12px;color:var(--gold)">Jaksolla rahoitustapahtumia ${eur(w.financing)} — luvut eivät ole vertailukelpoisia muihin jaksoihin</div>` : ''}
-      <div style="font-size:11px;color:var(--dim);margin-top:8px">Ei sisällä vuokratiliä, lainojen lyhennyksiä eikä sijoitusten arvonmuutosta.</div>
+      ${note}
+      ${w.financing > 0 ? `<div style="margin-top:8px;padding:8px 10px;background:var(--gold-light);border-radius:var(--radius-sm);font-size:12px;color:var(--gold)">Jaksolla rahoitustapahtumia ${eur(w.financing)} — näkyvät rivillä Muut siirrot</div>` : ''}
+      <div style="font-size:11px;color:var(--dim);margin-top:8px">Jakson toteutuneet tulot ja kulutus. Muut siirrot = neutraalit rivit talouden ulkopuolelle, vuokratili ja rahoitus. Ei sisällä lainojen lyhennyksiä eikä sijoitusten arvonmuutosta.</div>
     </div>`;
 }
 
