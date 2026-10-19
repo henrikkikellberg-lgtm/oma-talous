@@ -309,7 +309,7 @@ function editPanels(){
   const cands = candidates();
   return `<datalist id="shareList">${shares.map(s=>`<option value="${esc(s)}">`).join('')}</datalist>
     <h2>Lisää rivejä <span class="lbl" id="candN">${cands.length} ehdotusta</span></h2>
-    <div class="note">Oletuksena näkyvät matkan ajalta tilien rivit, joita ei ole vielä kohdistettu mihinkään matkaan. Haulla löydät myös etukäteen maksetut lennot ja majoitukset.</div>
+    <div class="note">Oletuksena näkyvät matkan ajalta (ja 3 päivää paluun jälkeen) tilien rivit, joita ei ole vielä kohdistettu mihinkään matkaan. Haulla löydät myös etukäteen maksetut lennot ja majoitukset.</div>
     <div class="acts" style="margin-top:0">
       <input type="search" placeholder="Hae maksunsaajalla tai summalla…" value="${esc(candQ)}" oninput="candQ=this.value;clearTimeout(window._ct);window._ct=setTimeout(renderCands,200)" style="flex:1;min-width:180px">
       <button class="btn sm ${candAll?'on':''}" onclick="candAll=!candAll;render()">${candAll?'Vain matkan ajalta':'Kaikki päivät'}</button>
@@ -346,11 +346,17 @@ function renderCands(){
   const c = candidates(), box = document.getElementById('cands'); if (!box) return;
   box.innerHTML = candsHTML(c); document.getElementById('candN').textContent = `${c.length} ehdotusta`;
 }
+// Korttiostot kirjautuvat pankkiin 1–3 päivän viiveellä ja paluupäivän ostot
+// (lentokenttä, viimeinen ravintola) jäivät muuten ehdotuksista pois
+// (Madeira 3/2026: Funchal TB 4.3., Madeira Duty Free 5.3.).
+const TAIL_DAYS = 3;
+function addDays(iso, n){ const d=new Date(iso+'T12:00:00Z'); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); }
 function candidates(){
   const q = candQ.trim().toLowerCase();
+  const endW = addDays(trip.end_date, TAIL_DAYS);
   const qn = parseFloat(q.replace(',','.').replace(/[^\d.]/g,''));
   return TX.filter(t=>!t.trip_id && t.type!=='neutral' && t.type!=='savings' && !NEVER.test(t.cat||'')
-      && (candAll || q || (t.date>=trip.start_date && t.date<=trip.end_date))
+      && (candAll || q || (t.date>=trip.start_date && t.date<=endW))
       && (!q || ((t.payee||'')+' '+(t.selitys||'')+' '+(t.viesti||'')+' '+(t.cat||'')).toLowerCase().includes(q)
              || (!isNaN(qn) && Math.abs(Math.abs(+t.amount)-qn)<0.005)))
     .sort((a,b)=>b.date.localeCompare(a.date));
