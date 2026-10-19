@@ -295,6 +295,7 @@ tr:hover td{background:var(--surface2)}
     <button class="dnav-btn" data-tab="analytiikka" onclick="switchTab('analytiikka')">Analytiikka</button>
     <button class="dnav-btn" data-tab="tapahtumat" onclick="switchTab('tapahtumat')">Tapahtumat</button>
     <button class="dnav-btn" data-tab="saannot" onclick="switchTab('saannot')">Säännöt</button>
+    <a class="dnav-btn" href="matka.html" style="text-decoration:none;display:inline-flex;align-items:center">Matkat ↗</a>
     <a class="dnav-btn" href="vuokra.html" style="text-decoration:none;display:inline-flex;align-items:center">Vuokratoiminta ↗</a>
   </nav>
   <div class="desk-actions">
@@ -634,7 +635,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.20.1';
+const APP_VERSION = '1.21.0';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -1387,7 +1388,10 @@ function typeBadge(t) { return 'badge-'+(t||'neutral'); }
 // Palauttaa tapahtuman "efektiiviset rivit" laskentaan: jos split asetettu, käytetään osia
 function expandTx(tx) {
   if (tx.splits && tx.splits.length) {
-    return tx.splits.map(s => ({...tx, cat:s.cat, type:s.type, amount:-Math.abs(s.amount)}));
+    // Osat saavat rivin etumerkin: plusrivin (esim. käteistalletus, josta osa on
+    // takaisinmaksua ja osa omaa rahaa) splitti netottaa kategorioita oikein (v1.21.0).
+    const sign = tx.amount < 0 ? -1 : 1;
+    return tx.splits.map(s => ({...tx, cat:s.cat, type:s.type, amount:sign*Math.abs(s.amount)}));
   }
   return [tx];
 }
@@ -1509,6 +1513,11 @@ function categorizeTx(tx) {
   if (tx.amount > 0 && tx.account === 'Revolut' &&
       (/^rahanlisäys$/i.test((tx.payee||'').trim()) || /sijoitustilil|robo portfolio|invest/i.test(tx.payee||''))) {
     return {cat:'Sijoittaminen', type:'savings'};
+  }
+  // Sisään tuleva MobilePay = takaisinmaksu yhteisestä ostosta, ei tuloa (v1.21.0).
+  // Sama tarkistus API:n categorize()-funktiossa.
+  if (tx.amount > 0 && /vipps mobilepay|mobilepay/i.test(tx.payee||'') && accountByKey(tx.account)?.kind !== 'credit') {
+    return {cat:'— Takaisinmaksu?', type:'flag'};
   }
   for (const r of rules) {
     if (txt.includes(r.kw.toLowerCase())) {
@@ -3402,6 +3411,7 @@ function renderLisaa() {
       <button class="add-option" onclick="switchTab('vertailu')">📅 Kuukausivertailu</button>
       <button class="add-option" onclick="switchTab('saannot')">⚙️ Kategorisointisäännöt</button>
       <button class="add-option" onclick="switchTab('saldot')">🏦 Saldot &amp; nettovarallisuus</button>
+      <button class="add-option" onclick="location.href='matka.html'">✈️ Matkat</button>
       <button class="add-option" onclick="location.href='vuokra.html'">🏘️ Vuokratoiminta</button>
     </div>
     <div style="margin-top:24px;display:flex;gap:8px;flex-wrap:wrap">

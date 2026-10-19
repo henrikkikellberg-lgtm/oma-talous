@@ -1,6 +1,6 @@
 /**
  * oma-talous Workers API
- * Endpoints: /receipts/parse, /quick/parse, /transactions, /summary, /import/csv, /rules, /settings
+ * Endpoints: /receipts/parse, /quick/parse, /transactions, /summary, /import/csv, /rules, /settings, /trips, /trip_items
  */
 
 // ── CORS ────────────────────────────────────────────────────────────────────
@@ -99,6 +99,28 @@ export default {
         const bid = decodeURIComponent(budgetMatch[1]);
         if (method === 'PUT')    return handleBudgetsUpsert(req, env, bid);
         if (method === 'DELETE') return handleBudgetsDelete(env, bid);
+      }
+
+      // Matkat (v1.21.0)
+      if (path === '/trips') {
+        if (method === 'GET')  return handleTripsList(env);
+        if (method === 'POST') return handleTripsCreate(req, env);
+      }
+      const tripMatch = path.match(/^\/trips\/([^/]+)$/);
+      if (tripMatch) {
+        const tid = decodeURIComponent(tripMatch[1]);
+        if (method === 'PUT')    return handleTripsUpdate(req, env, tid);
+        if (method === 'DELETE') return handleTripsDelete(env, tid);
+      }
+      if (path === '/trip_items') {
+        if (method === 'GET')  return handleTripItemsList(env, url);
+        if (method === 'POST') return handleTripItemsCreate(req, env);
+      }
+      const tiMatch = path.match(/^\/trip_items\/([^/]+)$/);
+      if (tiMatch) {
+        const iid = decodeURIComponent(tiMatch[1]);
+        if (method === 'PUT')    return handleTripItemsUpdate(req, env, iid);
+        if (method === 'DELETE') return handleTripItemsDelete(env, iid);
       }
 
       return err('Not found', 404);
@@ -248,7 +270,7 @@ async function handleTxCreate(req, env) {
 async function handleTxUpdate(req, env, id) {
   const decodedId = decodeURIComponent(id);
   const updates = await req.json();
-  const fields = ['cat','type','payee','amount','date','account','splits','property_id'].filter(f=>updates[f]!==undefined);
+  const fields = ['cat','type','payee','amount','date','account','splits','property_id','trip_id','trip_group','share_group'].filter(f=>updates[f]!==undefined);
   if (!fields.length) return err('Nothing to update');
   const sets = fields.map(f=>`${f}=?`).join(',');
   const vals = fields.map(f => f==='splits' ? (updates[f]?JSON.stringify(updates[f]):null) : updates[f]);
@@ -262,6 +284,67 @@ function safeParse(s) { if (!s) return null; try { return JSON.parse(s); } catch
 async function handleTxDelete(req, env, id) {
   const decodedId = decodeURIComponent(id);
   await env.DB.prepare('DELETE FROM transactions WHERE id=?').bind(decodedId).run();
+  return ok({ ok: true });
+}
+
+// ── TRIPS (v1.21.0) ──────────────────────────────────────────────────────────
+// Matka = kohdistus, ei kategoria. Ks. migrations/009_trips.sql.
+async function handleTripsList(env) {
+  const { results } = await env.DB.prepare('SELECT * FROM trips ORDER BY start_date DESC').all();
+  return ok(results);
+}
+async function handleTripsCreate(req, env) {
+  const t = await req.json();
+  if (!t.name || !t.start_date || !t.end_date) return err('Missing fields');
+  const id = t.id || `trip_${Date.now()}_${Math.random().toString(36).substr(2,5)}`;
+  await env.DB.prepare('INSERT INTO trips (id,name,start_date,end_date,note) VALUES (?,?,?,?,?)')
+    .bind(id, t.name, t.start_date, t.end_date, t.note||null).run();
+  return ok({ id });
+}
+async function handleTripsUpdate(req, env, id) {
+  const u = await req.json();
+  const fields = ['name','start_date','end_date','note'].filter(f=>u[f]!==undefined);
+  if (!fields.length) return err('Nothing to update');
+  const r = await env.DB.prepare(`UPDATE trips SET ${fields.map(f=>`${f}=?`).join(',')} WHERE id=?`)
+    .bind(...fields.map(f=>u[f]), id).run();
+  if (r.meta?.changes === 0) return err('Trip not found', 404);
+  return ok({ ok: true });
+}
+// Poistaa matkan, sen käteisrivit ja kohdistukset. Tapahtumat itse säilyvät.
+async function handleTripsDelete(env, id) {
+  await env.DB.batch([
+    env.DB.prepare('UPDATE transactions SET trip_id=NULL, trip_group=NULL, share_group=NULL WHERE trip_id=?').bind(id),
+    env.DB.prepare('DELETE FROM trip_items WHERE trip_id=?').bind(id),
+    env.DB.prepare('DELETE FROM trips WHERE id=?').bind(id),
+  ]);
+  return ok({ ok: true });
+}
+async function handleTripItemsList(env, url) {
+  const trip = url.searchParams.get('trip');
+  const q = trip ? env.DB.prepare('SELECT * FROM trip_items WHERE trip_id=? ORDER BY date').bind(trip)
+                 : env.DB.prepare('SELECT * FROM trip_items ORDER BY date');
+  const { results } = await q.all();
+  return ok(results);
+}
+async function handleTripItemsCreate(req, env) {
+  const it = await req.json();
+  if (!it.trip_id || !it.date || !it.label || it.amount === undefined) return err('Missing fields');
+  const id = it.id || `ti_${Date.now()}_${Math.random().toString(36).substr(2,5)}`;
+  await env.DB.prepare('INSERT INTO trip_items (id,trip_id,date,label,amount,trip_group,share_group,note) VALUES (?,?,?,?,?,?,?,?)')
+    .bind(id, it.trip_id, it.date, it.label, it.amount, it.trip_group||null, it.share_group||null, it.note||null).run();
+  return ok({ id });
+}
+async function handleTripItemsUpdate(req, env, id) {
+  const u = await req.json();
+  const fields = ['date','label','amount','trip_group','share_group','note'].filter(f=>u[f]!==undefined);
+  if (!fields.length) return err('Nothing to update');
+  const r = await env.DB.prepare(`UPDATE trip_items SET ${fields.map(f=>`${f}=?`).join(',')} WHERE id=?`)
+    .bind(...fields.map(f=>u[f]), id).run();
+  if (r.meta?.changes === 0) return err('Item not found', 404);
+  return ok({ ok: true });
+}
+async function handleTripItemsDelete(env, id) {
+  await env.DB.prepare('DELETE FROM trip_items WHERE id=?').bind(id).run();
   return ok({ ok: true });
 }
 
@@ -883,6 +966,15 @@ function categorize(tx, rules) {
   if (tx.amount > 0 && tx.account === 'Revolut' &&
       (/^rahanlisäys$/i.test((tx.payee||'').trim()) || /sijoitustilil|robo portfolio|invest/i.test(tx.payee||''))) {
     return {cat:'Sijoittaminen', type:'savings'};
+  }
+
+  // Sisään tuleva MobilePay on lähes aina takaisinmaksu yhteisestä ostosta, ei tuloa.
+  // Kreikan reissulla 10.–18.10.2026 seitsemän siirtoa (432,50 €) meni "Palkka ja
+  // tulot" -kategoriaan, jolloin tulot paisuivat ja ravintolakulut näyttivät
+  // bruttona. Tarkistettavaksi: käyttäjä kohdistaa siirron oston kategoriaan
+  // plussalla, jolloin se netottuu (ks. CLAUDE.md → Takaisinmaksut).
+  if (tx.amount > 0 && /vipps mobilepay|mobilepay/i.test(tx.payee||'') && !CREDIT_ACCTS.includes(tx.account)) {
+    return {cat:'— Takaisinmaksu?', type:'flag'};
   }
 
   for (const r of rules) {

@@ -294,6 +294,21 @@ Suoja lisätty `categorize()`:en (API ja frontend, v1.13.1): **luottotilillä ne
 - **Käsin syötetyn rivin duplikaattihaku ±3 pv.** Tarkka päivävertailu päästi läpi Spotifyn (pankki 20.6. / käsin 22.6.) ja McDonald'sin (26.8. / 27.8.) → Perus-saldo 30,39 € pankkia pienempi. `findExistingDuplicate` hyväksyy nyt manual/receipt-rivin ±3 pv sisältä, lähin ensin, yksi CSV-rivi per käsin syötetty rivi. Saldon täsmäytys: pankin tiliotteen loppusaldo = `opening_balance + SUM(amount)`; Perus 23.9.2026 = 286,38 €.
 - **`GET /transactions` palauttaa KAIKKI rivit.** Aiempi `LIMIT 1000` pudotti vanhimmat rivit frontendistä, kun data ylitti 1 000 riviä (24.9.2026): Perus-saldo näytti 805,32 € liikaa, koska 1.–5.1.2026 rivit puuttuivat summasta. Älä lisää oletusrajaa — saldot lasketaan koko historiasta.
 
+### Takaisinmaksut yhteisistä ostoista (v1.21.0)
+
+- **Netotus kategoriassa.** Kaverilta tullut MobilePay saa oston kategorian ja tyypin **plussalla**: Ravintolat −164,50 + 82,50 + 55 = oma osuus 27 €. `monthSummary` laskee saman tyypin plus- ja miinusrivit yhteen. Ei splitata ostoa `neutral`iin — maksamatta jäänyt osuus katoaisi hiljaa.
+- **Sisään tuleva `VIPPS MOBILEPAY` → `— Takaisinmaksu?` / `flag`** (API `categorize()` + frontend `categorizeTx()`). Ennen tätä fallback teki siitä `Palkka ja tulot` / `income` (Kreikka 10/2026: 432,50 € valetuloa). Maksajan nimi on `viesti`-kentässä: `Alkuperäinen maksaja: …`.
+- **Plusrivin splitti säilyttää etumerkin** (`expandTx`). Esim. käteistalletus: osa takaisinmaksua (kategoriaan plussalla), osa omaa rahaa (`neutral`).
+
+## Matkat (v1.21.0) — `app/matka.html`
+
+- Taulut: `trips`, `trip_items` (käteinen — ei saldoissa eikä budjeteissa) ja `transactions.trip_id / trip_group / share_group`. Migraatio 009 **ajettu tuotantoon 19.10.2026 — ÄLÄ aja uudelleen** (ALTER kaatuu duplicate columniin).
+- Kohdistus on erillinen kenttä, ei kategoria: budjetit ja NWS eivät muutu. Matkalle kuuluvat myös etukäteen maksetut (lennot helmikuussa).
+- `trip_group` NULL = arvataan (`autoGroup`): auto → ruoka-kategoriat → liikkuminen → lennot → majoitus → ostokset → tekeminen → muut. Järjestys on tarkoituksellinen: tiemaksu `ATTIKI ODOS` on tiliotteella kahvila, hotellin baari on ruokaa.
+- `share_group` = yhteiskulu: saman tunnisteen ostot (−) ja takaisinmaksut (+) netotetaan. Takaisinmaksu ilman omaa ryhmää perii suurimman oston ryhmän.
+- API: `GET/POST /trips`, `PUT/DELETE /trips/:id` (poisto vain irrottaa rivit), `GET /trip_items?trip=`, `POST /trip_items`, `PUT/DELETE /trip_items/:id`, `PUT /transactions/:id {trip_id, trip_group, share_group}`.
+- Kreikka 2026 (`trip_kreikka_2026`, 9.–18.10.2026): 64 riviä + 3 käteisriviä, oma kulu 2 350,17 € (ilman ostoksia 2 207,37). Jutalle 8.9. maksettu 173,30 € on oletettu majoitukseksi.
+
 ### Tarkistuslista ennen kuin vastaat "mihin raha meni"
 
 1. **`MAX(transactions.date)` EI kerro datan tuoreutta.** Tili jolla ei ole ollut tapahtumia (Revolut, säästötili) näyttää täsmälleen samalta kuin tili jonka tiliotetta ei ole tuotu kuukauteen. Ensimmäinen on kunnossa, toinen tekee kaikista luvuista hiljaa liian pieniä. Ainoa luotettava signaali on `accounts.last_import_at` — leima siitä milloin tiliote tuotiin, päivittyy myös kun tiedostossa ei ollut yhtään riviä.
