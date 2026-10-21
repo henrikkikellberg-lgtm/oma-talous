@@ -334,6 +334,7 @@ tr:hover td{background:var(--surface2)}
       <span style="font-size:22px;font-weight:300;color:var(--text)" id="deskTotal">—</span>
       <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">käytetty</span>
     </div>
+    <button class="btn btn-secondary" style="height:32px;padding:0 12px;font-size:13px" onclick="openFitModal()">🛍 Mahtuuko?</button>
     <button class="btn btn-secondary" style="height:32px;padding:0 12px;font-size:13px" onclick="openCameraModal()">📷 Kuitti</button>
     <button class="btn btn-secondary" style="height:32px;padding:0 12px;font-size:13px" onclick="openManualModal()">+ Lisää</button>
   </div>
@@ -429,10 +430,27 @@ tr:hover td{background:var(--surface2)}
   <div class="modal-sheet">
     <div class="modal-handle"></div>
     <div class="modal-title">Lisää tapahtuma</div>
+    <button class="add-option" style="background:var(--blue-light);color:var(--blue)" onclick="closeModal('addModal');openFitModal()">🛍 <span>Mahtuuko ostos?</span></button>
     <button class="add-option" onclick="closeModal('addModal');openCameraModal()">📷 <span>Kuittikuva</span></button>
     <button class="add-option" onclick="closeModal('addModal');openQuickModal()">⚡ <span>Pikasyöttö</span></button>
     <button class="add-option" onclick="closeModal('addModal');openManualModal()">✏️ <span>Manuaalinen syöttö</span></button>
     <button class="modal-cancel" onclick="closeModal('addModal')">Peruuta</button>
+  </div>
+</div>
+
+<!-- ── MODAL: MAHTUUKO OSTOS? (v1.22.0) ──────────────────── -->
+<div class="modal-overlay" id="fitModal" onclick="if(event.target===this)closeModal('fitModal')">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Mahtuuko ostos?</div>
+    <div id="fitHead"></div>
+    <div class="field-group"><div class="field-label">Ostoksen hinta €</div><input class="field-input" id="fitAmount" type="number" inputmode="decimal" step="1" min="0" placeholder="esim. 100" oninput="renderFitResult()"></div>
+    <div class="cat-chips" style="margin-top:-6px">
+      <button class="cat-chip" onclick="setFitAmount(20)">20 €</button><button class="cat-chip" onclick="setFitAmount(50)">50 €</button><button class="cat-chip" onclick="setFitAmount(100)">100 €</button><button class="cat-chip" onclick="setFitAmount(300)">300 €</button>
+    </div>
+    <div id="fitVerdict"></div>
+    <div id="fitBreakdown"></div>
+    <button class="modal-cancel" onclick="closeModal('fitModal')">Sulje</button>
   </div>
 </div>
 
@@ -635,7 +653,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.21.0';
+const APP_VERSION = '1.22.0';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -939,6 +957,165 @@ function computeRunway() {
           spentSoFar, avgDaily, dailyAllowance, projection, targetDaily};
 }
 
+// ── MAHTUUKO OSTOS? (v1.22.0) ───────────────────────────────────────────────
+// Palkkajakson vapaa kulutusraha. Järjestys on tarkoituksellinen: SÄÄSTÖT ENSIN,
+// sitten kiinteät laskut ja korttivelan tavoitelyhennys, sitten jo käytetty ja
+// arjen varaus (ruoka, liikkuminen) loppujaksolle. Mitä jää = vapaata ostoksiin.
+// Kertalaskelma: varauksia ei tallenneta.
+// Kiinteät tunnistetaan maksunsaajasta: edellisen jakson kiinteän kategorian
+// maksu, jota ei ole vielä näkynyt tällä jaksolla, on "vielä tulossa".
+// Avain on pelkkä maksunsaaja (ei tili): keittiölainan loppumaksu säästötililtä
+// 20.10.2026 kuittaa Perukselta maksetun erän.
+const FIXED_CATS = ['Asuminen','Luotot — korko','Luotot — lyhennys','Suoratoisto & liittymät','Vakuutukset'];
+const LIPAS_ROUNDUP = 4;   // €/korttimaksu säästölippaaseen (OP:n säästötavoite)
+const isFixedCat = c => FIXED_CATS.includes(c);
+const fixedKey = t => (t.payee||'').toLowerCase().replace(/\s+/g,' ').trim();
+
+// Palkkajakso [start, end): back=0 nykyinen, 1 edellinen, ... (käyttää periodBoundsia)
+function fitPeriod(back = 0) {
+  const { startPay: start, endPay: end } = periodBounds(-back);
+  return { start, end, startISO: isoLocal(start), endISO: isoLocal(end) };
+}
+const inPeriod = (t, b) => t.date >= b.startISO && t.date < b.endISO;
+const sumNeg = (list, f) => -list.filter(f).reduce((s,t) => s + t.amount, 0);
+
+function computeFreeSpend() {
+  const cur = fitPeriod(0), prev = fitPeriod(1);
+  const past = [1,2,3].map(fitPeriod);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const daysLeft = Math.max(daysBetween(today, cur.end), 0);
+  const all = ptxs();
+  const curRaw = all.filter(t => inPeriod(t, cur));
+  const curEff = expandList(curRaw);
+  const pastRaw = past.map(b => all.filter(t => inPeriod(t, b)));
+
+  // Tulot: toteutunut palkka, tai asetus jos palkka ei ole vielä tuotu
+  const minSal = (settings.monthly_salary || 0) * 0.4;
+  const actInc = curEff.filter(t => t.type === 'income').reduce((s,t) => s + t.amount, 0);
+  const incomeEst = !(actInc > 0 && actInc >= minSal);
+  const income = incomeEst ? (settings.monthly_salary || 0) : actInc;
+
+  // 1. Säästöt ensin: tavoite (asetus) tai kolmen jakson keskiarvo
+  const savAvg = pastRaw.reduce((s,l) => s + sumNeg(expandList(l), t => t.type === 'savings'), 0) / 3;
+  const roundupAvg = pastRaw.reduce((s,l) => s + sumNeg(l, t => t.type === 'savings' && t.cat === 'Säästölipas' && t.amount < 0 && /korttim/i.test(t.viesti || '')), 0) / 3;
+  const savTarget = (settings.savings_target || 0) > 0 ? settings.savings_target : Math.round(savAvg);
+  const savDone = sumNeg(curEff, t => t.type === 'savings');
+  const savLeft = Math.max(savTarget - savDone, 0);
+
+  // 2. Kiinteät: maksetut + vielä tulossa
+  const fixedPaid = sumNeg(curEff, t => t.type === 'needs' && isFixedCat(t.cat));
+  const seen = new Set(curRaw.map(fixedKey));
+  const up = {};
+  all.filter(t => inPeriod(t, prev) && t.type === 'needs' && isFixedCat(t.cat) && t.amount < 0 && !seen.has(fixedKey(t)))
+    .forEach(t => {
+      const a = accountByKey(t.account);
+      if (a && a.kind === 'credit' && balanceOf(a.key) > -1) return;   // nollattu kortti → ei korkoa
+      const k = fixedKey(t);
+      (up[k] = up[k] || { label: t.payee, amount: 0 }).amount += -t.amount;
+    });
+  const upcoming = Object.values(up).sort((a,b) => b.amount - a.amount);
+  const fixedLeft = upcoming.reduce((s,u) => s + u.amount, 0);
+
+  // Korttivelan tavoitelyhennys: raha lähtee käyttötililtä, vaikka se ei ole kulutusta
+  const creditLeft = accounts
+    .filter(a => a.kind === 'credit' && (a.monthly_target || 0) > 0 && balanceOf(a.key) < -1)
+    .map(a => ({ label: a.label, amount: Math.max(a.monthly_target - curRaw.filter(t => t.account === a.key && t.amount > 0).reduce((s,t) => s + t.amount, 0), 0) }))
+    .filter(x => x.amount > 0);
+  const creditLeftSum = creditLeft.reduce((s,c) => s + c.amount, 0);
+
+  // 3. Jo käytetty: muuttuvat needs + wants + rahoitus (myös kortilla)
+  const varNeeds = sumNeg(curEff, t => t.type === 'needs' && !isFixedCat(t.cat));
+  const wants    = sumNeg(curEff, t => t.type === 'wants');
+  const fin      = sumNeg(curEff, t => t.type === 'financing');
+  const spent = varNeeds + wants + fin;
+  const tripSpent = sumNeg(expandList(curRaw.filter(t => t.trip_id)), t => ['needs','wants','financing'].includes(t.type));
+
+  // 4. Arjen varaus loppujaksolle: muuttuvat needs / pv, kolme jaksoa ilman matkoja
+  // eikä remonttia (Asuminen — remontti on kertaluontoinen, 8/2026 722 € nosti tahdin 29 €/pv:hen)
+  let vn = 0, vd = 0;
+  past.forEach((b,i) => {
+    vn += sumNeg(expandList(pastRaw[i].filter(t => !t.trip_id)), t => t.type === 'needs' && !isFixedCat(t.cat) && !(t.cat || '').startsWith('Asuminen'));
+    vd += daysBetween(b.start, b.end);
+  });
+  const dailyEveryday = vd ? vn / vd : 0;
+  const everydayLeft = dailyEveryday * daysLeft;
+
+  const free = income - savDone - savLeft - fixedPaid - fixedLeft - creditLeftSum - spent - everydayLeft;
+  const perus = accountByKey('Perus');
+  return { cur, daysLeft, income, incomeEst, savTarget, savAvg, savDone, savLeft, roundupAvg,
+           fixedPaid, upcoming, fixedLeft, creditLeft, creditLeftSum,
+           varNeeds, wants, fin, spent, tripSpent, dailyEveryday, everydayLeft, free,
+           checking: balanceOf('Perus'), importedThrough: perus?.last_import_through || null };
+}
+
+function openFitModal() {
+  const inp = document.getElementById('fitAmount'); if (inp) inp.value = '';
+  renderFitResult();
+  openModal('fitModal');
+  setTimeout(() => document.getElementById('fitAmount')?.focus(), 150);
+}
+function setFitAmount(v) { const i = document.getElementById('fitAmount'); if (i) { i.value = v; renderFitResult(); } }
+function saveSavingsTarget(v) { saveSetting('savings_target', v); renderFitResult(); renderRunwayCard(); }
+
+function renderFitResult() {
+  const f = computeFreeSpend();
+  const x = parseFloat(document.getElementById('fitAmount')?.value) || 0;
+  const head = document.getElementById('fitHead'), ver = document.getElementById('fitVerdict'), br = document.getElementById('fitBreakdown');
+  if (!head) return;
+  const fc = f.free >= 100 ? 'var(--green)' : f.free >= 0 ? 'var(--gold)' : 'var(--red)';
+  head.innerHTML = `
+    <div style="background:var(--surface2);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--dim)">Vapaata ostoksiin · ${f.daysLeft} pv palkkaan</div>
+      <div style="font-size:28px;font-weight:300;color:${fc};line-height:1.2">${esigned(Math.round(f.free))}</div>
+      <div style="font-size:12px;color:var(--muted)">${f.free >= 0 ? `≈ ${eur(f.daysLeft ? f.free / f.daysLeft : f.free)}/pv säästöjen, laskujen ja ruoan jälkeen` : 'Jakso on jo miinuksella — ostokset menevät säästöistä tai kortille'}</div>
+    </div>`;
+
+  if (!x) { ver.innerHTML = ''; }
+  else {
+    const after = f.free - x;
+    let c, title, txt;
+    if (after >= 0) {
+      c = 'var(--green)'; title = 'Mahtuu';
+      txt = `Jää ${eur(after)}${f.daysLeft ? ` · ${eur(after / f.daysLeft)}/pv loppujaksolle` : ''}.`;
+    } else if (after >= -f.savLeft) {
+      c = 'var(--gold)'; title = 'Mahtuu vain säästöjen kustannuksella';
+      txt = `Säästötavoitteesta jäisi ${eur(-after)} saavuttamatta.`;
+    } else {
+      c = 'var(--red)'; title = 'Ei mahdu';
+      txt = `Vaje ${eur(-after)}: menisi säästöistä tai kortille.`;
+    }
+    if (x > f.checking) txt += ` Perustilillä on nyt vain ${eur(f.checking)}.`;
+    ver.innerHTML = `
+      <div style="border:.5px solid var(--border);border-left:3px solid ${c};border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:14px">
+        <div style="font-size:15px;font-weight:500;color:${c}">${title}</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:2px">${txt}</div>
+        <div style="font-size:11px;color:var(--dim);margin-top:4px">Kortilla maksettuna lippaaseen lähtee lisäksi ${eur(LIPAS_ROUNDUP)}.</div>
+      </div>`;
+  }
+
+  const row = (lbl, val, sub = '', strong = false) => `
+    <div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:.5px solid var(--border);font-size:13px">
+      <span style="color:${strong ? 'var(--text)' : 'var(--muted)'};${strong ? 'font-weight:500' : ''}">${lbl}${sub ? `<br><span style="font-size:11px;color:var(--dim)">${sub}</span>` : ''}</span>
+      <span style="white-space:nowrap;color:${strong ? 'var(--text)' : 'var(--muted)'};${strong ? 'font-weight:500' : ''}">${val}</span>
+    </div>`;
+  const neg = v => v ? '−' + eur(v) : eur(0);
+  const upTxt = f.upcoming.length ? f.upcoming.map(u => `${esc(u.label)} ${eur(u.amount)}`).join(' · ') : '';
+  br.innerHTML = `
+    <div style="font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--dim);margin-bottom:4px">Laskelma · palkkajakso ${ddmm(f.cur.startISO)}–${ddmm(isoLocal(new Date(f.cur.end.getTime() - 86400000)))}</div>
+    ${row('Palkka', eur(f.income), f.incomeEst ? 'arvio — palkkaa ei vielä tuotu' : '')}
+    ${row('1. Säästöt', neg(Math.max(f.savTarget, f.savDone)), `tavoite ${eur(f.savTarget)}${(settings.savings_target||0) > 0 ? '' : ' (3 jakson ka.)'} · tehty ${eur(f.savDone)} · josta lipas-pyöristykset ka. ${eur(f.roundupAvg)}/jakso`)}
+    ${row('2. Kiinteät laskut', neg(f.fixedPaid + f.fixedLeft), `maksettu ${eur(f.fixedPaid)}${f.fixedLeft ? ` · tulossa ${eur(f.fixedLeft)}: ${upTxt}` : ''}`)}
+    ${f.creditLeftSum ? row('Korttivelan lyhennys', neg(f.creditLeftSum), f.creditLeft.map(c => `${esc(c.label)} ${eur(c.amount)}`).join(' · ')) : ''}
+    ${row('3. Jo käytetty', neg(f.spent), `ruoka & arki ${eur(f.varNeeds)} · wants ${eur(f.wants)}${f.fin ? ` · rahoitus ${eur(f.fin)}` : ''}${f.tripSpent ? ` · josta matkoja ${eur(f.tripSpent)}` : ''}`)}
+    ${row('4. Ruoka & arki loppujaksolle', neg(f.everydayLeft), `${eur(f.dailyEveryday)}/pv × ${f.daysLeft} pv (3 jakson ka., ilman matkoja ja remonttia)`)}
+    ${row('Vapaata ostoksiin', esigned(Math.round(f.free)), '', true)}
+    <div style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12px;color:var(--muted)">
+      <span style="flex:1">Säästötavoite €/jakso<br><span style="font-size:11px;color:var(--dim)">tyhjä = 3 jakson keskiarvo (${eur(f.savAvg)})</span></span>
+      <input class="saldo-in" style="width:110px" type="number" step="10" min="0" value="${(settings.savings_target||0) > 0 ? settings.savings_target : ''}" placeholder="${Math.round(f.savAvg)}" onchange="saveSavingsTarget(this.value)">
+    </div>
+    ${f.importedThrough ? `<div style="font-size:11px;color:var(--dim);margin-top:8px">Perustilin tiliote tuotu ${fmtDateLbl(f.importedThrough)} asti — sen jälkeiset ostot eivät ole laskelmassa.</div>` : ''}`;
+}
+
 // Nettovelkaantuminen kuukaudelle: korttiostot+korot − maksut korteille
 function netBorrowingForMonth(month) {
   const credit = txs.filter(t => { const a=accountByKey(t.account); return a && a.kind==='credit' && t.date.startsWith(month); });
@@ -1019,7 +1196,7 @@ async function initState() {
     .catch(()=>{});
   fetch(`${API_BASE}/settings`, { headers: apiHeaders() })
     .then(r=>r.ok?r.json():null)
-    .then(s=>{ if(s){ settings = Object.assign(settings, {salary_day:+s.salary_day||27, monthly_salary:+s.monthly_salary||3267}); saveLocalState(); renderTab(curTab); } })
+    .then(s=>{ if(s){ settings = Object.assign(settings, {salary_day:+s.salary_day||27, monthly_salary:+s.monthly_salary||3267, savings_target:+s.savings_target||0}); saveLocalState(); renderTab(curTab); } })
     .catch(()=>{});
 
   try {
@@ -1884,6 +2061,11 @@ function renderRunwayCard() {
         <span>Jos ${eur(r.targetDaily)}/pv → ennuste <strong style="color:${tpColor}">${esigned(Math.round(targetProjection))}</strong></span>
         <span>Saldo riittää max <strong style="color:var(--text)">${eur(r.dailyAllowance)}/pv</strong></span>
       </div>
+      ${(() => { const f = computeFreeSpend(); const c = f.free >= 100 ? 'var(--green)' : f.free >= 0 ? 'var(--gold)' : 'var(--red)';
+        return `<button onclick="openFitModal()" style="display:flex;justify-content:space-between;align-items:center;width:100%;margin-top:10px;padding:10px 12px;border:.5px solid var(--border);border-radius:var(--radius-sm);background:var(--blue-light);font-family:'Inter',sans-serif;cursor:pointer">
+          <span style="font-size:13px;font-weight:500;color:var(--blue)">🛍 Mahtuuko ostos?</span>
+          <span style="font-size:13px;color:var(--muted)">vapaata <strong style="color:${c}">${esigned(Math.round(f.free))}</strong> ›</span>
+        </button>`; })()}
     </div>`;
 }
 
@@ -2857,7 +3039,7 @@ function budgetFitCardHTML() {
         <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:8px 10px">
           <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);font-weight:500;margin-bottom:2px">Liikkumavara${needsAvg ? ` (${needsAvg.months} kk avg)` : ''}</div>
           ${headroom !== null
-            ? `<div style="font-size:15px;font-weight:300;color:${headroomC}">${eur(headroom)}/kk</div>
+            ? `<div style="font-size:15px;font-weight:300;color:${headroomC}">${headroom<0?'−':''}${eur(headroom)}/kk</div>
                <div style="font-size:11px;color:var(--dim)">Avg kulutus ${eur(needsAvg.avg)}</div>`
             : `<div style="font-size:13px;color:var(--dim)">Ei tarpeeksi dataa</div>`}
         </div>
@@ -2896,7 +3078,7 @@ function calcBudgetFit() {
     const fits = pay <= headroom;
     const fitC = fits ? 'var(--green)' : 'var(--red)';
     const fitTxt = fits ? 'mahtuu liikkumavaraan' : 'ylittää liikkumavaran';
-    html += `<br><span style="color:${fitC};font-weight:500">${fitTxt}</span> (${eur(headroom)}/kk headroom)`;
+    html += `<br><span style="color:${fitC};font-weight:500">${fitTxt}</span> (${headroom<0?'−':''}${eur(headroom)}/kk)`;
   }
   if (months) html += `<br>Kokonaiskustannus ${eur(totalCost)} · vapautuu ${fmtMonthLbl(endMonthKey)}`;
 

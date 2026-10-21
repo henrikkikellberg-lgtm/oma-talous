@@ -309,6 +309,14 @@ Suoja lisätty `categorize()`:en (API ja frontend, v1.13.1): **luottotilillä ne
 - API: `GET/POST /trips`, `PUT/DELETE /trips/:id` (poisto vain irrottaa rivit), `GET /trip_items?trip=`, `POST /trip_items`, `PUT/DELETE /trip_items/:id`, `PUT /transactions/:id {trip_id, trip_group, share_group}`.
 - Kreikka 2026 (`trip_kreikka_2026`, 9.–18.10.2026): 64 riviä + 3 käteisriviä, oma kulu 2 350,17 € (ilman ostoksia 2 207,37). Jutalle 8.9. maksettu 173,30 € on oletettu majoitukseksi.
 
+### Mahtuuko ostos? (v1.22.0)
+
+- `computeFreeSpend()` laskee palkkajakson vapaan kulutusrahan järjestyksessä: **säästöt ensin** (asetus `settings.savings_target`, tyhjä = 3 jakson keskiarvo) → kiinteät laskut (`FIXED_CATS`: maksetut + "vielä tulossa") → korttivelan `monthly_target` miinus jakson maksut → jo käytetty (muuttuvat needs + wants + rahoitus, myös kortilla) → ruoka & arki loppujaksolle (3 jakson päiväkeskiarvo ilman matkoja ja `Asuminen — remontti`a).
+- "Vielä tulossa" = edellisen jakson kiinteän kategorian maksunsaaja, jota ei ole näkynyt tällä jaksolla. Avain on pelkkä maksunsaaja (ei tili), jotta säästötililtä maksettu loppumaksu kuittaa käyttötililtä maksetun erän. Nollatun luottokortin korkoa ei ennusteta.
+- Kertalaskelma, ei varauksia. Pääsy: FAB-valikko, Koti-näkymän palkkapäiväkortti, desktopin yläpalkki. Funktion nimi `fitPeriod` — `periodBounds` on jo olemassa (negatiivinen offset).
+- Lipas-pyöristys on 4 €/korttimaksu (OP:n säästötavoite); 1–10/2026 keskimäärin ~190 €/kk.
+- Lainataulun "Mahtuuko budjettiin?" -kortin liikkumavara voi olla negatiivinen; `eur()` ottaa itseisarvon, joten miinus lisätään erikseen.
+
 ### Tarkistuslista ennen kuin vastaat "mihin raha meni"
 
 1. **`MAX(transactions.date)` EI kerro datan tuoreutta.** Tili jolla ei ole ollut tapahtumia (Revolut, säästötili) näyttää täsmälleen samalta kuin tili jonka tiliotetta ei ole tuotu kuukauteen. Ensimmäinen on kunnossa, toinen tekee kaikista luvuista hiljaa liian pieniä. Ainoa luotettava signaali on `accounts.last_import_at` — leima siitä milloin tiliote tuotiin, päivittyy myös kun tiedostossa ei ollut yhtään riviä.

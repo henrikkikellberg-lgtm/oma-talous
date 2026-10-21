@@ -2,6 +2,25 @@
 
 ---
 
+## 🔜 Oma domain `talous.fuseapt.com` + Cloudflare Access (päätetty 19.10.2026)
+
+**Miksi:** DNA:n "Turvallinen netti" estää `oma-talous.pages.dev`:n DNS-tasolla (finanssisanasto + `pages.dev` = tyypillinen phishing-profiili). `fuseapt.com` on jo samalla CF-tilillä (`it.fuseapt.com` = Investment Tracker), joten sama kuvio.
+
+**Vaiheet:**
+1. Workers & Pages → `oma-talous` → Custom domains → `talous.fuseapt.com` (CNAME + varmenne syntyvät automaattisesti).
+2. API (`oma-talous-api`, erillinen Worker): Custom Domain `talous-api.fuseapt.com` (wrangler.toml `routes` + `custom_domain = true`); pidä `workers.dev` päällä siirtymän ajan.
+3. Frontend: `API_BASE` kovakoodattu kolmeen tiedostoon (`app/index.html`, `app/vuokra.html`, `app/matka.html`) → yksi vakio / uusi osoite.
+4. API:n CORS on nyt `'*'` (`api/src/index.js` r. 8) → toimii sellaisenaan; rajaa siirtymän jälkeen `https://talous.fuseapt.com`:iin.
+5. Cloudflare Access (Zero Trust → Applications → Self-hosted) `talous.fuseapt.com` + `talous-api.fuseapt.com`, policy Allow = oma sähköposti (kertakoodi). APP_SECRET jää toiseksi kerrokseksi.
+6. Sulje vanha: Pages → Settings → Enable access policy (`*.pages.dev`), API:n `workers_dev = false` kun uusi toimii.
+7. Päivitä Makefilen ja CLAUDE.md:n tuotanto-URLit. Huom: `localStorage` (`ot_secret`, `ot_savopen`) on origin-kohtainen → kirjaudu uudelleen uudessa osoitteessa.
+
+**Hyväksyntä:** sovellus aukeaa DNA-liittymästä puhelimella, Access-kirjautuminen toimii, vanha `pages.dev` ei avaudu ilman Accessia.
+
+**Liittyy:** IT5-UI1 (Investment Tracker saa saman design-järjestelmän) · IT5-M9 (IT:n vastaava domain-siirto).
+
+---
+
 ## v1.18.0 — Toteutettu 6.10.2026
 
 - ✅ v1.21.0: **Matkat** (`app/matka.html`, migraatio 009): matkan kulut ryhmittäin, yhteiskulut (maksoin / takaisin / oma osuus), käteisrivit. Sisään tuleva MobilePay → tarkistettavaksi, ei tuloksi. Plusrivin splitti säilyttää etumerkin. Avoinna: käteistalletus (230 €) splitataan, kun se näkyy tilillä — +130 Matkailu (Hertz 240 − käteiskulut 110), +100 neutral.
