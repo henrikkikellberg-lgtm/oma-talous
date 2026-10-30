@@ -788,9 +788,20 @@ function parseRevolut(lines, fname, acct) {
     }
     return rows;
   }
+  // Taskut (Pockets) ovat otteella omia osioitaan: otsikkorivi "<nimi> (EUR)".
+  // Päätili on "Henkilökohtainen tili". Taskun nimi tallennetaan viestiin
+  // ("Revolut · Päivittäistavarat"), jotta taskukohtainen kulutus on luettavissa
+  // — kortti ei näy otteella, tasku näkyy (v1.23.0). Rivi-id ei muutu.
   const rows = [];
+  let pocket = null;
   for (const line of lines) {
     const c = splitCSV(line, ',').map(x=>x.replace(/^"|"$/g,'').trim());
+    const h = (c[0] || '').match(/^(.+) \(([A-Z]{3})\)$/);
+    if (h && c.slice(1).every(x => !x)) {
+      pocket = /^henkilökohtainen tili$/i.test(h[1].trim()) ? null : h[1].trim();
+      continue;
+    }
+    if (/(tapahtumaotteet|yhteenvedot)$/i.test(c[0] || '')) { pocket = null; continue; }
     if (c.length < 4) continue;
     const d = c[0];
     const m = d.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
@@ -800,7 +811,7 @@ function parseRevolut(lines, fname, acct) {
     if (amt === null) continue;
     const payee = c[1] || '';
     const kat   = c[2] || '';
-    rows.push({id:`RV_${date}_${payee}_${amt}`, date, payee, selitys:kat, viesti:'Revolut', amount:amt, source:fname||'Revolut', account});
+    rows.push({id:`RV_${date}_${payee}_${amt}`, date, payee, selitys:kat, viesti: pocket ? `Revolut · ${pocket}` : 'Revolut', amount:amt, source:fname||'Revolut', account});
   }
   return rows;
 }
