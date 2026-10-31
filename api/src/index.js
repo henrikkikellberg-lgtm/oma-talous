@@ -388,6 +388,13 @@ async function handleAccountsPut(req, env) {
            a.opening_balance||0, a.opening_date||'2026-01-01',
            a.credit_limit??null, a.apr??null, a.sort||0,
            a.monthly_target??null).run();
+    // Hold päivitetään erikseen ja vain jos kenttä on mukana: vanha välimuistissa
+    // oleva frontend lähettää tilin ilman on_holdia, eikä se saa nollata holdia.
+    if ('on_hold' in a) {
+      const hold = a.on_hold ? 1 : 0;
+      await env.DB.prepare('UPDATE accounts SET on_hold = ?1, on_hold_since = ?2 WHERE key = ?3')
+        .bind(hold, hold ? (a.on_hold_since || new Date().toISOString().slice(0,10)) : null, a.key).run();
+    }
   }
   return ok({ ok: true });
 }
@@ -411,7 +418,8 @@ async function handleBalances(env, url) {
       .reduce((s,t)=>s+Math.abs(t.amount), 0);
     const balance = a.opening_balance + delta + incoming;
     const r = { key:a.key, label:a.label, kind:a.kind, balance,
-                opening_balance:a.opening_balance, opening_date:a.opening_date };
+                opening_balance:a.opening_balance, opening_date:a.opening_date,
+                on_hold: a.on_hold ? 1 : 0, on_hold_since: a.on_hold_since ?? null };
     if (a.kind === 'credit') {
       r.credit_limit = a.credit_limit;
       r.apr = a.apr;
