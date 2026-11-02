@@ -654,7 +654,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.24.0';
+const APP_VERSION = '1.25.0';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -1796,7 +1796,7 @@ function accountFromFilename(fname) {
   if (/lipas/.test(n)) return 'Lipas';
   if (/saastotili|saasto/.test(n)) return 'Saasto';
   if (/credit|luotto/.test(n)) return 'OPCredit';
-  if (/revolut|accountstatement/.test(n)) return 'Revolut';
+  if (/revolut|accountstatement|consolidated/.test(n)) return 'Revolut';
   if (/finnair/.test(n)) return 'Finnair';
   if (/vuokra/.test(n)) return 'Vuokra';
   return 'Perus';

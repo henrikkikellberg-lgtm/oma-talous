@@ -450,7 +450,40 @@ async function handleCSVImport(req, env) {
   let added = 0;
   let skippedDuplicates = 0;
   const claimed = new Set();   // käsin syötetyt rivit jotka jo kuittasivat yhden CSV-rivin
+  // Revolutin kaksi vientimuotoa päivää saman ostoksen eri tavoin: "Aloituspäivä"-
+  // muoto ostopäivällä, konsolidoitu ote valmistumispäivällä — ero jopa 4 pv
+  // (Alexander Sauna 15.10. / 19.10.). Rivi-id sisältää päivän, joten id-vertailu
+  // ei tunnista samaa ostosta (v1.25.0). Kaksi vaihetta:
+  //  1. tarkat osumat (päivä + summa) varataan ensin, jotta väljä haku ei vie
+  //     toisen, oikeasti eri päivän siirron paria (Ulkona −58 € 30.10. ja 31.10.);
+  //  2. loput aikajärjestyksessä: aikaisin vapaa rivi ±6 pv, sama summa ja sama
+  //     maksunsaaja tai sen alku ("Avecra Oy" / "Avecra Oy/ravintolavaunu").
+  //     Aikajärjestys pitää toistuvat ostot oikeissa pareissa (FLEX −17 €
+  //     14./17.10. ↔ 16./19.10.); lähin-ensin pariutti ne ristiin.
+  // Käsin syötetyt ja kuittirivit jäävät findExistingDuplicaten ±3 pv -haulle.
+  {
+    const rv = rows.filter(r => r.account === 'Revolut');
+    const pool = existing.filter(e => e.account === 'Revolut' && e.source !== 'manual' && e.source !== 'receipt')
+      .sort((x, y) => x.date.localeCompare(y.date));
+    for (const row of rv) {
+      const e = pool.find(x => !claimed.has(x.id) && x.date === row.date && Math.abs(x.amount - row.amount) <= 0.005);
+      if (e) { claimed.add(e.id); row._exact = e.id; }
+    }
+    const norm = s => String(s || '').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+    const DAYR = 86400000;
+    for (const row of rv.filter(r => !r._exact).sort((x, y) => x.date.localeCompare(y.date))) {
+      const a = norm(row.payee), t = Date.parse(row.date);
+      const e = pool.find(x => {
+        if (claimed.has(x.id) || Math.abs(x.amount - row.amount) > 0.005) return false;
+        if (Math.abs(Date.parse(x.date) - t) > 6 * DAYR) return false;
+        const b = norm(x.payee);
+        return a && b && (a.startsWith(b) || b.startsWith(a));
+      });
+      if (e) { claimed.add(e.id); row._exact = e.id; }
+    }
+  }
   for (const row of rows) {
+    if (row._exact) { skippedDuplicates++; continue; }
     // OP käyttää toistuvan tilisiirron JOKAISELLA kerralla samaa
     // arkistointitunnusta (esim. "Asuntosäästö" 100 €/kk: 20200825/593619/2B3784
     // toistui 7 kk). Pelkkä id-vertailu ohitti 6 riviä duplikaattina → vuokratilin
@@ -516,6 +549,7 @@ function findExistingDuplicate(row, existing, claimed = new Set()) {
     if ((e.account || 'Perus') !== (row.account || 'Perus')) continue;
     if (e.date !== row.date) continue;
     if (Math.abs(e.amount - row.amount) > 0.005) continue;
+    if (row.account === 'Revolut' && claimed.has(e.id)) continue;   // varattu tarkalle parille
     return true;
   }
   // Käsin syötetyn rivin päivä ei aina osu pankin ostopäivään: tilaus veloitetaan
@@ -703,7 +737,7 @@ function accountFromFilename(fname) {
   if (/lipas/.test(n)) return 'Lipas';
   if (/saastotili|saasto/.test(n)) return 'Saasto';
   if (/credit|luotto/.test(n)) return 'OPCredit';
-  if (/revolut|accountstatement/.test(n)) return 'Revolut';
+  if (/revolut|accountstatement|consolidated/.test(n)) return 'Revolut';
   if (/finnair/.test(n)) return 'Finnair';
   return null;
 }
@@ -717,7 +751,10 @@ function parseCSV(text, fname, acctOverride) {
   // OP:n luottokorttiote: 8 saraketta, tunnistuu Kurssi-kentästä. Debit-otteessa
   // on 11 saraketta ja summasarake on "Määrä EUROA".
   const isOPCredit = head.includes('Kurssi') && !head.includes('Määrä EUROA');
-  if (isRevolut && !isFinnair) return parseRevolut(lines, fname, acctOverride || 'Revolut');
+  // Revolut-ote kuuluu aina Revolut-tilille, vaikka tuontidialogi olisi arvannut
+  // toisin: "consolidated_statement_….csv" ei osunut tiedostonimisääntöön ja
+  // dialogi tarjosi Perus-tiliä (v1.25.0).
+  if (isRevolut && !isFinnair) return parseRevolut(lines, fname, 'Revolut');
   const rows = [];
   for (let i=1; i<lines.length; i++) {
     if (isOPCredit) {
@@ -800,16 +837,27 @@ function parseRevolut(lines, fname, acct) {
   // Päätili on "Henkilökohtainen tili". Taskun nimi tallennetaan viestiin
   // ("Revolut · Päivittäistavarat"), jotta taskukohtainen kulutus on luettavissa
   // — kortti ei näy otteella, tasku näkyy (v1.23.0). Rivi-id ei muutu.
+  // Konsolidoidussa otteessa on myös Robo- ja krypto-osiot. Niiden rivit alkavat
+  // samalla P.K.VVVV-päivällä ("24.9.2026,WELK,IE000…,0.0434…"), ja ilman rajausta
+  // osuusmäärä luettaisiin euromääräksi. Luetaan vain "Käyttötilit Tapahtumaotteet"
+  // -osio (v1.25.0). Vanha otemuoto ilman osio-otsikoita luetaan kokonaan.
   const rows = [];
   let pocket = null;
+  const hasSections = lines.some(l => /^"?Käyttötilit Tapahtumaotteet"?/i.test(l));
+  let inTx = !hasSections;
   for (const line of lines) {
     const c = splitCSV(line, ',').map(x=>x.replace(/^"|"$/g,'').trim());
+    if (/(tapahtumaotteet|yhteenvedot)$/i.test(c[0] || '')) {
+      inTx = /^käyttötilit tapahtumaotteet$/i.test(c[0]);
+      pocket = null;
+      continue;
+    }
+    if (!inTx) continue;
     const h = (c[0] || '').match(/^(.+) \(([A-Z]{3})\)$/);
     if (h && c.slice(1).every(x => !x)) {
       pocket = /^henkilökohtainen tili$/i.test(h[1].trim()) ? null : h[1].trim();
       continue;
     }
-    if (/(tapahtumaotteet|yhteenvedot)$/i.test(c[0] || '')) { pocket = null; continue; }
     if (c.length < 4) continue;
     const d = c[0];
     const m = d.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
