@@ -831,7 +831,7 @@ function parseRevolut(lines, fname, acct) {
       rows.push({id:`RV_${date}_${payee}_${amt}`.replace(/\s+/g,'_'), date, payee,
                  selitys:c[0]||'', viesti:'Revolut', amount:amt, source:fname||'Revolut', account});
     }
-    return rows;
+    return numberRepeats(rows);
   }
   // Taskut (Pockets) ovat otteella omia osioitaan: otsikkorivi "<nimi> (EUR)".
   // Päätili on "Henkilökohtainen tili". Taskun nimi tallennetaan viestiin
@@ -868,6 +868,22 @@ function parseRevolut(lines, fname, acct) {
     const payee = c[1] || '';
     const kat   = c[2] || '';
     rows.push({id:`RV_${date}_${payee}_${amt}`, date, payee, selitys:kat, viesti: pocket ? `Revolut · ${pocket}` : 'Revolut', amount:amt, source:fname||'Revolut', account});
+  }
+  return numberRepeats(rows);
+}
+
+// Revolutin rivi-id on päivä + saaja + summa, eikä otteella ole kellonaikaa.
+// Kaksi samanlaista tapahtumaa samana päivänä (7.11.2026: kaksi 58 € siirtoa
+// Ulkona-taskuun, klo 17.29 ja 21.16) saivat saman id:n, ja jälkimmäinen
+// ohitettiin duplikaattina → päätilin saldo 58 € pankkia suurempi (v1.25.1).
+// Toistuva id saa järjestysnumeron (_2, _3 …) otteen järjestyksessä.
+// Ensimmäinen esiintymä pitää vanhan id:n, jotta jo tuotu data ei monistu.
+function numberRepeats(rows) {
+  const seen = new Map();
+  for (const r of rows) {
+    const n = (seen.get(r.id) || 0) + 1;
+    seen.set(r.id, n);
+    if (n > 1) r.id = `${r.id}_${n}`;
   }
   return rows;
 }

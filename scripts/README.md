@@ -4,6 +4,7 @@
 |---|---|
 | `test-budgets.js` | Budjetti-, palkkajakso- ja viikkologiikan testit (39 kpl). Ajaa `app/index.html`:n skriptin Node-sandboxissa kiinnitetyllä päivämäärällä. `node scripts/test-budgets.js` |
 | `test-csv-parsers.mjs` | Tarkistaa että jokainen tiliote jäsentyy oikein ja **summautuu pankin omaan lukuun**. Vaatii että `api/src/index.js` on kopioitu `api/src/index.mjs`:ksi export-rivillä (ks. alla). |
+| `test-revolut-samat-rivit.mjs` | Kaksi identtistä Revolut-riviä samana päivänä ei sulaudu yhdeksi (id saa `_2`). Ei tarvitse tiliotteita. `node scripts/test-revolut-samat-rivit.mjs` |
 | `simuloi-tuonti.mjs` | Näyttää ENNEN tuontia mitä tuonti tuottaisi: rivit tyypeittäin per tili + kriittiset väitteet (ei valetuloja, ei tuplasäästöjä). |
 | `import-from-json.js` | Vanha kertaluonteinen migraatioskripti |
 
