@@ -1075,7 +1075,12 @@ function categorize(tx, rules) {
     // Ilman tätä sama euro laskettaisiin kahdesti — kerran Perus→Säästölipas
     // -siirtona ja toisen kerran lippaan PANO-rivinä, ja Perus→Säästötili→Nordnet
     // jopa kolmesti.
-    if (res.type === 'savings' && SAVINGS_ACCTS.includes(tx.account)) {
+    // Sama koskee omia siirtoja säästötilille ja sieltä pois, vaikka sääntö
+    // antaisi muun tyypin: kuukausivaraus "Sähkövaraus" on Perus-puolella
+    // Asuminen/needs (kulu jaksotetaan), mutta säästötilin vastapuoli on pelkkä
+    // siirto — muuten kulu nollautuisi (+25) tai tuplaantuisi (−75 purussa).
+    // Säästötililtä suoraan maksettu lasku (payee ei Kellberg) säilyy kuluna.
+    if (SAVINGS_ACCTS.includes(tx.account) && (res.type === 'savings' || /kellberg/i.test(tx.payee || ''))) {
       res = {...res, type:'neutral'};
     }
     // Luottokortilta EI voi tehdä tilisiirtoa: negatiivinen rivi on aina osto tai kulu.
