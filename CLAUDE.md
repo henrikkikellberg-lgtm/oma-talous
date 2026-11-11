@@ -8,6 +8,7 @@ Henkilökohtainen budjettiseuranta PWA. Mobile-first. Yksi app joka toimii sekä
 
 **GitHub:** https://github.com/henrikkikellberg-lgtm/oma-talous  
 **Backlog:** `BACKLOG.md` — lue ennen isompia muutoksia
+**Taloudenpito:** `TALOUS.md` — tavoitteet, tilien roolit, kiinteät kulut, velat. Lue ennen budjetti- ja saldokysymyksiä
 
 ## Stack
 
