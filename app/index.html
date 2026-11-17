@@ -692,7 +692,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.26.1';
+const APP_VERSION = '1.26.2';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -1539,6 +1539,7 @@ function weekCardHTML() {
       käytetty tällä viikolla <b style="color:var(--text);font-weight:500">${eur(w.spent)}</b> · <b style="color:var(--text);font-weight:500">${w.count}</b> ostosta
       ${w.perDay > 0 ? ` · tahti ${eur(w.perDay)}/pv` : ''}
     </div>
+    ${tmStaleHTML('viikon ostot voivat puuttua.')}
     ${prev}
   </div>`;
 }
@@ -2434,6 +2435,46 @@ function tmSavingsGoal(income) {
   return t.frame === 'fire' ? (t.invest || 0) : income * (t.s || 0) / 100;
 }
 function tmInvested(list) { return -tmSum(list.filter(t => stripIcon(t.cat) === 'Sijoittaminen'), t => +t.amount || 0); }
+// FIRE-tavoite koskee TULOISTA sijoitettua rahaa (TALOUS.md): vain käyttötileiltä lähteneet
+// sijoitukset nostojen jälkeen. Säästötilin kautta kulkevat (Saxo → Säästötili → Nordnet 11/2026)
+// ovat säästöjen siirtelyä ja näytetään erikseen (v1.26.2; ennen 1 048 € vs. oikea 965 €).
+function tmInvestedFromIncome(list) { return tmInvested(list.filter(t => accountByKey(t.account)?.kind === 'checking')); }
+
+// Kesken olevan palkkajakson ennuste jakson loppuun (v1.26.2). Toteutunut säästöaste näytti
+// jakson puolivälissä 40 %, vaikka taskut ja laskut veivät loput: loppujakson kulutus =
+// kaksitilimallissa taskujen tahti + laskutilin tulossa olevat laskut, yksitilimallissa
+// runwayn muuttuvien menojen tahti + tulossa olevat laskut. Tulossa olevat sijoituserät → säästöön.
+function tmPeriodForecast(win, s, bInc) {
+  if (!win || win.mode !== 'period' || !win.isCurrent) return null;
+  let spend = 0, bills = 0, billSav = 0;
+  if (tmSplit()) {
+    const P = computePockets();
+    spend = tmSum(P.pockets.filter(p => p.role === 'spend'), p => p.pace * P.daysLeft);
+    const up = computeBillsForecast().upcoming;
+    bills = tmSum(up.filter(u => u.type !== 'savings'), u => u.amount);
+    billSav = tmSum(up.filter(u => u.type === 'savings'), u => u.amount);
+  } else {
+    const r = computeRunway();
+    spend = r.avgDaily * r.daysLeft;
+    bills = tmSum(r.upcoming.filter(u => u.type !== 'savings'), u => u.amount);
+    billSav = tmSum(r.upcoming.filter(u => u.type === 'savings'), u => u.amount);
+  }
+  const income = Math.max(s.income || 0, bInc || 0);
+  const kulutus = s.needs + s.wants + spend + bills;
+  const sav = s.sav + billSav;
+  return { spend, bills, billSav, income, kulutus, sav, saved: income - kulutus,
+           rate: income > 0 ? (income - kulutus) / income * 100 : null };
+}
+// Käyttötilit, joiden ote on yli 3 pv vanha: niiden ostot puuttuvat luvuista.
+function tmStaleChecking() {
+  const t = isoLocal(new Date());
+  return accounts.filter(a => a.kind === 'checking' && !a.on_hold && a.last_import_through && tmDays(a.last_import_through, t) > 3)
+    .map(a => `${a.label} ${ddmm(a.last_import_through)}`);
+}
+function tmStaleHTML(what) {
+  const st = tmStaleChecking();
+  return st.length ? `<div style="font-size:11px;color:var(--gold);margin-top:8px">Tiliote tuotu vain ${st.map(esc).join(', ')} asti — ${what}</div>` : '';
+}
 
 // ── UI: yhteiset palat ────────────────────────────────────────────────────────────
 const tmColor = v => v > 50 ? 'var(--green)' : v >= 0 ? 'var(--gold)' : 'var(--red)';
@@ -2554,8 +2595,10 @@ function tmNwsMarkers() {
 function tmFrameLine(list, bInc) {
   const t = tmTargets();
   if (t.frame === 'fire') {
-    const inv = tmInvested(list), c = inv >= t.invest ? 'var(--green)' : 'var(--text)';
-    return `<div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px"><span style="color:var(--muted)">Säästö ensin</span><span>sijoitettu <b style="font-weight:500;color:${c}">${Math.round(inv)} / ${Math.round(t.invest)} €</b></span></div>`;
+    const inv = tmInvestedFromIncome(list), other = tmInvested(list) - inv;
+    const c = inv >= t.invest ? 'var(--green)' : 'var(--text)';
+    return `<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:8px;font-size:12px"><span style="color:var(--muted)">Säästö ensin</span>
+      <span>sijoitettu tuloista <b style="font-weight:500;color:${c}">${Math.round(inv)} / ${Math.round(t.invest)} €</b>${Math.abs(other) >= 1 ? ` <span style="color:var(--muted)">· säästöistä ${other > 0 ? '+' : '−'}${Math.round(Math.abs(other))} €</span>` : ''}</span></div>`;
   }
   return `<div style="font-size:12px;color:var(--muted);margin-top:8px">Viivat: tavoite ${t.n}/${t.w}/${t.s}${t.frame === '503020' ? ' (50/30/20)' : ''}</div>`;
 }
@@ -2877,7 +2920,14 @@ function kassavirtaCardHTML(s, bInc, isEstimate, list) {
   if (!bInc) return '';
   const kulutus = s.needs + s.wants;
   const kv     = bInc - kulutus;
-  const netto  = kv - s.sav;
+  // v1.26.2: netto = mitä tileille jää. Luottokorttien lyhennys (wealthChange.credit > 0) on rahaa
+  // joka lähti tililtä; korttiostot joita ei vielä maksettu (credit < 0) eivät lähteneet.
+  // Ennen "Netto +900 € jää puskuriin", vaikka 750 € meni OP Visaan ja tileille jäi ~40 €.
+  const kvWin  = dashWindow();
+  const crd    = (kvWin && list) ? wealthChange(kvWin.start, kvWin.end).credit : 0;
+  const netto  = kv - s.sav - crd;
+  const fc     = tmPeriodForecast(kvWin, s, bInc);
+  const fcNet  = fc ? fc.income - fc.kulutus - fc.sav - crd : null;
   const kvColor    = kv >= 0 ? 'var(--green)' : 'var(--red)';
   const nettoColor = netto >= 0 ? 'var(--green)' : 'var(--red)';
   const kvPct  = Math.round(Math.abs(kv) / bInc * 100);
@@ -2911,16 +2961,19 @@ function kassavirtaCardHTML(s, bInc, isEstimate, list) {
         <div class="kv-op">−</div>
         <div class="kv-node">
           <div class="kv-l">Säästöt</div>
-          <div class="kv-v" style="color:var(--blue)">${eur(s.sav)}</div>
-          <div class="kv-c">sijoitukset</div>
+          <div class="kv-v" style="color:var(--blue)">${s.sav < 0 ? '−' : ''}${eur(s.sav)}</div>
+          <div class="kv-c">${s.sav < 0 ? 'nostot yli sijoitusten' : 'sijoitukset'}</div>
         </div>
         <div class="kv-op">=</div>
         <div class="kv-res" style="border-top-color:${nettoColor}">
           <div class="kv-l">Netto</div>
           <div class="kv-v" style="color:${nettoColor}">${netto>=0?'+':'−'}${eur(netto)}</div>
-          <div class="kv-c">${netto>=0 ? 'jää puskuriin' : 'alijäämä'}</div>
+          <div class="kv-c">${Math.abs(crd) >= 1 ? (crd > 0 ? 'kortit −' : 'luotolla +') + eur(crd) + ' · ' : ''}${netto>=0 ? 'jää tileille' : 'tilit vähenivät'}</div>
         </div>
       </div>
+      ${fc ? `<div style="margin-top:12px;padding:9px 11px;border-radius:var(--radius-sm);font-size:12px;line-height:1.5;background:${fcNet < 0 ? 'var(--red-light)' : 'var(--surface2)'};color:${fcNet < 0 ? 'var(--red)' : 'var(--muted)'}">
+        <b style="font-weight:500">Ennuste jakson lopussa:</b> kulutus ${eur(fc.kulutus)} (+${eur(fc.spend + fc.bills)} loppujaksolle) · säästöaste ${fc.rate === null ? '–' : Math.round(fc.rate) + ' %'} · tileille ${esigned(Math.round(fcNet))}${fcNet < 0 ? ' — katetaan säästöistä tai kortilla' : ''}
+        ${tmStaleHTML('ennuste perustuu siihen asti tuotuun tahtiin.')}</div>` : tmStaleHTML('ostot sen jälkeen puuttuvat.')}
       <div style="position:relative;margin-top:14px"><div style="display:flex;height:6px;border-radius:3px;overflow:hidden">
         <div style="width:${pct(s.needs)}%;background:var(--green)"></div>
         <div style="width:${pct(s.wants)}%;background:var(--gold)"></div>
@@ -3035,7 +3088,7 @@ function varallisuusCardHTML(win, s, bInc) {
         <div>
           <div class="sum-label">Säästöaste</div>
           <div style="font-size:28px;font-weight:300;line-height:1.2;color:${rateColor}">${rate===null ? '–' : (rate<0?'−':'')+Math.abs(rate)+' %'}</div>
-          ${partial ? `<div style="font-size:11px;color:var(--gold);margin-top:2px">${partial} — laskee kun kulutusta kertyy</div>` : ''}
+          ${partial ? (() => { const f = tmPeriodForecast(win, s, bInc); return `<div style="font-size:11px;color:var(--gold);margin-top:2px">${partial}${f && f.rate !== null ? ` — <b style="font-weight:500;color:${f.rate < 0 ? 'var(--red)' : 'var(--text)'}">ennuste jakson lopussa ${Math.round(f.rate)} %</b> (kulutus +${eur(f.spend + f.bills)})` : ' — laskee kun kulutusta kertyy'}</div>`; })() : ''}
         </div>
         <div style="text-align:right;font-size:12px;color:var(--muted);line-height:1.6">
           Tulot ${eur(s.income)}<br>− kulutus ${eur(s.needs + s.wants)}<br>
@@ -3107,7 +3160,7 @@ function renderYhteenveto() {
     <div class="sum-card sum-savings" onclick="toggleSavDetail()" style="cursor:pointer">
       <div class="sum-label">Säästö${tmTgtLbl('s')}</div>
       <div class="sum-value" style="${savedAmt<0?'color:var(--red)':''}">${savedAmt<0?'−':''}${eur(savedAmt)}</div>
-      <div class="sum-sub">${savRate===null?'–':(savRate<0?'−':'')+Math.abs(savRate)+'%'} tuloista · <span style="color:var(--blue)">${savOpen?'sulje erittely':'erittely ›'}</span></div>
+      <div class="sum-sub">${savRate===null?'–':(savRate<0?'−':'')+Math.abs(savRate)+'%'} tuloista${(() => { const f = tmPeriodForecast(win, s, bInc); return f && f.rate !== null ? ` → <b style="color:${f.rate < 0 ? 'var(--red)' : 'var(--text)'};font-weight:500">ennuste ${Math.round(f.rate)}%</b>` : ''; })()} · <span style="color:var(--blue)">${savOpen?'sulje erittely':'erittely ›'}</span></div>
       <div class="sum-bar"><div class="sum-bar-fill" style="width:${Math.max(0,Math.min((savRate||0)/tmTgtPct('s')*100,100))}%"></div></div>
     </div>
   `;

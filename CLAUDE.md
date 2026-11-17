@@ -332,6 +332,9 @@ Suoja lisätty `categorize()`:en (API ja frontend, v1.13.1): **luottotilillä ne
 - **Kassavirta kaksitilimallissa**: kulutus tileittäin + rahan reitti. Siirto laskutililtä kulutustilille tunnistetaan parista (sama summa vastakkaisella tilillä ±3 pv), korttimaksut `CARD_PAYMENT_IBANS`ista. "Jäi" = tilin muutos jaksossa.
 - **Budjettikehys** (`budget_frame`): `fire` (säästö ensin, `invest_target` €/kk), `503020`, `own` (`nws_own`). N/W/S-jakauma näkyy aina; kehys ratkaisee vain tavoiteviivat, korttien tavoitetekstit ja palkkapäivän jaon jäännöksen nimen.
 - **Navi**: kaksitilimallissa Taskut korvaa Kategoriat mobiilin alapalkissa (`.tm-split` / `.tm-single`, `applyTmUI()`), Kategoriat on Lisää-valikossa. Mobiilin yläpalkki näyttää "Taskuissa" = kulutustilin saldo.
+- **Jakson ennuste ja netto (v1.26.2).** Kesken olevalle palkkajaksolle `tmPeriodForecast()`: loppujakson kulutus = taskujen tahti (split) tai runwayn muuttuvien menojen tahti (single) + tulossa olevat laskut → säästöaste "toteutunut → ennuste" Säästö-kortissa, erittelyssä ja kassavirran ennustelaatikossa. 17.11.2026 toteutunut 40 % näytti hyvältä, vaikka jakso oli päättymässä tileille noin −380 €. Kassavirran **Netto = kassavirta − säästöt − `wealthChange().credit`** = mitä tileille jää; ennen "jää puskuriin +900 €", vaikka 750 € meni OP Visan lyhennykseen.
+- **FIRE-mittari = sijoitettu tuloista** (`tmInvestedFromIncome`): vain käyttötileiltä lähteneet `Sijoittaminen`-rivit nostojen jälkeen. Säästötilin kautta kulkevat (Saxo-palautus 616,75 → Säästötili → Nordnet 650 €) näkyvät erikseen "säästöistä ±X €". Ennen 1 048 € vs. oikea 965 €.
+- **Vanha kulutustilin ote** (`tmStaleChecking`, > 3 pv): viikkokortti ja kassavirta kertovat sen ("Tiliote tuotu vain Revolut 11.11. asti") eivätkä näytä nollaostoja todellisena.
 - Testi: `node scripts/test-tilimalli.js` (12.11.2026 tilanne mallinnettuna).
 
 ### Tarkistuslista ennen kuin vastaat "mihin raha meni"

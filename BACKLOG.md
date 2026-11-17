@@ -5,6 +5,7 @@
 ## v1.26.0 — Tilimalli, taskut, toistuvat maksut ✅ TEHTY 17.11.2026
 
 - Laskutili + kulutustili -malli (valinnainen), laskutilin ennuste ilman päivätahtia, taskukohtaiset ennusteet ja Tasaa-ehdotus, Taskut-välilehti, palkkapäivän jako, toistuvien maksujen tunnistus (+ käsin lisätyt erät), budjettikehys (säästö ensin / 50/30/20 / oma), kassavirtaan kulutus tileittäin ja rahan reitti. Korjattu: runway (kiinteät pois päivätahdista), `fixedKey` (Spotify). Ks. CLAUDE.md.
+- **v1.26.2 (17.11.):** säästöasteen ennuste jakson loppuun, netto huomioi korttien lyhennyksen, FIRE-mittari vain tuloista, varoitus vanhasta kulutustilin otteesta.
 - **Jatkoon:** tapahtumalistaan suodatin "laskutilin korttiostot" (varoituksen Näytä-linkki vie nyt vain Tapahtumiin); taskukohtaiset rajat Mahtuuko-varoituksiin; toistuvien maksujen hinnanmuutoshälytys (Kauppalehti 2,90 → 35,90).
 
 ## 🔜 Oma domain `talous.fuseapt.com` + Cloudflare Access (päätetty 19.10.2026)
