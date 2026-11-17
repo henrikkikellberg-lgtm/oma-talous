@@ -47,6 +47,7 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 .logo .dot{color:var(--gold)}
 .desk-nav{display:flex;flex:1;margin-left:20px}
 .dnav-btn{padding:0 14px;height:56px;border:none;background:none;color:var(--muted);font-size:13px;font-weight:500;font-family:'Inter',sans-serif;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+.dnav-btn{white-space:nowrap}
 .dnav-btn:hover{color:var(--text)}
 .dnav-btn.active{color:var(--green);border-bottom-color:var(--green)}
 .desk-actions{display:flex;gap:8px;align-items:center;margin-left:16px}
@@ -291,6 +292,7 @@ tr:hover td{background:var(--surface2)}
   <nav class="desk-nav">
     <button class="dnav-btn active" data-tab="yhteenveto" onclick="switchTab('yhteenveto')">Yhteenveto</button>
     <button class="dnav-btn" data-tab="saldot" onclick="switchTab('saldot')">Saldot</button>
+    <button class="dnav-btn tm-split" data-tab="taskut" onclick="switchTab('taskut')" style="display:none">Taskut</button>
     <button class="dnav-btn" data-tab="kategoriat" onclick="switchTab('kategoriat')">Kategoriat</button>
     <button class="dnav-btn" data-tab="vertailu" onclick="switchTab('vertailu')">Vertailu</button>
     <button class="dnav-btn" data-tab="analytiikka" onclick="switchTab('analytiikka')">Analytiikka</button>
@@ -396,6 +398,11 @@ tr:hover td{background:var(--surface2)}
     <div id="analytiikkaContent"></div>
   </div>
 
+  <!-- TASKUT (v1.26.0, kaksitilimalli) -->
+  <div class="tab-panel" id="tab-taskut">
+    <div id="taskutContent"></div>
+  </div>
+
   <!-- LISÄÄ (mobile) -->
   <div class="tab-panel mob-only" id="tab-lisaa">
     <div id="lisaaContent"></div>
@@ -416,7 +423,11 @@ tr:hover td{background:var(--surface2)}
   <div class="mob-nav-fab">
     <button class="fab-center" onclick="openAddModal()">+</button>
   </div>
-  <button class="mob-nav-btn" data-tab="kategoriat" onclick="switchTab('kategoriat')">
+  <button class="mob-nav-btn tm-split" data-tab="taskut" onclick="switchTab('taskut')" style="display:none">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M8 6V4h8v2"/></svg>
+    <span>Taskut</span>
+  </button>
+  <button class="mob-nav-btn tm-single" data-tab="kategoriat" onclick="switchTab('kategoriat')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
     <span>Kategoriat</span>
   </button>
@@ -452,6 +463,32 @@ tr:hover td{background:var(--surface2)}
     <div id="fitVerdict"></div>
     <div id="fitBreakdown"></div>
     <button class="modal-cancel" onclick="closeModal('fitModal')">Sulje</button>
+  </div>
+</div>
+
+<!-- ── MODAL: TILIMALLI JA BUDJETTI (v1.26.0) ─────────────── -->
+<div class="modal-overlay" id="tmModal" onclick="if(event.target===this)closeModal('tmModal')">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Tilimalli ja budjetti</div>
+    <div id="tmBody"></div>
+    <button class="modal-cancel" onclick="closeModal('tmModal')">Sulje</button>
+  </div>
+</div>
+<div class="modal-overlay" id="recModal" onclick="if(event.target===this)closeModal('recModal')">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Toistuvat maksut</div>
+    <div id="recBody"></div>
+    <button class="modal-cancel" onclick="closeModal('recModal')">Sulje</button>
+  </div>
+</div>
+<div class="modal-overlay" id="payModal" onclick="if(event.target===this)closeModal('payModal')">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Palkkapäivän jako</div>
+    <div id="payBody"></div>
+    <button class="modal-cancel" onclick="closeModal('payModal')">Sulje</button>
   </div>
 </div>
 
@@ -654,7 +691,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.25.2';
+const APP_VERSION = '1.26.0';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -934,7 +971,10 @@ function prevPaydayFrom(today) {
 function daysBetween(a, b) { return Math.round((b - a) / 86400000); }
 function isoLocal(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 
-// Runway-laskenta käyttötilille (Perus) tähän hetkeen
+// Runway-laskenta käyttötileille tähän hetkeen (yksitilimalli).
+// v1.26.0: saldo = kaikki aktiiviset käyttötilit, tahti vain MUUTTUVISTA menoista ja kiinteät
+// laskut erinä toistuvien maksujen "vielä tulossa" -listalta. Ennen tahti sisälsi jo maksetun
+// vastikkeen ja Elisan, jotka kerrottiin jäljellä olevilla päivillä (−1 250 € → oikea +46 €).
 function computeRunway() {
   const today = new Date(); today.setHours(0,0,0,0);
   const nextPay = nextPaydayFrom(today);
@@ -942,20 +982,24 @@ function computeRunway() {
   const daysLeft = Math.max(daysBetween(today, nextPay), 0);
   const periodLen = Math.max(daysBetween(prevPay, nextPay), 1);
   const daysElapsed = Math.max(daysBetween(prevPay, today), 1);
-  const checking = balanceOf('Perus');
+  const chk = accounts.filter(a => a.kind === 'checking' && !a.on_hold).map(a => a.key);
+  const keys = chk.length ? chk : ['Perus'];
+  const checking = keys.reduce((s,k) => s + balanceOf(k), 0);
   const startISO = isoLocal(prevPay);
   const todayISOv = isoLocal(today);
-  // Vain käteistilit (Perus, Revolut) — luottokorttiostot eivät veloita käyttötiliä nyt
-  const spentSoFar = txs
-    .filter(t => (t.type==='needs'||t.type==='wants') && t.date>=startISO && t.date<=todayISOv
-      && (accountByKey(t.account)?.kind ?? 'checking') !== 'credit')
+  const spentSoFar = expandList(ptxs().filter(t => keys.includes(t.account) && t.date>=startISO && t.date<=todayISOv && !t.trip_id))
+    .filter(t => (t.type==='needs'||t.type==='wants') && !isFixedCat(t.cat) && !(t.cat||'').startsWith('Asuminen'))
     .reduce((s,t)=>s - t.amount, 0);
-  const avgDaily = spentSoFar / daysElapsed;
-  const dailyAllowance = daysLeft>0 ? checking/daysLeft : checking;
-  const projection = checking - avgDaily*daysLeft;            // tilin saldo palkkapäivänä (arvio)
-  const targetDaily = ((settings.monthly_salary||0)*0.8) / periodLen;
-  return {today, nextPay, prevPay, daysLeft, periodLen, daysElapsed, checking,
-          spentSoFar, avgDaily, dailyAllowance, projection, targetDaily};
+  const avgDaily = Math.max(spentSoFar, 0) / daysElapsed;
+  const upcoming = tmUpcomingBills(keys);
+  const upSum = upcoming.reduce((s,u) => s + u.amount, 0);
+  const dailyAllowance = daysLeft>0 ? (checking - upSum)/daysLeft : checking - upSum;
+  const projection = checking - upSum - avgDaily*daysLeft;            // tilin saldo palkkapäivänä (arvio)
+  const sal = settings.monthly_salary || 0;
+  const billsPer = detectRecurring(keys).filter(r => r.status === 'bill' && r.type !== 'savings').reduce((s,r) => s + r.lastTotal, 0);
+  const targetDaily = Math.max(sal - tmSavingsGoal(sal) - billsPer, 0) / periodLen;
+  return {today, nextPay, prevPay, daysLeft, periodLen, daysElapsed, checking, accts: keys.length,
+          spentSoFar, avgDaily, dailyAllowance, projection, targetDaily, upcoming, upSum};
 }
 
 // ── MAHTUUKO OSTOS? (v1.22.0) ───────────────────────────────────────────────
@@ -970,7 +1014,7 @@ function computeRunway() {
 const FIXED_CATS = ['Asuminen','Luotot — korko','Luotot — lyhennys','Suoratoisto & liittymät','Vakuutukset'];
 const LIPAS_ROUNDUP = 4;   // €/korttimaksu säästölippaaseen (OP:n säästötavoite)
 const isFixedCat = c => FIXED_CATS.includes(c);
-const fixedKey = t => (t.payee||'').toLowerCase().replace(/\s+/g,' ').trim();
+const fixedKey = t => payeeKey(t.payee);   // v1.26.0: viitekoodit pois (Spotify P42A1F… vaihtui joka kk)
 
 // Palkkajakso [start, end): back=0 nykyinen, 1 edellinen, ... (käyttää periodBoundsia)
 function fitPeriod(back = 0) {
@@ -1115,6 +1159,7 @@ function renderFitResult() {
       <input class="saldo-in" style="width:110px" type="number" step="10" min="0" value="${(settings.savings_target||0) > 0 ? settings.savings_target : ''}" placeholder="${Math.round(f.savAvg)}" onchange="saveSavingsTarget(this.value)">
     </div>
     ${f.importedThrough ? `<div style="font-size:11px;color:var(--dim);margin-top:8px">Perustilin tiliote tuotu ${fmtDateLbl(f.importedThrough)} asti — sen jälkeiset ostot eivät ole laskelmassa.</div>` : ''}`;
+  if (tmSplit()) br.innerHTML = tmFitPocketsHTML(x) + br.innerHTML;
 }
 
 // Nettovelkaantuminen kuukaudelle: korttiostot+korot − maksut korteille
@@ -1197,7 +1242,7 @@ async function initState() {
     .catch(()=>{});
   fetch(`${API_BASE}/settings`, { headers: apiHeaders() })
     .then(r=>r.ok?r.json():null)
-    .then(s=>{ if(s){ settings = Object.assign(settings, {salary_day:+s.salary_day||27, monthly_salary:+s.monthly_salary||3267, savings_target:+s.savings_target||0}); saveLocalState(); renderTab(curTab); } })
+    .then(s=>{ if(s){ settings = Object.assign(settings, {salary_day:+s.salary_day||27, monthly_salary:+s.monthly_salary||3267, savings_target:+s.savings_target||0}, tmParseSettings(s)); saveLocalState(); renderTab(curTab); } })
     .catch(()=>{});
 
   try {
@@ -1971,7 +2016,10 @@ function updateMobTotal() {
   const sm = monthSummary(base);
   const total = sm.needs + sm.wants + sm.sav;
   const el = document.getElementById('mobTotal');
-  if (el) el.textContent = eur(total);
+  const lb = document.querySelector('.mob-total-label');
+  // Kaksitilimallissa mobiilin yläpalkki näyttää kulutustilin saldon (taskuissa)
+  if (tmSplit()) { if (lb) lb.textContent = 'Taskuissa'; if (el) el.textContent = eur(balanceOf(tm('spend_account'))); }
+  else { if (lb) lb.textContent = 'Käytetty'; if (el) el.textContent = eur(total); }
   const del = document.getElementById('deskTotal');
   if (del) del.textContent = eur(total);
 }
@@ -1992,7 +2040,9 @@ function updateFlagBanner() {
 }
 
 function renderTab(tab) {
+  applyTmUI();
   if (tab==='yhteenveto') renderYhteenveto();
+  else if (tab==='taskut') renderTaskut();
   else if (tab==='tapahtumat') renderTapahtumat();
   else if (tab==='kategoriat') renderKategoriat();
   else if (tab==='vertailu') renderVertailu();
@@ -2021,12 +2071,12 @@ function viewToggleHTML(win, used) {
 function renderRunwayCard() {
   const el = document.getElementById('runwayCard'); if (!el) return;
   if (curMonth !== fmtMonthKey(new Date())) { el.innerHTML = ''; return; }
+  if (tmSplit()) { el.innerHTML = tmSplitCardsHTML(); return; }
   const r = computeRunway();
   const light = r.projection > 200 ? 'var(--green)' : r.projection >= 0 ? 'var(--gold)' : 'var(--red)';
   const lightTxt = r.projection > 200 ? 'Hyvin menee' : r.projection >= 0 ? 'Tarkkana' : 'Varoitus';
   const overPace = r.avgDaily > r.targetDaily;
-  // Skenaario: jos kuluttaa tavoitetahdissa, paljonko jää?
-  const targetProjection = r.checking - r.targetDaily * r.daysLeft;
+  const targetProjection = r.checking - r.upSum - r.targetDaily * r.daysLeft;
   const tpColor = targetProjection >= 0 ? 'var(--green)' : 'var(--red)';
   el.innerHTML = `
     <div class="sum-card" style="border-top:2.5px solid ${light};margin-bottom:12px">
@@ -2036,39 +2086,755 @@ function renderRunwayCard() {
       </div>
       <div style="font-size:34px;font-weight:300;color:${light};letter-spacing:-0.5px;line-height:1">${esigned(Math.round(r.projection))}</div>
       <div style="font-size:12px;color:${r.projection<0?'var(--red)':'var(--muted)'};margin-top:3px;margin-bottom:10px">
-        ${r.projection < 0 ? `Käyttötili menee miinukselle ennen palkkaa · vaje ${eur(Math.abs(r.projection))}` : `Käyttötilillä palkkapäivänä`}
+        ${r.projection < 0 ? `Käyttötili menee miinukselle ennen palkkaa · vaje ${eur(Math.abs(r.projection))}` : `Käyttötilillä palkkapäivänä laskujen jälkeen`}
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:10px">
-        <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:7px 9px">
-          <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);font-weight:500;margin-bottom:3px">Tili nyt</div>
-          <div style="font-size:15px;font-weight:400;color:var(--text)">${eur(r.checking)}</div>
-        </div>
-        <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:7px 9px">
-          <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);font-weight:500;margin-bottom:3px">Kulutustahti</div>
-          <div style="font-size:15px;font-weight:400;color:${overPace?'var(--red)':'var(--green)'}">
-            ${eur(r.avgDaily)}<span style="font-size:11px">/pv</span>
-          </div>
-          <div style="font-size:10px;color:${overPace?'var(--red)':'var(--muted)'}">nyk. tahti</div>
-        </div>
-        <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:7px 9px">
-          <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);font-weight:500;margin-bottom:3px">Budjettitahti</div>
-          <div style="font-size:15px;font-weight:400;color:var(--muted)">
-            ${eur(r.targetDaily)}<span style="font-size:11px">/pv</span>
-          </div>
-          <div style="font-size:10px;color:var(--dim)">tavoite (80%)</div>
-        </div>
+        ${tmKv('Tili nyt', eur(r.checking), r.accts > 1 ? r.accts + ' käyttötiliä' : '')}
+        ${tmKv('Kulutustahti', eur(r.avgDaily) + '<span style="font-size:11px">/pv</span>', 'muuttuvat menot', overPace ? 'var(--red)' : 'var(--green)')}
+        ${tmKv('Laskuja tulossa', (r.upSum ? '−' : '') + eur(r.upSum), r.upcoming.length + ' erää', r.upSum ? 'var(--red)' : '')}
       </div>
       <div style="font-size:12px;color:var(--muted);display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px">
-        <span>Jos ${eur(r.targetDaily)}/pv → ennuste <strong style="color:${tpColor}">${esigned(Math.round(targetProjection))}</strong></span>
+        <span>Budjetti ${eur(r.targetDaily)}/pv → ennuste <strong style="color:${tpColor}">${esigned(Math.round(targetProjection))}</strong></span>
         <span>Saldo riittää max <strong style="color:var(--text)">${eur(r.dailyAllowance)}/pv</strong></span>
       </div>
+      ${r.upcoming.length ? `<div style="font-size:11px;color:var(--dim);margin-top:6px">Tulossa: ${r.upcoming.map(u => `${esc(u.label)} ${eur(u.amount)}`).join(' · ')} · <span style="color:var(--blue);cursor:pointer" onclick="openRecModal()">toistuvat ›</span></div>` : ''}
       ${(() => { const f = computeFreeSpend(); const c = f.free >= 100 ? 'var(--green)' : f.free >= 0 ? 'var(--gold)' : 'var(--red)';
-        return `<button onclick="openFitModal()" style="display:flex;justify-content:space-between;align-items:center;width:100%;margin-top:10px;padding:10px 12px;border:.5px solid var(--border);border-radius:var(--radius-sm);background:var(--blue-light);font-family:'Inter',sans-serif;cursor:pointer">
+        return `<button onclick="openFitModal()" style="display:flex;justify-content:space-between;align-items:center;width:100%;margin-top:10px;padding:10px 12px;border:.5px solid var(--border);border-radius:var(--radius-sm);background:var(--blue-light);font-family:inherit;cursor:pointer">
           <span style="font-size:13px;font-weight:500;color:var(--blue)">🛍 Mahtuuko ostos?</span>
           <span style="font-size:13px;color:var(--muted)">vapaata <strong style="color:${c}">${esigned(Math.round(f.free))}</strong> ›</span>
         </button>`; })()}
     </div>`;
 }
+
+// ── TILIMALLI, TASKUT JA TOISTUVAT MAKSUT (v1.26.0) ──────────────────────────────
+// Kaksi tilimallia: 'single' = laskut ja kulutus samalta käyttötililtä, 'split' =
+// laskutili (palkka, laskut, sijoitukset) + kulutustili (taskut). Ennuste lasketaan
+// kummallekin erikseen: laskutilillä EI ole päivätahtia (saldo − tulossa olevat erät),
+// kulutustilillä taskukohtainen tahti. Kiinteät laskut eivät mene päivätahtiin kummassakaan:
+// v1.25:n runway jakoi jo maksetun vastikkeen päiville ja kertoi jäljellä olevilla päivillä,
+// ja vähensi Revolutin kulutuksen Perustilin saldosta (12.11.2026: −1 250 € vs. oikea +46 €).
+// Asetukset ovat settings-taulussa avain/arvo-pareina, objektit JSON-merkkijonona → ei migraatiota.
+
+const TM_DEFAULTS = {
+  account_model: 'single', bills_account: 'Perus', spend_account: 'Revolut',
+  spend_transfer: 0, spend_invest: 0, buffer: 100, card_warn: 1,
+  budget_frame: 'fire', invest_target: 1000, nws_own: { n: 50, w: 30, s: 20 },
+  pockets: {}, recurring: { overrides: {}, manual: [] }
+};
+const TM_JSON_KEYS = ['nws_own', 'pockets', 'recurring'];
+const TM_NUM_KEYS = ['spend_transfer', 'spend_invest', 'buffer', 'card_warn', 'invest_target'];
+const WEEKDAYS_FI = ['su', 'ma', 'ti', 'ke', 'to', 'pe', 'la'];
+
+function tm(k) { const v = settings[k]; return (v === undefined || v === null || v === '') ? TM_DEFAULTS[k] : v; }
+function tmSplit() {
+  const b = tm('bills_account'), s = tm('spend_account');
+  return tm('account_model') === 'split' && b !== s && !!accountByKey(b) && !!accountByKey(s);
+}
+// API palauttaa kaikki arvot merkkijonoina.
+function tmParseSettings(s) {
+  const out = {};
+  Object.keys(TM_DEFAULTS).forEach(k => {
+    if (s[k] === undefined || s[k] === null) return;
+    if (TM_JSON_KEYS.includes(k)) { try { out[k] = typeof s[k] === 'string' ? JSON.parse(s[k]) : s[k]; } catch (e) {} }
+    else if (TM_NUM_KEYS.includes(k)) out[k] = +s[k] || 0;
+    else out[k] = String(s[k]);
+  });
+  return out;
+}
+// saveSetting() pakottaa luvuksi; tämä tallentaa merkkijonot ja objektit sellaisenaan.
+function saveSettingRaw(key, value) {
+  settings[key] = value;
+  saveLocalState();
+  if (API_BASE) {
+    const v = (value !== null && typeof value === 'object') ? JSON.stringify(value) : value;
+    fetch(`${API_BASE}/settings`, { method: 'PUT', headers: apiHeaders(), body: JSON.stringify({ [key]: v }) }).catch(() => {});
+  }
+}
+
+// Maksunsaajan avain toistuvuuteen: sanat joissa on numeroita (viitteet, kortin tunnisteet,
+// IBANin osat) ja lopun kaupunki pois. "Spotify P42A1F2DD9  Stockholm" vaihtui joka kuukausi,
+// joten tarkka vertailu ei tunnistanut Spotifya koskaan samaksi maksajaksi (v1.26.0).
+const PAYEE_CITIES = ['helsinki', 'stockholm', 'riihimaki', 'riihimäki', 'kuopio', 'espoo', 'vantaa', 'tampere',
+  'iisalmi', 'turku', 'oulu', 'dublin', 'london', 'amsterdam', 'luxembourg', 'itunes.com', 'fi', 'se'];
+function payeeKey(p) {
+  const raw = String(p || '').toLowerCase().replace(/\*/g, ' ').replace(/\s+/g, ' ').trim();
+  let w = raw.split(' ').filter(x => x && !/\d/.test(x));
+  while (w.length > 1 && PAYEE_CITIES.includes(w[w.length - 1])) w.pop();
+  const k = w.join(' ').trim();
+  return k || raw;                                   // pelkkä IBAN tms. → alkuperäinen
+}
+
+// Sama siivous näytettäväksi nimeksi (kirjainkoko säilyy); pelkkä IBAN → kategoria.
+function tmCleanLabel(p, cat) {
+  const raw = String(p || '').replace(/\*/g, ' ').replace(/\s+/g, ' ').trim();
+  const w = raw.split(' ').filter(x => x && !/\d/.test(x));
+  while (w.length > 1 && PAYEE_CITIES.includes(w[w.length - 1].toLowerCase())) w.pop();
+  return w.length ? w.join(' ') : (cat ? stripIcon(cat) : raw);
+}
+// Eräpäivä jaksossa kuukauden päivän mukaan (jaksot ovat eri mittaisia: 27.11.–23.12. on 26 pv).
+// Ei osumaa jaksoon → jakson viimeinen päivä.
+function tmDueInPeriod(b, dom) {
+  for (let d = b.startISO; d < b.endISO; d = tmAddDays(d, 1)) {
+    const dd = new Date(d + 'T00:00:00');
+    if (dd.getDate() === Math.min(dom, new Date(dd.getFullYear(), dd.getMonth() + 1, 0).getDate())) return d;
+  }
+  return tmAddDays(b.endISO, -1);
+}
+// Kaikki eräpäivät jaksossa: 26 päivän jaksoon ei osu 24. päivää lainkaan, seuraavaan osuu kaksi.
+function tmDueDates(b, dom) {
+  const out = [];
+  for (let d = b.startISO; d < b.endISO; d = tmAddDays(d, 1)) {
+    const dd = new Date(d + 'T00:00:00');
+    if (dd.getDate() === Math.min(dom, new Date(dd.getFullYear(), dd.getMonth() + 1, 0).getDate())) out.push(d);
+  }
+  return out;
+}
+function tmAddDays(iso, n) { const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + n); return isoLocal(d); }
+function tmDays(a, b) { return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000); }
+// Viikonpäivän esiintymät välillä [from, to)
+function tmCountWeekday(fromISO, toISO, wd) {
+  let n = 0;
+  for (let d = fromISO; d < toISO; d = tmAddDays(d, 1)) if (new Date(d + 'T00:00:00').getDay() === wd) n++;
+  return n;
+}
+// Datan tuoreus: tiliote tuotu tähän päivään asti. Ennuste alkaa siitä, ei tästä päivästä:
+// tuomattomat ostot eivät saa näkyä "vielä käytettävissä" -rahana.
+function tmThrough(key) {
+  const t = isoLocal(new Date());
+  const th = accountByKey(key)?.last_import_through;
+  return th && th < t ? th : t;
+}
+function tmIsCardPurchase(t) { return /PKORTTIMAKSU/i.test(t.selitys || '') || /OSTOPVM/i.test(t.viesti || ''); }
+function tmInt(v) { const r = Math.round(v); return (r > 0 ? '+' : r < 0 ? '−' : '') + Math.abs(r).toLocaleString('fi-FI'); }
+function tmSum(list, f) { return list.reduce((s, x) => s + (f ? f(x) : x), 0); }
+
+// ── Toistuvat maksut ──────────────────────────────────────────────────────────────
+// Viisi edellistä palkkajaksoa, maksunsaaja vähintään kolmessa. Lasku = kerran (tai
+// kiinteästi kahdesti) jaksossa ja päivä jakson sisällä ±5. Useammin = toistuva osto
+// (ei ennusteen erä). Käyttäjän ratkaisu (overrides: bill / ignore / habit) voittaa.
+const TM_REC_PERIODS = 5;
+let tmRecCache = [];
+function tmRecAccounts() {
+  if (tmSplit()) return [tm('bills_account')];
+  return accounts.filter(a => a.kind === 'checking' && !a.on_hold).map(a => a.key);
+}
+function detectRecurring(accts) {
+  accts = accts || tmRecAccounts();
+  const periods = [];
+  for (let i = 1; i <= TM_REC_PERIODS; i++) periods.push(fitPeriod(i));
+  const oldest = periods[periods.length - 1].startISO, newestEnd = periods[0].endISO;
+  const ov = (tm('recurring') || {}).overrides || {};
+  const groups = {};
+  ptxs().forEach(t => {
+    if (!accts.includes(t.account) || !(t.amount < 0) || t.date < oldest || t.date >= newestEnd) return;
+    if (t.type === 'neutral' || t.type === 'flag' || t.cat === 'Säästölipas') return;
+    const k = payeeKey(t.payee); if (!k) return;
+    const pi = periods.findIndex(b => inPeriod(t, b)); if (pi < 0) return;
+    const g = groups[k] || (groups[k] = { key: k, account: t.account, rows: [] });
+    g.rows.push({ t, pi, dip: tmDays(periods[pi].startISO, t.date), dom: +t.date.slice(8, 10) });
+  });
+  const out = [];
+  Object.values(groups).forEach(g => {
+    const per = {};
+    g.rows.forEach(r => { (per[r.pi] = per[r.pi] || []).push(r); });
+    const present = Object.keys(per).map(Number).sort((a, b) => a - b);   // 0 = viimeisin jakso
+    if (present.length < 3 && !ov[g.key]) return;
+    const counts = present.map(p => per[p].length);
+    const maxC = Math.max(...counts), minC = Math.min(...counts);
+    const freq = {}; counts.forEach(c => { freq[c] = (freq[c] || 0) + 1; });
+    const times = +Object.keys(freq).sort((a, b) => freq[b] - freq[a] || a - b)[0];
+    const dips = g.rows.map(r => r.dip).sort((a, b) => a - b);
+    const spread = dips[dips.length - 1] - dips[0];
+    const amts = g.rows.map(r => -r.t.amount);
+    const lastRows = per[present[0]].slice().sort((a, b) => a.t.date.localeCompare(b.t.date));
+    const lastT = lastRows[lastRows.length - 1].t;
+    let auto, reason = '';
+    if (maxC > 2) auto = 'habit';
+    else if (!per[0]) { auto = 'check'; reason = 'puuttui viime jaksosta — päättynyt?'; }
+    else if (minC !== maxC) { auto = 'check'; reason = `${minC}–${maxC} krt jaksossa`; }
+    else if (times === 1 && spread > 10) auto = 'habit';
+    else auto = 'bill';
+    const o = ov[g.key];
+    out.push({
+      key: g.key, label: tmCleanLabel(lastT.payee, lastT.cat), account: g.account, cat: lastT.cat, type: lastT.type,
+      periods: present.length, n: g.rows.length, times, spread,
+      dayInPeriod: dips[Math.floor(dips.length / 2)],
+      dom: g.rows.map(r => r.dom).sort((a, b) => a - b)[Math.floor(g.rows.length / 2)],
+      doms: [...new Set(lastRows.map(r => r.dom))].sort((a, b) => a - b),
+      min: Math.min(...amts), max: Math.max(...amts), total: tmSum(amts),
+      lastTotal: tmSum(lastRows, r => -r.t.amount),
+      seen: periods.map((_, i) => !!per[i]).reverse(),               // vanhin → uusin
+      auto, reason, status: (o === 'bill' || o === 'ignore' || o === 'habit') ? o : auto, override: o || null
+    });
+  });
+  return out.sort((a, b) => b.lastTotal - a.lastTotal);
+}
+// Käsin lisätyt erät (esim. uusi laina, jota ei vielä ole historiassa): {id,label,amount,day,start,account}
+function tmManualInPeriod(b, accts) {
+  const list = ((tm('recurring') || {}).manual) || [];
+  const out = [];
+  list.forEach(m => {
+    if (accts && m.account && !accts.includes(m.account)) return;
+    for (let d = b.startISO; d < b.endISO; d = tmAddDays(d, 1)) {
+      const dd = new Date(d + 'T00:00:00');
+      const last = new Date(dd.getFullYear(), dd.getMonth() + 1, 0).getDate();
+      if (dd.getDate() === Math.min(+m.day || 1, last) && (!m.start || d >= m.start)) out.push({ ...m, due: d });
+    }
+  });
+  return out;
+}
+// Palkkajakson vielä maksamattomat erät tileiltä accts
+function tmUpcomingBills(accts, b) {
+  b = b || fitPeriod(0);
+  const recs = detectRecurring(accts).filter(r => r.status === 'bill');
+  const rows = ptxs().filter(t => accts.includes(t.account) && inPeriod(t, b) && t.amount < 0);
+  const out = [];
+  recs.forEach(r => {
+    const paidN = rows.filter(t => payeeKey(t.payee) === r.key).length;
+    if (paidN >= r.times) return;
+    const left = r.lastTotal * (r.times - paidN) / r.times;
+    // Kahdesti jaksossa (OP-rahastot 16. ja 29.): seuraava maksamaton eräpäivä
+    const dates = r.doms.flatMap(d => tmDueDates(b, d)).sort();
+    const due = dates[paidN] || (r.times === 1 ? tmDueInPeriod(b, r.dom) : dates[dates.length - 1] || tmDueInPeriod(b, r.dom));
+    out.push({ label: r.label, amount: left, due, type: r.type, source: 'auto', key: r.key });
+  });
+  tmManualInPeriod(b, accts).forEach(m => {
+    const amt = +m.amount || 0;
+    if (recs.some(r => Math.abs(r.lastTotal - amt) < 1)) return;           // tunnistettu jo historiasta
+    const paid = rows.some(t => Math.abs(-t.amount - amt) < 1 && Math.abs(tmDays(m.due, t.date)) <= 5);
+    if (!paid) out.push({ label: m.label, amount: amt, due: m.due, type: 'needs', source: 'manual' });
+  });
+  return out.sort((a, c) => a.due.localeCompare(c.due));
+}
+
+// ── Laskutili ─────────────────────────────────────────────────────────────────────
+function computeBillsForecast() {
+  const key = tm('bills_account'), acc = accountByKey(key);
+  const cur = fitPeriod(0);
+  const balance = balanceOf(key);
+  const upcoming = tmUpcomingBills([key], cur);
+  const upSum = tmSum(upcoming, u => u.amount);
+  const billKeys = new Set(detectRecurring([key]).filter(r => r.status === 'bill').map(r => r.key));
+  const card = ptxs().filter(t => t.account === key && inPeriod(t, cur) && t.amount < 0
+    && (t.type === 'needs' || t.type === 'wants') && tmIsCardPurchase(t) && !billKeys.has(payeeKey(t.payee)));
+  return { key, label: acc ? acc.label : key, balance, through: tmThrough(key), cur, upcoming, upSum,
+    projection: balance - upSum, card, cardSum: -tmSum(card, t => t.amount) };
+}
+
+// ── Kulutustili ja taskut ─────────────────────────────────────────────────────────
+// Taskun nimi on parseRevolutin viesti-kentässä: "Revolut · Päivittäistavarat".
+function tmPocketName(t) {
+  const v = t.viesti || '', i = v.indexOf(' · ');
+  return (t.account === tm('spend_account') && i > 0) ? v.slice(i + 3) : null;
+}
+function tmPocketCfg(name) { return ((tm('pockets') || {})[name]) || {}; }
+function computePockets() {
+  const key = tm('spend_account'), acc = accountByKey(key), cfg = tm('pockets') || {};
+  const cur = fitPeriod(0), through = tmThrough(key);
+  const elapsed = Math.max(tmDays(cur.startISO, through) + 1, 1);
+  const daysLeft = Math.max(tmDays(through, cur.endISO) - 1, 0);
+  const rows = ptxs().filter(t => t.account === key);
+  const names = new Set();
+  rows.forEach(t => { const n = tmPocketName(t); if (n) names.add(n); });
+  Object.keys(cfg).forEach(n => names.add(n));
+  const pockets = [...names].map(name => {
+    const c = cfg[name] || {};
+    const pr = rows.filter(t => tmPocketName(t) === name);
+    const balance = tmSum(pr, t => +t.amount || 0);
+    const spent = -tmSum(pr.filter(t => inPeriod(t, cur) && t.date <= through && ['needs', 'wants', 'financing'].includes(t.type)), t => t.amount);
+    const role = c.cadence === 'reserve' ? 'reserve' : 'spend';
+    const cadence = c.cadence || 'period', wd = c.weekday ?? 5, fill = +c.fill || 0;
+    const week = cadence === 'week';
+    const fillsLeft = week ? tmCountWeekday(tmAddDays(through, 1), cur.endISO, wd) : 0;
+    const budget = fill * (week ? tmCountWeekday(cur.startISO, cur.endISO, wd) : (cadence === 'period' ? 1 : 0));
+    const upcoming = fill * fillsLeft;
+    const pace = role === 'spend' ? Math.max(spent, 0) / elapsed : 0;
+    const forecast = balance + upcoming - pace * daysLeft;
+    const runOut = (role === 'spend' && pace > 0 && forecast < 0) ? tmAddDays(through, Math.max(Math.round((balance + upcoming) / pace), 0)) : null;
+    return { name, role, balance, spent, pace, fill, cadence, weekday: wd, fillsLeft, upcoming, budget, forecast, runOut,
+      usedPct: budget > 0 ? spent / budget : null };
+  }).sort((a, b) => (a.role === b.role ? a.forecast - b.forecast : a.role === 'spend' ? -1 : 1));
+  const total = balanceOf(key);
+  const inPockets = tmSum(pockets, p => p.balance);
+  const reserved = tmSum(pockets, p => p.upcoming);
+  const sp = pockets.filter(p => p.role === 'spend');
+  const spent = tmSum(sp, p => p.spent);
+  return { key, label: acc ? acc.label : key, cur, through, elapsed, daysLeft, periodLen: tmDays(cur.startISO, cur.endISO),
+    pockets, total, mainBal: total - inPockets, reserved, mainFree: total - inPockets - reserved,
+    forecast: pockets.length ? tmSum(sp, p => p.forecast) : total - (spent / elapsed) * daysLeft,
+    pace: spent / elapsed, perDay: daysLeft ? total / daysLeft : total, spent };
+}
+// Ehdotus: ylijäämäisistä taskuista vajaisiin, pienin vaje ensin (mahdollisimman moni kuntoon).
+// Pelkkä ehdotus — siirron tekee käyttäjä pankissa.
+function tmRebalance(P) {
+  const src = P.pockets.filter(p => p.role === 'spend' && p.forecast > 1).map(p => ({ name: p.name, left: Math.floor(p.forecast) }));
+  if (P.mainFree > 1) src.push({ name: 'Päätili', left: Math.floor(P.mainFree) });
+  const def = P.pockets.filter(p => p.role === 'spend' && p.forecast < -1).map(p => ({ name: p.name, need: Math.ceil(-p.forecast) })).sort((a, b) => a.need - b.need);
+  const moves = [];
+  def.forEach(d => {
+    src.sort((a, b) => b.left - a.left);
+    for (const s of src) {
+      if (d.need <= 0) break;
+      if (s.left <= 0) continue;
+      const x = Math.min(s.left, d.need);
+      if (x < 5) continue;                       // alle 5 € siirrot eivät ole vaivan arvoisia
+      moves.push({ from: s.name, to: d.name, amount: x });
+      s.left -= x; d.need -= x;
+    }
+  });
+  return moves;
+}
+
+// ── Palkkapäivän jako (seuraava jakso) ────────────────────────────────────────────
+function computePaydayPlan() {
+  const next = fitPeriod(-1);
+  const salary = settings.monthly_salary || 0;
+  const billsKey = tmSplit() ? tm('bills_account') : null;
+  const accts = billsKey ? [billsKey] : tmRecAccounts();
+  const recs = detectRecurring(accts).filter(r => r.status === 'bill');
+  // Kerran jaksossa maksettavat erät kuukauden päivän mukaan (0, 1 tai 2 kertaa); kahdesti
+  // maksettavat (OP-rahastot 16. ja 29.) ovat jakson kiinteä summa.
+  const items = [];
+  recs.forEach(r => {
+    const dates = r.times === 1 ? tmDueDates(next, r.dom) : [tmDueInPeriod(next, r.dom)];
+    dates.forEach(d => items.push({ label: r.label, amount: r.lastTotal, due: d, type: r.type, source: 'auto' }));
+  });
+  tmManualInPeriod(next, accts).forEach(m => {
+    if (!recs.some(r => Math.abs(r.lastTotal - (+m.amount || 0)) < 1)) items.push({ label: m.label, amount: +m.amount || 0, due: m.due, type: 'needs', source: 'manual' });
+  });
+  items.sort((a, b) => b.amount - a.amount);
+  const bills = items.filter(i => i.type !== 'savings'), autoInv = items.filter(i => i.type === 'savings');
+  const billSum = tmSum(bills, i => i.amount), autoInvSum = tmSum(autoInv, i => i.amount);
+  const buffer = tm('buffer');
+  const cfg = tm('pockets') || {};
+  const fills = Object.entries(cfg).filter(([n, c]) => +c.fill > 0 && c.cadence !== 'reserve').map(([n, c]) => {
+    const k = c.cadence === 'week' ? tmCountWeekday(next.startISO, next.endISO, c.weekday ?? 5) : 1;
+    return { name: n, amount: (+c.fill) * k, count: k, cadence: c.cadence || 'period', fill: +c.fill, weekday: c.weekday ?? 5 };
+  });
+  const fillSum = tmSum(fills, f => f.amount);
+  const spendInvest = tm('spend_invest');
+  const transfer = billsKey ? (tm('spend_transfer') > 0 ? tm('spend_transfer') : fillSum + spendInvest) : 0;
+  const remainder = salary - billSum - autoInvSum - buffer - transfer;
+  const invested = autoInvSum + (billsKey ? spendInvest : 0) + Math.max(remainder, 0);
+  return { next, salary, bills, autoInv, billSum, autoInvSum, buffer, fills, fillSum, spendInvest, transfer,
+    spendFree: transfer - fillSum - spendInvest, remainder, invested, target: tm('invest_target'), split: !!billsKey };
+}
+
+// ── Budjettikehys ─────────────────────────────────────────────────────────────────
+// N/W/S-seuranta näkyy aina; kehys ratkaisee vain tavoiteviivat ja -tekstit.
+function tmTargets() {
+  const f = tm('budget_frame');
+  if (f === '503020') return { frame: f, n: 50, w: 30, s: 20 };
+  if (f === 'own') { const o = tm('nws_own') || {}; return { frame: f, n: +o.n || 0, w: +o.w || 0, s: +o.s || 0 }; }
+  return { frame: 'fire', n: null, w: null, s: null, invest: tm('invest_target') };
+}
+function tmSavingsGoal(income) {
+  const t = tmTargets();
+  return t.frame === 'fire' ? (t.invest || 0) : income * (t.s || 0) / 100;
+}
+function tmInvested(list) { return -tmSum(list.filter(t => stripIcon(t.cat) === 'Sijoittaminen'), t => +t.amount || 0); }
+
+// ── UI: yhteiset palat ────────────────────────────────────────────────────────────
+const tmColor = v => v > 50 ? 'var(--green)' : v >= 0 ? 'var(--gold)' : 'var(--red)';
+const tmStatus = v => v > 50 ? 'Riittää' : v >= 0 ? 'Tarkkana' : 'Ei riitä';
+function tmKv(label, value, sub, color) {
+  return `<div style="background:var(--surface2);border-radius:var(--radius-sm);padding:7px 9px;min-width:0">
+    <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);font-weight:500;margin-bottom:3px">${label}</div>
+    <div style="font-size:15px;font-weight:400;color:${color || 'var(--text)'}">${value}</div>
+    ${sub ? `<div style="font-size:10px;color:var(--muted)">${sub}</div>` : ''}</div>`;
+}
+function tmRow(l, r, rc) {
+  return `<div style="display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:6px 0;border-top:.5px solid var(--surface2)"><span>${l}</span><span style="white-space:nowrap;${rc ? 'color:' + rc : ''}">${r}</span></div>`;
+}
+function tmCardHead(label, right, collapseKey, closed) {
+  return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer" onclick="tmToggle('${collapseKey}')">
+    <div class="sum-label" style="margin:0">${label}</div>
+    <span style="display:flex;align-items:center;gap:8px">${right}
+      <span aria-hidden="true" style="color:var(--muted);font-size:14px;display:inline-block;transform:rotate(${closed ? 0 : 180}deg);transition:transform .15s">⌄</span></span>
+  </div>`;
+}
+let tmCollapse = {};
+try { tmCollapse = JSON.parse(localStorage.getItem('ot_tmcollapse') || '{}') || {}; } catch (e) {}
+function tmToggle(k) {
+  tmCollapse[k] = !tmIsClosed(k);
+  try { localStorage.setItem('ot_tmcollapse', JSON.stringify(tmCollapse)); } catch (e) {}
+  renderRunwayCard();
+}
+// Laskutili oletuksena pienenä, kulutustili auki
+function tmIsClosed(k) { return tmCollapse[k] === undefined ? k === 'bills' : !!tmCollapse[k]; }
+function tmPocketRowHTML(p, P, withMarker) {
+  const used = p.usedPct === null ? (p.balance + p.spent > 0 ? p.spent / (p.balance + p.spent) : 0) : p.usedPct;
+  const elapsedPct = Math.min(P.elapsed / Math.max(P.periodLen, 1), 1) * 100;
+  const c = p.role === 'reserve' ? 'var(--blue)' : p.forecast < -1 ? 'var(--red)' : used > elapsedPct / 100 + 0.1 ? 'var(--gold)' : 'var(--green)';
+  const fillTxt = p.role === 'reserve' ? 'kortiton · ylijäämät'
+    : p.cadence === 'week' ? `täyttö ${eur(p.fill)} ${WEEKDAYS_FI[p.weekday]}` : (p.fill ? `${eur(p.fill)} / jakso` : 'täyttöä ei asetettu');
+  const right = p.role === 'reserve' ? ''
+    : p.forecast < -1 ? `<span style="color:var(--red);font-weight:500">${p.runOut ? 'loppuu ~' + ddmm(p.runOut) : 'vaje ' + eur(p.forecast)}</span>`
+    : p.forecast > 1 ? `<span style="color:var(--green);font-weight:500">+${Math.round(p.forecast)} € jää</span>`
+    : `<span style="color:var(--gold);font-weight:500">riittää</span>`;
+  return `<div style="padding:8px 0">
+    <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px"><span style="font-weight:500">${esc(p.name)}</span>
+      <span>${eur(p.balance)}${p.upcoming ? ` <span style="color:var(--muted)">+${Math.round(p.upcoming)} tulossa</span>` : ''}</span></div>
+    <div style="position:relative;height:6px;border-radius:3px;background:var(--surface2)">
+      <div style="width:${Math.min(used * 100, 100)}%;height:6px;border-radius:3px;background:${c}"></div>
+      ${withMarker ? `<div style="position:absolute;left:${elapsedPct}%;top:-3px;width:2px;height:12px;background:var(--text);border-radius:1px"></div>` : ''}
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px">
+      <span>${p.role === 'spend' && p.spent ? eur(p.pace) + '/pv · ' : ''}${fillTxt}</span>${right}</div>
+  </div>`;
+}
+
+// ── UI: Koti, kaksitilimallin kortit ──────────────────────────────────────────────
+function tmSplitCardsHTML() {
+  const B = computeBillsForecast(), P = computePockets();
+  const bc = tmColor(B.projection), pc = tmColor(P.forecast);
+  const bClosed = tmIsClosed('bills'), sClosed = tmIsClosed('spend');
+  const pay = ddmm(B.cur.endISO);
+  const billsBody = bClosed
+    ? `<div style="font-size:12px;color:var(--muted);margin-top:4px">jää palkkapäivänä · ${B.upcoming.length} erää ${eur(B.upSum)} tulossa${B.card.length && tm('card_warn') ? ` · ${B.card.length} korttiostoa` : ''}</div>`
+    : `<div style="font-size:34px;font-weight:300;color:${bc};letter-spacing:-.5px;line-height:1;margin-top:10px">${esigned(Math.round(B.projection))}</div>
+      <div style="font-size:12px;color:var(--muted);margin:3px 0 10px">jää tilille palkkapäivänä ${pay}, kun tulossa olevat erät on maksettu</div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-bottom:8px">
+        ${tmKv('Saldo nyt', eur(B.balance), 'tiliote ' + ddmm(B.through))}${tmKv('Tulossa', '−' + eur(B.upSum), '', B.upSum ? 'var(--red)' : '')}${tmKv('Eriä', B.upcoming.length + ' kpl')}
+      </div>
+      ${B.upcoming.map(u => tmRow(`${esc(u.label)} <span style="color:var(--muted)">~${ddmm(u.due)}</span>${u.source === 'manual' ? ' <span style="font-size:10px;color:var(--gold)">käsin</span>' : ''}`, eur(u.amount))).join('')}
+      ${B.card.length && tm('card_warn') ? `<div style="margin-top:10px;background:var(--red-light);border-radius:var(--radius-sm);padding:9px 10px;font-size:12px;color:var(--red)">
+        ${esc(B.label)}n kortilla ${B.card.length} ostoa tässä jaksossa (${eur(B.cardSum)}). Laskutililtä ei kuluteta. <span style="text-decoration:underline;cursor:pointer" onclick="event.stopPropagation();switchTab('tapahtumat')">Näytä</span></div>` : ''}
+      <div style="font-size:11px;color:var(--dim);margin-top:8px">Ei päivätahtia: ennuste = saldo − tulossa olevat erät. <span style="color:var(--blue);cursor:pointer" onclick="event.stopPropagation();openRecModal()">Toistuvat maksut ›</span></div>`;
+  const spendBody = sClosed
+    ? `<div style="font-size:12px;color:var(--muted);margin-top:4px">palkkapäivänä nykytahdilla${P.pockets.filter(p => p.runOut).map(p => ` · ${esc(p.name)} loppuu ~${ddmm(p.runOut)}`).slice(0, 2).join('')}</div>`
+    : `<div style="font-size:34px;font-weight:300;color:${pc};letter-spacing:-.5px;line-height:1;margin-top:10px">${esigned(Math.round(P.forecast))}</div>
+      <div style="font-size:12px;color:var(--muted);margin:3px 0 10px">taskuissa palkkapäivänä nykytahdilla · ${P.daysLeft} pv tiliotteen jälkeen</div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-bottom:6px">
+        ${tmKv('Tilillä', eur(P.total), 'tiliote ' + ddmm(P.through))}${tmKv('Tahti', eur(P.pace) + '<span style="font-size:11px">/pv</span>', '', P.pace > P.perDay ? 'var(--red)' : 'var(--green)')}${tmKv('Riittää', eur(P.perDay) + '<span style="font-size:11px">/pv</span>')}
+      </div>
+      ${P.pockets.filter(p => p.role === 'spend').map(p => tmPocketRowHTML(p, P, false)).join('')}
+      ${P.pockets.length ? `<div style="display:flex;justify-content:space-between;font-size:13px;padding-top:8px;border-top:.5px solid var(--surface2)">
+        <span><b style="font-weight:500">Päätili</b> <span style="color:var(--muted)">${P.reserved ? eur(P.reserved) + ' varattu täyttöihin' : ''}</span></span><span>${eur(P.mainBal)}</span></div>` : ''}
+      ${P.pockets.filter(p => p.role === 'reserve').map(p => `<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--muted);padding-top:6px"><span><b style="font-weight:500;color:var(--text)">${esc(p.name)}</b> kortiton</span><span>${eur(p.balance)}</span></div>`).join('')}
+      ${(() => { const m = tmRebalance(P); return m.length ? `<button onclick="event.stopPropagation();switchTab('taskut')" style="display:flex;justify-content:space-between;align-items:center;width:100%;margin-top:10px;padding:11px 12px;border:.5px solid var(--border);border-radius:var(--radius-sm);background:var(--blue-light);font-family:inherit;cursor:pointer">
+        <span style="font-size:13px;font-weight:500;color:var(--blue)">Tasaa taskut</span><span style="font-size:12px;color:var(--muted)">${esc(m[0].from)} ${m[0].amount} € → ${esc(m[0].to)} ›</span></button>` : ''; })()}`;
+  const f = computeFreeSpend();
+  return `
+    <div class="sum-card" style="border-top:2.5px solid ${bc};margin-bottom:12px">
+      ${tmCardHead('Laskutili · ' + esc(B.label), bClosed ? `<span style="font-size:15px;color:${bc}">${esigned(Math.round(B.projection))}</span>` : `<span style="font-size:11px;font-weight:500;color:${bc}">● ${tmStatus(B.projection)}</span>`, 'bills', bClosed)}
+      ${billsBody}
+    </div>
+    <div class="sum-card" style="border-top:2.5px solid ${pc};margin-bottom:12px">
+      ${tmCardHead('Kulutustili · ' + esc(P.label), sClosed ? `<span style="font-size:15px;color:${pc}">${esigned(Math.round(P.forecast))}</span>` : `<span style="font-size:11px;font-weight:500;color:${pc}">● ${tmStatus(P.forecast)}</span>`, 'spend', sClosed)}
+      ${spendBody}
+    </div>
+    <button onclick="openFitModal()" style="display:flex;justify-content:space-between;align-items:center;width:100%;margin-bottom:12px;padding:12px;border:.5px solid var(--border);border-radius:var(--radius);background:var(--surface);font-family:inherit;cursor:pointer">
+      <span style="font-size:13px;font-weight:500;color:var(--blue)">🛍 Mahtuuko ostos? <span style="color:var(--muted);font-weight:400">taskuittain</span></span>
+      <span style="font-size:13px;color:var(--muted)">›</span>
+    </button>`;
+}
+
+// Mahtuuko-modaali kaksitilimallissa: vastaus taskuittain
+function tmFitPocketsHTML(x) {
+  const P = computePockets();
+  const sp = P.pockets.filter(p => p.role === 'spend');
+  if (!sp.length) return '';
+  return `<div style="font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--dim);margin-bottom:4px">Taskuittain palkkapäivänä</div>
+    ${sp.map(p => { const after = p.forecast - (x || 0); return `<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:.5px solid var(--border);font-size:13px">
+      <span>${esc(p.name)} <span style="color:var(--dim)">saldo ${eur(p.balance)}</span></span>
+      <span style="color:${after >= 0 ? 'var(--green)' : 'var(--red)'};white-space:nowrap">${x ? (after >= 0 ? 'mahtuu · jää ' : 'vaje ') + eur(after) : esigned(Math.round(p.forecast))}</span></div>`; }).join('')}
+    ${P.mainFree > 1 ? `<div style="font-size:12px;color:var(--muted);padding:5px 0 12px">Päätilillä vapaata ${eur(P.mainFree)}.</div>` : '<div style="height:12px"></div>'}`;
+}
+
+// ── UI: kassavirta-kortin lisät ───────────────────────────────────────────────────
+// N/W/S-palkin tavoiteviivat kehyksen mukaan
+function tmNwsMarkers() {
+  const t = tmTargets();
+  if (t.frame === 'fire') return '';
+  const m = v => `<div style="position:absolute;left:${v}%;top:-3px;width:1.5px;height:12px;background:var(--text)"></div>`;
+  return m(t.n) + m(t.n + t.w);
+}
+function tmFrameLine(list, bInc) {
+  const t = tmTargets();
+  if (t.frame === 'fire') {
+    const inv = tmInvested(list), c = inv >= t.invest ? 'var(--green)' : 'var(--text)';
+    return `<div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px"><span style="color:var(--muted)">Säästö ensin</span><span>sijoitettu <b style="font-weight:500;color:${c}">${Math.round(inv)} / ${Math.round(t.invest)} €</b></span></div>`;
+  }
+  return `<div style="font-size:12px;color:var(--muted);margin-top:8px">Viivat: tavoite ${t.n}/${t.w}/${t.s}${t.frame === '503020' ? ' (50/30/20)' : ''}</div>`;
+}
+// Kaksitilimallissa: kulutus tileittäin ja rahan reitti
+function tmFlowExtrasHTML(list) {
+  if (!tmSplit()) return '';
+  const bk = tm('bills_account'), sk = tm('spend_account');
+  const eff = expandList(list).filter(t => t.type === 'needs' || t.type === 'wants');
+  const by = k => -tmSum(eff.filter(t => t.account === k), t => t.amount);
+  const kb = by(bk), ks = by(sk), ko = -tmSum(eff.filter(t => t.account !== bk && t.account !== sk), t => t.amount);
+  const tot = kb + ks + ko;
+  if (tot <= 0) return '';
+  const pct = v => (v / tot * 100).toFixed(1);
+  const dot = c => `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${c};margin-right:6px"></span>`;
+  const fl = (l, v, strong) => `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;${strong ? 'border-top:.5px solid var(--border);font-weight:500' : ''}"><span>${l}</span><span style="${v > 0 && !strong ? 'color:var(--blue)' : ''}">${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.round(Math.abs(v)).toLocaleString('fi-FI')}</span></div>`;
+  // Rahan reitti: siirto laskutililtä kulutustilille = laskutilin neutraali miinus, jolle löytyy
+  // sama summa plussalla kulutustililtä ±3 pv. Korttimaksut tunnistetaan IBANista / parista.
+  const route = k => {
+    const r = list.filter(t => t.account === k);
+    const inc = tmSum(r.filter(t => t.type === 'income'), t => +t.amount);
+    const neu = r.filter(t => t.type === 'neutral' && !/^taskuun eur|^taskusta eur|noston taskusta/i.test(t.payee || ''));
+    const partner = k === bk ? sk : bk;
+    const isPair = t => list.some(c => c.account === partner && c.type === 'neutral' && Math.abs(+c.amount + +t.amount) < 0.005 && Math.abs(tmDays(c.date, t.date)) <= 3);
+    const toPartner = tmSum(neu.filter(isPair), t => +t.amount);
+    const cardPay = tmSum(neu.filter(t => !isPair(t) && t.amount < 0 && (CARD_PAYMENT_IBANS.some(i => String(t.viesti || '').toLowerCase().replace(/\s/g, '').includes(i)) || /op vähittäis|aktia bank/i.test(t.payee || ''))), t => +t.amount);
+    const otherNeu = tmSum(neu, t => +t.amount) - toPartner - cardPay;
+    const inv = -tmInvested(r);
+    const sav = tmSum(r.filter(t => t.type === 'savings' && stripIcon(t.cat) !== 'Sijoittaminen'), t => +t.amount);
+    const spend = tmSum(r.filter(t => ['needs', 'wants', 'financing'].includes(t.type)), t => +t.amount);
+    const net = inc + toPartner + cardPay + otherNeu + inv + sav + spend;
+    const pl = accountByKey(partner)?.label || partner;
+    return `<div style="background:var(--surface2);border-radius:var(--radius-sm);padding:8px 10px;min-width:0">
+      <div style="font-size:12px;font-weight:500;margin-bottom:4px">${esc(accountByKey(k)?.label || k)}</div>
+      ${inc ? fl('Tulot', inc) : ''}${toPartner ? fl((toPartner > 0 ? '← ' : '→ ') + esc(pl), toPartner) : ''}
+      ${cardPay ? fl('→ Luottokortit', cardPay) : ''}${Math.abs(otherNeu) >= 1 ? fl('Muut omat siirrot', otherNeu) : ''}
+      ${inv ? fl('Sijoitukset', inv) : ''}${sav ? fl('Muu säästö', sav) : ''}${spend ? fl('Laskut ja kulutus', spend) : ''}
+      ${fl('Jäi', net, true)}</div>`;
+  };
+  return `
+    <div style="font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--dim);margin:16px 0 8px">Kulutus tileittäin</div>
+    <div style="display:flex;height:8px;border-radius:4px;overflow:hidden;gap:2px">
+      <div style="width:${pct(kb)}%;background:var(--gold)"></div><div style="width:${pct(ks)}%;background:var(--red)"></div><div style="width:${pct(ko)}%;background:var(--dim)"></div></div>
+    <div style="font-size:12px;margin-top:6px">
+      <div style="display:flex;justify-content:space-between;padding:3px 0"><span>${dot('var(--gold)')}Laskutili · ${esc(accountByKey(bk)?.label || bk)}</span><span>${eur(kb)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0"><span>${dot('var(--red)')}Kulutustili · ${esc(accountByKey(sk)?.label || sk)}</span><span>${eur(ks)}</span></div>
+      ${ko > 0.5 ? `<div style="display:flex;justify-content:space-between;padding:3px 0"><span>${dot('var(--dim)')}Muut tilit</span><span>${eur(ko)}</span></div>` : ''}
+    </div>
+    <div style="font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--dim);margin:16px 0 6px">Rahan reitti</div>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">${route(bk)}${route(sk)}</div>`;
+}
+
+// ── UI: Taskut-välilehti ──────────────────────────────────────────────────────────
+function renderTaskut() {
+  const el = document.getElementById('taskutContent'); if (!el) return;
+  if (!tmSplit()) {
+    el.innerHTML = `<div class="sum-card"><div style="font-size:14px;margin-bottom:10px">Taskut ovat käytössä kaksitilimallissa (laskutili + kulutustili).</div>
+      <button class="btn btn-primary" onclick="openTmModal()">Tilimalli ja budjetti</button></div>`;
+    return;
+  }
+  const P = computePockets();
+  const moves = tmRebalance(P);
+  const sp = P.pockets.filter(p => p.role === 'spend');
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:10px">
+      <span>${esc(P.label)} · jaksosta kulunut ${P.elapsed}/${P.periodLen} pv</span><span>tiliote ${ddmm(P.through)}</span></div>
+    <div class="sum-card" style="margin-bottom:12px;padding-top:6px;padding-bottom:6px">${sp.map(p => tmPocketRowHTML(p, P, true)).join('<div style="border-top:.5px solid var(--surface2)"></div>') || '<div style="font-size:13px;color:var(--muted);padding:8px 0">Taskuja ei löytynyt otteesta.</div>'}</div>
+    <div class="sum-card" style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;font-size:13px"><b style="font-weight:500">Päätili</b><span>${eur(P.mainBal)}</span></div>
+      <div style="font-size:12px;color:var(--muted);margin-top:3px">${P.reserved ? eur(P.reserved) + ' odottaa täyttöjä · ' : ''}${eur(P.mainFree)} vapaata</div>
+      ${P.pockets.filter(p => p.role === 'reserve').map(p => `<div style="display:flex;justify-content:space-between;font-size:13px;padding-top:8px;margin-top:8px;border-top:.5px solid var(--surface2)"><b style="font-weight:500">${esc(p.name)}</b><span>${eur(p.balance)}</span></div><div style="font-size:12px;color:var(--muted)">Kortiton · ylijäämät ja raskaammat kuukaudet</div>`).join('')}
+    </div>
+    ${moves.length ? `<div class="sum-card" style="margin-bottom:12px;background:var(--blue-light);border-color:var(--blue-light)">
+      <div class="sum-label" style="color:var(--blue)">Tasaa ennen palkkaa</div>
+      <div style="font-size:13px;line-height:1.5;margin:4px 0 8px">Ennuste palkkapäivänä ${esigned(Math.round(P.forecast))}. Ehdotetut siirrot:</div>
+      ${moves.map(m => `<div style="display:flex;justify-content:space-between;align-items:center;min-height:40px;padding:0 12px;margin-bottom:6px;border:.5px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);font-size:13px"><span>${esc(m.from)} → ${esc(m.to)}</span><b style="font-weight:500">${m.amount} €</b></div>`).join('')}
+      <div style="font-size:11px;color:var(--muted)">Ehdotus — siirron teet itse pankissa.</div></div>` : ''}
+    <div class="sum-card" style="margin-bottom:12px">
+      <div class="sum-label">Jakso yhteensä</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:6px">
+        <thead><tr style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em"><th style="text-align:left;font-weight:500;padding-bottom:6px">Tasku</th><th style="text-align:right;font-weight:500">Budjetti</th><th style="text-align:right;font-weight:500">Käytetty</th><th style="text-align:right;font-weight:500">Ennuste</th></tr></thead>
+        <tbody>${sp.map(p => `<tr style="border-top:.5px solid var(--surface2)"><td style="padding:6px 0">${esc(p.name)}</td><td style="text-align:right">${p.budget ? Math.round(p.budget) : '–'}</td><td style="text-align:right">${Math.round(p.spent)}</td><td style="text-align:right;color:${tmColor(p.forecast)}">${tmInt(p.forecast)}</td></tr>`).join('')}
+          <tr style="border-top:.5px solid var(--border);font-weight:500"><td style="padding:6px 0">Yhteensä</td><td style="text-align:right">${Math.round(tmSum(sp, p => p.budget))}</td><td style="text-align:right">${Math.round(P.spent)}</td><td style="text-align:right;color:${tmColor(P.forecast)}">${tmInt(P.forecast)}</td></tr></tbody>
+      </table>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-secondary" onclick="openPayModal()">Palkkapäivän jako</button>
+      <button class="btn btn-secondary" onclick="openTmModal()">Taskujen täytöt</button>
+      <button class="btn btn-secondary" onclick="openRecModal()">Toistuvat maksut</button>
+    </div>`;
+}
+
+// Kaksitilimallissa Taskut korvaa Kategoriat mobiilinavissa; Kategoriat löytyy Lisää-valikosta.
+function applyTmUI() {
+  const split = tmSplit();
+  document.querySelectorAll('.tm-split').forEach(e => { e.style.display = split ? '' : 'none'; });
+  document.querySelectorAll('.tm-single').forEach(e => { e.style.display = split ? 'none' : ''; });
+}
+
+// ── UI: Palkkapäivän jako ─────────────────────────────────────────────────────────
+function openPayModal() { renderPayModal(); openModal('payModal'); }
+function renderPayModal() {
+  const el = document.getElementById('payBody'); if (!el) return;
+  const p = computePaydayPlan();
+  const tag = s => s === 'manual' ? ' <span style="font-size:10px;color:var(--gold)">käsin</span>' : s === 'setting' ? ' <span style="font-size:10px;color:var(--blue)">asetus</span>' : '';
+  const sub = (l, v) => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);padding:2px 0"><span>${l}</span><span>${v}</span></div>`;
+  let n = 0;
+  const step = (title, amount, inner) => `<div style="display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:.5px solid var(--border)">
+    <input type="checkbox" id="pay${++n}" style="width:20px;height:20px;margin-top:1px;accent-color:var(--green);flex-shrink:0">
+    <div style="flex:1;min-width:0"><label for="pay${n}" style="display:flex;justify-content:space-between;gap:8px;font-size:14px;font-weight:500"><span>${title}</span><span>${eur(amount)}</span></label>${inner || ''}</div></div>`;
+  const billsAcc = p.split ? (accountByKey(tm('bills_account'))?.label || '') : 'käyttötili';
+  const invPct = p.target ? Math.min(p.invested / p.target, 1) * 100 : 0;
+  const ic = p.invested >= p.target ? 'var(--green)' : 'var(--red)';
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;background:var(--surface2);border-radius:var(--radius);padding:12px 14px;margin-bottom:6px">
+      <div><div style="font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--dim)">Nettopalkka</div><div style="font-size:12px;color:var(--muted)">jakso ${ddmm(p.next.startISO)}–${ddmm(tmAddDays(p.next.endISO, -1))}</div></div>
+      <div style="font-size:26px;font-weight:300;color:var(--green)">${eur(p.salary)}</div></div>
+    <div style="font-size:11px;color:var(--dim);margin:6px 0 4px">Erät tunnistettu tilitapahtumista, ellei toisin merkitty. <span style="color:var(--blue);cursor:pointer" onclick="openRecModal()">Toistuvat maksut ›</span></div>
+    ${step(`Jätä laskuihin · ${esc(billsAcc)}`, p.billSum, p.bills.map(b => sub(`${esc(b.label)} ~${ddmm(b.due)}${tag(b.source)}`, eur(b.amount))).join(''))}
+    ${p.autoInvSum ? step('Automaattiset sijoitukset', p.autoInvSum, p.autoInv.map(b => sub(`${esc(b.label)} ~${ddmm(b.due)}`, eur(b.amount))).join('')) : ''}
+    ${p.buffer ? step('Puskuri', p.buffer, sub('jää tilille' + tag('setting'), '')) : ''}
+    ${p.split ? step(`Siirrä ${esc(accountByKey(tm('spend_account'))?.label || '')}iin`, p.transfer,
+      p.fills.map(f => sub(`${esc(f.name)}${f.cadence === 'week' ? ` · ${f.count} ${WEEKDAYS_FI[f.weekday]} × ${eur(f.fill)}` : ''}`, eur(f.amount))).join('')
+      + (p.spendInvest ? sub('Sijoitukset kulutustililtä' + tag('setting'), eur(p.spendInvest)) : '')
+      + (Math.abs(p.spendFree) >= 1 ? sub('Päätilille vapaaksi', esigned(p.spendFree)) : '')) : ''}
+    ${step(tmTargets().frame === 'fire' ? 'Jäännös → sijoituksiin' : 'Jäännös', Math.max(p.remainder, 0),
+      p.remainder < 0 ? `<div style="font-size:12px;color:var(--red);margin-top:2px">Palkka ei riitä: vaje ${eur(p.remainder)}</div>` : '')}
+    <div class="sum-card" style="border-top:2.5px solid ${ic};margin-top:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center"><div class="sum-label" style="margin:0">Sijoitukset palkasta</div><span style="font-size:11px;font-weight:500;color:${ic}">● ${p.invested >= p.target ? 'Tavoitteessa' : 'Alle tavoitteen'}</span></div>
+      <div style="display:flex;align-items:baseline;gap:8px;margin-top:6px"><span style="font-size:26px;font-weight:300">${eur(p.invested)}</span><span style="font-size:13px;color:var(--muted)">/ ${eur(p.target)}${p.invested < p.target ? ' · vaje ' + eur(p.target - p.invested) : ''}</span></div>
+      <div style="height:6px;border-radius:3px;background:var(--surface2);margin-top:8px"><div style="width:${invPct}%;height:6px;border-radius:3px;background:var(--blue)"></div></div>
+    </div>`;
+}
+
+// ── UI: Toistuvat maksut ──────────────────────────────────────────────────────────
+function openRecModal() { renderRecModal(); openModal('recModal'); }
+function tmRecUpdate(fn) {
+  const rec = JSON.parse(JSON.stringify(tm('recurring') || {}));
+  rec.overrides = rec.overrides || {}; rec.manual = rec.manual || [];
+  fn(rec);
+  saveSettingRaw('recurring', rec);
+  renderRecModal(); renderTab(curTab);
+}
+function tmRecSet(i, status) { const r = tmRecCache[i]; if (!r) return; tmRecUpdate(rec => { if (status) rec.overrides[r.key] = status; else delete rec.overrides[r.key]; }); }
+function tmManualAdd() {
+  const v = id => (document.getElementById(id) || {}).value || '';
+  const label = v('recMLabel').trim(), amount = parseFloat(String(v('recMAmount')).replace(',', '.')), day = parseInt(v('recMDay'), 10);
+  if (!label || !(amount > 0) || !(day >= 1 && day <= 31)) { showToast('Anna nimi, summa ja eräpäivä', 'error'); return; }
+  tmRecUpdate(rec => rec.manual.push({ id: 'm' + Date.now(), label, amount, day, start: v('recMStart') || null, account: tmRecAccounts()[0] }));
+}
+function tmManualDel(id) { tmRecUpdate(rec => { rec.manual = rec.manual.filter(m => m.id !== id); }); }
+function renderRecModal() {
+  const el = document.getElementById('recBody'); if (!el) return;
+  tmRecCache = detectRecurring();
+  const dots = r => `<span style="display:inline-flex;gap:3px;margin-left:6px;vertical-align:middle">${r.seen.map(s => `<span style="width:9px;height:4px;border-radius:2px;background:${s ? 'var(--green)' : 'var(--border)'}"></span>`).join('')}</span>`;
+  const btn = (i, st, l) => `<button class="btn btn-secondary btn-xs" onclick="tmRecSet(${i},${st ? `'${st}'` : 'null'})">${l}</button>`;
+  const amt = r => r.max - r.min > 0.2 * r.min ? `${Math.round(r.min)}–${Math.round(r.max)} €` : eur(r.lastTotal);
+  const item = (r, i, actions, meta) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-top:.5px solid var(--border)">
+    <div style="min-width:0"><div style="font-size:13px">${esc(r.label)}${dots(r)}</div><div style="font-size:11px;color:var(--muted);margin-top:2px">${meta}</div></div>
+    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0"><span style="font-size:13px;white-space:nowrap">${amt(r)}</span>${actions}</div></div>`;
+  const idx = r => tmRecCache.indexOf(r);
+  const bills = tmRecCache.filter(r => r.status === 'bill');
+  const check = tmRecCache.filter(r => r.status === 'check');
+  const habits = tmRecCache.filter(r => r.status === 'habit').sort((a, b) => b.total - a.total).slice(0, 8);
+  const ign = tmRecCache.filter(r => r.status === 'ignore');
+  const manual = ((tm('recurring') || {}).manual) || [];
+  const sec = (title, n, body, color) => `<div style="margin-top:14px"><div style="display:flex;justify-content:space-between;font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--dim)"><span>${title}</span><span style="color:${color || 'var(--dim)'}">${n}</span></div>${body}</div>`;
+  const accLbl = tmRecAccounts().map(k => accountByKey(k)?.label || k).join(', ');
+  el.innerHTML = `
+    <div style="font-size:12px;color:var(--muted);line-height:1.5">${esc(accLbl)} · ${TM_REC_PERIODS} edellistä palkkajaksoa. Ennusteet ja palkkapäivän jako käyttävät vain laskuja.</div>
+    ${sec('Laskut', bills.length, bills.map(r => item(r, idx(r), btn(idx(r), 'ignore', 'Ei lasku'), `${r.times > 1 ? r.times + ' krt jaksossa' : '~' + r.dom + '. pv'} · ${esc(r.cat || '')}${r.override ? ' · vahvistettu' : ''}`)).join(''), 'var(--green)')}
+    ${check.length ? sec('Tarkista', check.length, check.map(r => item(r, idx(r), btn(idx(r), 'bill', 'Lasku') + btn(idx(r), 'ignore', 'Ohita'), esc(r.reason))).join(''), 'var(--gold)') : ''}
+    ${habits.length ? sec('Toistuvat ostot · ei eriä', '', habits.map(r => item(r, idx(r), btn(idx(r), 'bill', 'Lasku'), `${r.n} krt / ${r.periods} jaksoa · yht. ${eur(r.total)}`)).join('')) : ''}
+    ${ign.length ? sec('Ohitetut', ign.length, ign.map(r => item(r, idx(r), btn(idx(r), null, 'Palauta'), esc(r.cat || ''))).join('')) : ''}
+    ${sec('Käsin lisätyt', manual.length, manual.map(m => `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-top:.5px solid var(--border)">
+      <div><div style="font-size:13px">${esc(m.label)}</div><div style="font-size:11px;color:var(--muted)">${m.day}. pv${m.start ? ' · alkaen ' + ddmm(m.start) : ''}</div></div>
+      <div style="display:flex;align-items:center;gap:6px"><span style="font-size:13px">${eur(m.amount)}</span><button class="btn btn-secondary btn-xs" onclick="tmManualDel('${esc(m.id)}')">Poista</button></div></div>`).join('')
+      + `<div style="font-size:12px;color:var(--muted);margin:8px 0 6px">Uusi maksu tunnistuu vasta kun se on näkynyt kolmessa jaksossa. Lisää tiedossa oleva erä:</div>
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:6px">
+        <input class="field-input" id="recMLabel" placeholder="Nimi, esim. OP-asuntolaina" aria-label="Nimi">
+        <input class="field-input" id="recMAmount" type="number" inputmode="decimal" step="0.01" placeholder="€" aria-label="Summa">
+        <input class="field-input" id="recMStart" type="date" aria-label="Alkaen">
+        <input class="field-input" id="recMDay" type="number" min="1" max="31" placeholder="pv" aria-label="Eräpäivä">
+      </div>
+      <button class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:8px" onclick="tmManualAdd()">+ Lisää erä</button>`)}
+    <div style="font-size:11px;color:var(--dim);margin-top:12px;line-height:1.5">Maksunsaajasta poistetaan viitekoodit ja kaupunki (Spotify P42A1F2DD9 Stockholm → spotify). Lasku = kerran tai kiinteästi kahdesti jaksossa, päivä ±5. Useammin = toistuva osto.</div>`;
+}
+
+// ── UI: Tilimalli ja budjetti -asetukset ──────────────────────────────────────────
+let tmPocketNames = [];
+function openTmModal() { renderTmModal(); openModal('tmModal'); }
+function tmSet(key, value) {
+  saveSettingRaw(key, TM_NUM_KEYS.includes(key) ? (parseFloat(value) || 0) : value);
+  renderTmModal(); applyTmUI(); renderAll();
+}
+function tmSetPocket(i, field, value) {
+  const name = tmPocketNames[i]; if (name === undefined) return;
+  const p = JSON.parse(JSON.stringify(tm('pockets') || {}));
+  p[name] = p[name] || {};
+  p[name][field] = (field === 'fill' || field === 'weekday') ? (parseFloat(value) || 0) : value;
+  saveSettingRaw('pockets', p);
+  renderTmModal(); renderAll();
+}
+function tmSetOwn(field, value) {
+  const o = Object.assign({}, tm('nws_own') || {}); o[field] = parseFloat(value) || 0;
+  saveSettingRaw('nws_own', o); renderTmModal(); renderAll();
+}
+function renderTmModal() {
+  const el = document.getElementById('tmBody'); if (!el) return;
+  const split = tm('account_model') === 'split';
+  const chk = accounts.filter(a => a.kind === 'checking');
+  const opt = (sel) => chk.map(a => `<option value="${esc(a.key)}"${a.key === sel ? ' selected' : ''}>${esc(a.label)}</option>`).join('');
+  const choice = (val, title, desc, on, fn) => `<button onclick="${fn}('${val}')" style="display:flex;flex-direction:column;gap:4px;width:100%;text-align:left;padding:12px 14px;margin-bottom:8px;border-radius:var(--radius);font-family:inherit;cursor:pointer;background:${on ? 'var(--green-light)' : 'var(--surface)'};border:${on ? '1.5px solid var(--green)' : '.5px solid var(--border)'};color:var(--text)">
+    <span style="font-size:14px;font-weight:500">${title}</span><span style="font-size:12px;color:var(--muted);line-height:1.45">${desc}</span></button>`;
+  const fld = (label, input) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:44px;border-top:.5px solid var(--border);font-size:13px"><span>${label}</span>${input}</div>`;
+  const num = (key, w) => `<input class="saldo-in" style="width:${w || 90}px;text-align:right" type="number" step="1" value="${tm(key) || ''}" onchange="tmSet('${key}', this.value)">`;
+  const H = t => `<div style="font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--dim);margin:18px 0 8px">${t}</div>`;
+  let pocketsHTML = '';
+  if (split && tmSplit()) {
+    const P = computePockets();
+    tmPocketNames = P.pockets.map(p => p.name);
+    const wdOpts = sel => [1, 2, 3, 4, 5, 6, 0].map(d => `<option value="${d}"${d === sel ? ' selected' : ''}>${WEEKDAYS_FI[d]}</option>`).join('');
+    pocketsHTML = H('Taskut · ' + esc(P.label)) + (P.pockets.length ? P.pockets.map((p, i) => `
+      <div style="display:flex;align-items:center;gap:6px;min-height:44px;border-top:.5px solid var(--border);font-size:13px">
+        <span style="flex:1;min-width:0">${esc(p.name)}</span>
+        ${p.cadence !== 'reserve' ? `<input class="saldo-in" style="width:70px;text-align:right" type="number" step="1" value="${p.fill || ''}" placeholder="€" aria-label="Täyttö ${esc(p.name)}" onchange="tmSetPocket(${i},'fill',this.value)">` : ''}
+        <select class="saldo-in" style="width:auto" aria-label="Rytmi" onchange="tmSetPocket(${i},'cadence',this.value)">
+          <option value="period"${p.cadence === 'period' ? ' selected' : ''}>/ jakso</option><option value="week"${p.cadence === 'week' ? ' selected' : ''}>/ viikko</option><option value="reserve"${p.cadence === 'reserve' ? ' selected' : ''}>kortiton</option></select>
+        ${p.cadence === 'week' ? `<select class="saldo-in" style="width:auto" aria-label="Viikonpäivä" onchange="tmSetPocket(${i},'weekday',this.value)">${wdOpts(p.weekday)}</select>` : ''}
+      </div>`).join('') : '<div style="font-size:12px;color:var(--muted)">Taskuja ei löytynyt kulutustilin otteesta (Revolutin konsolidoitu ote).</div>');
+  }
+  const t = tmTargets(), sal = settings.monthly_salary || 0;
+  const billsPer = tmSum(detectRecurring().filter(r => r.status === 'bill' && r.type !== 'savings'), r => r.lastTotal);
+  const frameTab = (v, l) => `<button onclick="tmSet('budget_frame','${v}')" style="flex:1;min-height:40px;border-radius:var(--radius-sm);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;background:${t.frame === v ? 'var(--green)' : 'var(--surface)'};color:${t.frame === v ? '#fff' : 'var(--text)'};border:${t.frame === v ? 'none' : '.5px solid var(--border)'}">${l}</button>`;
+  let frameBody = '';
+  if (t.frame === 'fire') {
+    const left = sal - t.invest - billsPer;
+    frameBody = fld('Sijoitukset kuukaudessa', num('invest_target')) +
+      fld('Toistuvat laskut (tunnistettu)', `<span>${eur(billsPer)}</span>`) +
+      fld('<b style="font-weight:500">Kulutukseen jää</b>', `<b style="font-weight:500;color:${left >= 0 ? 'var(--text)' : 'var(--red)'}">${esigned(left)}</b>`);
+  } else if (t.frame === '503020') {
+    frameBody = fld('Needs 50 %', `<span>${eur(sal * .5)}</span>`) + fld('Wants 30 %', `<span>${eur(sal * .3)}</span>`) + fld('Savings 20 %', `<span>${eur(sal * .2)}</span>`);
+  } else {
+    const o = tm('nws_own') || {};
+    const inp = f => `<span style="display:flex;align-items:center;gap:4px"><input class="saldo-in" style="width:60px;text-align:right" type="number" step="1" value="${+o[f] || 0}" onchange="tmSetOwn('${f}',this.value)"> %</span>`;
+    frameBody = fld('Needs', inp('n')) + fld('Wants', inp('w')) + fld('Savings', inp('s')) +
+      ((+o.n || 0) + (+o.w || 0) + (+o.s || 0) !== 100 ? `<div style="font-size:12px;color:var(--red);margin-top:4px">Summa ${(+o.n || 0) + (+o.w || 0) + (+o.s || 0)} % — pitäisi olla 100 %.</div>` : '');
+  }
+  el.innerHTML = `
+    ${H('Miten maksat?')}
+    ${choice('single', 'Yksi käyttötili', 'Laskut ja kulutus samalta tililtä. Ennuste: saldo − tulossa olevat laskut − muuttuvan kulutuksen tahti.', !split, 'tmSetModel')}
+    ${choice('split', 'Laskutili + kulutustili', 'Palkka jää laskutilille, kulutusraha siirretään erilliselle tilille. Kummallekin oma ennuste — laskutilillä ei päivätahtia.', split, 'tmSetModel')}
+    ${split ? `<div class="sum-card" style="padding:4px 14px">
+      ${fld('Laskutili', `<select class="saldo-in" style="width:auto" onchange="tmSet('bills_account',this.value)">${opt(tm('bills_account'))}</select>`)}
+      ${fld('Kulutustili', `<select class="saldo-in" style="width:auto" onchange="tmSet('spend_account',this.value)">${opt(tm('spend_account'))}</select>`)}
+      ${fld('Siirto kulutustilille / jakso <br><span style="font-size:11px;color:var(--dim)">tyhjä = täytöt + sijoitukset</span>', num('spend_transfer'))}
+      ${fld('Sijoitukset kulutustililtä / jakso', num('spend_invest'))}
+      ${fld('Varoita laskutilin korttiostoista', `<input type="checkbox" ${tm('card_warn') ? 'checked' : ''} style="width:20px;height:20px;accent-color:var(--green)" onchange="tmSet('card_warn', this.checked ? 1 : 0)">`)}
+    </div>${tm('bills_account') === tm('spend_account') ? '<div style="font-size:12px;color:var(--red);margin-top:6px">Valitse eri tilit laskuille ja kulutukselle.</div>' : ''}` : ''}
+    ${pocketsHTML}
+    ${H('Budjettikehys')}
+    <div style="font-size:12px;color:var(--muted);line-height:1.45;margin-bottom:8px">N/W/S-jakauma näkyy aina. Kehys ratkaisee tavoiteviivat ja palkkapäivän jaon jäännöksen.</div>
+    <div style="display:flex;gap:6px;margin-bottom:6px">${frameTab('fire', 'Säästö ensin')}${frameTab('503020', '50/30/20')}${frameTab('own', 'Oma jako')}</div>
+    <div class="sum-card" style="padding:4px 14px">${frameBody}${fld('Puskuri laskutilille / jakso', num('buffer'))}</div>
+    <button class="add-option" style="margin-top:14px" onclick="closeModal('tmModal');openRecModal()">🔁 Toistuvat maksut</button>`;
+}
+function tmSetModel(v) { tmSet('account_model', v); }
+// N/W/S-korttien tavoitteet kehyksestä. Säästö ensin -kehyksessä needs/wants ilman %-tavoitetta,
+// palkit skaalautuvat silloin 50/30-viitteeseen ja säästö sijoitustavoitteen osuuteen palkasta.
+function tmTgtPct(k) {
+  const t = tmTargets();
+  if (t[k] > 0) return t[k];
+  if (k === 's' && t.frame === 'fire') { const sal = settings.monthly_salary || 0; return sal ? Math.max(t.invest / sal * 100, 1) : 20; }
+  return { n: 50, w: 30, s: 20 }[k];
+}
+function tmTgtLbl(k) {
+  const t = tmTargets();
+  if (t.frame === 'fire') return k === 's' ? ` · sijoitus ${Math.round(t.invest)} €` : '';
+  return ` · tavoite ${t[k]}%`;
+}
+
 
 function buildTips(month) {
   const tips = [];
@@ -2154,18 +2920,19 @@ function kassavirtaCardHTML(s, bInc, isEstimate, list) {
           <div class="kv-c">${netto>=0 ? 'jää puskuriin' : 'alijäämä'}</div>
         </div>
       </div>
-      <div style="display:flex;height:6px;border-radius:3px;overflow:hidden;margin-top:14px">
+      <div style="position:relative;margin-top:14px"><div style="display:flex;height:6px;border-radius:3px;overflow:hidden">
         <div style="width:${pct(s.needs)}%;background:var(--green)"></div>
         <div style="width:${pct(s.wants)}%;background:var(--gold)"></div>
         <div style="width:${pct(s.sav)}%;background:var(--blue)"></div>
         <div style="width:${pct(Math.max(netto,0))}%;background:var(--border)"></div>
-      </div>
+      </div>${tmNwsMarkers()}</div>
       <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:11px;color:var(--muted)">
         <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--green);margin-right:5px"></span>Needs ${Math.round(pct(s.needs))} %</span>
         <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--gold);margin-right:5px"></span>Wants ${Math.round(pct(s.wants))} %</span>
         <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--blue);margin-right:5px"></span>Savings ${Math.round(pct(s.sav))} %</span>
         <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--border);margin-right:5px"></span>Puskuri ${Math.round(pct(Math.max(netto,0)))} %</span>
       </div>
+      ${tmFrameLine(list || [], bInc)}${tmFlowExtrasHTML(list || [])}
       ${creditKulutus > 0 ? `<div style="margin-top:14px;padding:8px 10px;background:var(--gold-light);border-radius:var(--radius-sm);font-size:12px;color:var(--gold)">${eur(creditKulutus)} maksettu luotolla — ei lähtenyt tililtä tässä jaksossa</div>` : ''}
     </div>`;
 }
@@ -2325,22 +3092,22 @@ function renderYhteenveto() {
       <div class="sum-bar"><div class="sum-bar-fill" style="width:100%"></div></div>
     </div>
     <div class="sum-card sum-needs">
-      <div class="sum-label">Needs · tavoite 50%</div>
+      <div class="sum-label">Needs${tmTgtLbl('n')}</div>
       <div class="sum-value">${eur(s.needs)}</div>
       <div class="sum-sub">${np}% budjetista</div>
-      <div class="sum-bar"><div class="sum-bar-fill" style="width:${Math.min(np/50*100,100)}%;background:${np>50?'var(--red)':'var(--green)'}"></div></div>
+      <div class="sum-bar"><div class="sum-bar-fill" style="width:${Math.min(np/tmTgtPct('n')*100,100)}%;background:${np>tmTgtPct('n')?'var(--red)':'var(--green)'}"></div></div>
     </div>
     <div class="sum-card sum-wants">
-      <div class="sum-label">Wants · tavoite 30%</div>
+      <div class="sum-label">Wants${tmTgtLbl('w')}</div>
       <div class="sum-value">${eur(s.wants)}</div>
       <div class="sum-sub">${wp}% budjetista</div>
-      <div class="sum-bar"><div class="sum-bar-fill" style="width:${Math.min(wp/30*100,100)}%;background:${wp>30?'var(--red)':'var(--gold)'}"></div></div>
+      <div class="sum-bar"><div class="sum-bar-fill" style="width:${Math.min(wp/tmTgtPct('w')*100,100)}%;background:${wp>tmTgtPct('w')?'var(--red)':'var(--gold)'}"></div></div>
     </div>
     <div class="sum-card sum-savings" onclick="toggleSavDetail()" style="cursor:pointer">
-      <div class="sum-label">Säästö · tavoite 20%</div>
+      <div class="sum-label">Säästö${tmTgtLbl('s')}</div>
       <div class="sum-value" style="${savedAmt<0?'color:var(--red)':''}">${savedAmt<0?'−':''}${eur(savedAmt)}</div>
       <div class="sum-sub">${savRate===null?'–':(savRate<0?'−':'')+Math.abs(savRate)+'%'} tuloista · <span style="color:var(--blue)">${savOpen?'sulje erittely':'erittely ›'}</span></div>
-      <div class="sum-bar"><div class="sum-bar-fill" style="width:${Math.max(0,Math.min((savRate||0)/20*100,100))}%"></div></div>
+      <div class="sum-bar"><div class="sum-bar-fill" style="width:${Math.max(0,Math.min((savRate||0)/tmTgtPct('s')*100,100))}%"></div></div>
     </div>
   `;
 
@@ -2466,8 +3233,9 @@ function txItemHTML(t) {
   const amtClass = t.amount>0?'pos':t.type==='flag'?'red':'neg';
   const amtSign = t.amount>0?'+':'−';
   const acct = accountByKey(t.account);
+  const pocket = tmPocketName(t);
   const acctBadge = (acct && acct.key!=='Perus')
-    ? `<span style="display:inline-block;font-size:10px;padding:0 4px;border-radius:3px;margin-left:5px;background:var(--surface2);color:var(--muted);font-weight:500;vertical-align:middle">${esc(acct.label)}</span>`
+    ? `<span style="display:inline-block;font-size:10px;padding:0 4px;border-radius:3px;margin-left:5px;background:var(--surface2);color:var(--muted);font-weight:500;vertical-align:middle">${esc(pocket || acct.label)}</span>`
     : '';
   const splitBlock = hasSplit ? `<div class="tx-splits">${t.splits.map(s=>
     `<div class="tx-split-row"><span class="tx-split-label">${esc(s.label||s.cat)}</span><span class="tx-split-amt">${eur(s.amount)}</span></div>`
@@ -3621,6 +4389,10 @@ function renderLisaa() {
   document.getElementById('lisaaContent').innerHTML = `
     <div style="display:flex;flex-direction:column;gap:8px">
       <label class="add-option" style="cursor:pointer">📂 Tuo CSV<input type="file" accept=".csv" multiple hidden onchange="handleCSVInput(event)"></label>
+      <button class="add-option" onclick="openTmModal()">🧭 Tilimalli &amp; budjetti</button>
+      <button class="add-option" onclick="openRecModal()">🔁 Toistuvat maksut</button>
+      ${tmSplit() ? `<button class="add-option" onclick="openPayModal()">💸 Palkkapäivän jako</button>
+      <button class="add-option" onclick="switchTab('kategoriat')">🗂 Kategoriat</button>` : ''}
       <button class="add-option" onclick="switchTab('analytiikka')">📊 Analytiikka &amp; trendit</button>
       <button class="add-option" onclick="switchTab('vertailu')">📅 Kuukausivertailu</button>
       <button class="add-option" onclick="switchTab('saannot')">⚙️ Kategorisointisäännöt</button>
@@ -3716,7 +4488,7 @@ function switchTab(tab) {
   if (panel) panel.classList.add('active');
   document.querySelectorAll('.dnav-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   document.querySelectorAll('.mob-nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
-  const hideMonth = tab === 'saannot' || tab === 'analytiikka';
+  const hideMonth = tab === 'saannot' || tab === 'analytiikka' || tab === 'taskut';
   const mobBar = document.querySelector('.month-bar');
   const deskRow = document.getElementById('deskMonthRow');
   if (mobBar) mobBar.style.display = hideMonth ? 'none' : '';
