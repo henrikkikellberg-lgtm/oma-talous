@@ -133,7 +133,9 @@ eq('Riennot kortiton', pk('Riennot').role, 'reserve');
 eq('kulutustilin saldo', P.total, 1250-214.77-118-110.22-156.03-202.8-30);
 eq('päätili', P.mainBal, 1250-176-232-250-60-214.77-118);
 eq('varattu täyttöihin', P.reserved, 176);
-eq('ennuste yht.', P.forecast, (65.78+176-110.22/16*15)+(75.97-156.03/16*15)+(47.2-202.8/16*15)+(30-30/16*15));
+eq('taskujen ennuste', P.pocketsForecast, (65.78+176-110.22/16*15)+(75.97-156.03/16*15)+(47.2-202.8/16*15)+(30-30/16*15));
+eq('ennuste yht. = taskut + päätilin vapaa', P.forecast, P.pocketsForecast + P.mainFree);
+eq('päätilin vapaa', P.mainFree, 1250-176-232-250-60-214.77-118-176);
 const mv=J(`tmRebalance(computePockets())`);
 eq('tasaus: ensin pienin vaje (Ulkona)', mv[0].to, 'Ulkona'); eq('tasaus: Päivittäistavaroista', mv[0].from, 'Päivittäistavarat'); eq('tasaus: 71 €', mv[0].amount, 71);
 

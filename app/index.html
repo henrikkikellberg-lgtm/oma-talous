@@ -692,7 +692,7 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const APP_VERSION = '1.26.2';
+const APP_VERSION = '1.26.3';
 const API_BASE = 'https://oma-talous-api.henrikki-kellberg.workers.dev';
 // Salasana ei ole enää kovakoodattu — luetaan localStoragesta kirjautumisen jälkeen.
 let API_SECRET = (typeof localStorage !== 'undefined' && localStorage.getItem('ot_secret')) || '';
@@ -2363,7 +2363,10 @@ function computePockets() {
   const spent = tmSum(sp, p => p.spent);
   return { key, label: acc ? acc.label : key, cur, through, elapsed, daysLeft, periodLen: tmDays(cur.startISO, cur.endISO),
     pockets, total, mainBal: total - inPockets, reserved, mainFree: total - inPockets - reserved,
-    forecast: pockets.length ? tmSum(sp, p => p.forecast) : total - (spent / elapsed) * daysLeft,
+    // v1.26.3: koko kulutustili on kulutusrahaa → päätilin vapaa osa (saldo − varatut täytöt)
+    // kuuluu ennusteeseen. Ennen taskut −50 € ja "Ei riitä", vaikka päätilillä oli 112 € vapaana.
+    forecast: pockets.length ? tmSum(sp, p => p.forecast) + (total - inPockets - reserved) : total - (spent / elapsed) * daysLeft,
+    pocketsForecast: tmSum(sp, p => p.forecast),
     pace: spent / elapsed, perDay: daysLeft ? total / daysLeft : total, spent };
 }
 // Ehdotus: ylijäämäisistä taskuista vajaisiin, pienin vaje ensin (mahdollisimman moni kuntoon).
@@ -2546,7 +2549,7 @@ function tmSplitCardsHTML() {
   const spendBody = sClosed
     ? `<div style="font-size:12px;color:var(--muted);margin-top:4px">palkkapäivänä nykytahdilla${P.pockets.filter(p => p.runOut).map(p => ` · ${esc(p.name)} loppuu ~${ddmm(p.runOut)}`).slice(0, 2).join('')}</div>`
     : `<div style="font-size:34px;font-weight:300;color:${pc};letter-spacing:-.5px;line-height:1;margin-top:10px">${esigned(Math.round(P.forecast))}</div>
-      <div style="font-size:12px;color:var(--muted);margin:3px 0 10px">taskuissa palkkapäivänä nykytahdilla · ${P.daysLeft} pv tiliotteen jälkeen</div>
+      <div style="font-size:12px;color:var(--muted);margin:3px 0 10px">kulutustilillä palkkapäivänä nykytahdilla · taskut ${esigned(Math.round(P.pocketsForecast))}, päätili ${esigned(Math.round(P.mainFree))} · ${P.daysLeft} pv tiliotteen jälkeen</div>
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-bottom:6px">
         ${tmKv('Tilillä', eur(P.total), 'tiliote ' + ddmm(P.through))}${tmKv('Tahti', eur(P.pace) + '<span style="font-size:11px">/pv</span>', '', P.pace > P.perDay ? 'var(--red)' : 'var(--green)')}${tmKv('Riittää', eur(P.perDay) + '<span style="font-size:11px">/pv</span>')}
       </div>
