@@ -53,7 +53,12 @@ INSERT INTO transactions VALUES
   ('cc1','2026-11-21','OPCredit','KELLBERG HENRIKKI','Pueblo','',-81.8,'Ravintolat','wants',NULL),
   ('int','2026-11-09','OPCredit','Korko','Korko','',-19.58,'Luotot — korko','needs',NULL),
   ('r1','2026-11-17','Revolut','Smartum','','Revolut · Ulkona',-34.12,'Ravintolat','wants',NULL),
-  ('r2','2026-11-16','Revolut','Apple Pay','','Revolut · palautus',16.9,'Ravintolat','wants',NULL),
+  ('r2','2026-11-16','Revolut','Apple Pay','','Revolut',16.9,'Ravintolat','wants',NULL),
+  ('rin','2026-10-30','Revolut','Avoimen pankkitoiminnan lisämaksu','','Revolut',500,'MobilePay & siirrot','neutral',NULL),
+  ('pu1','2026-10-30','Revolut','Taskuun EUR Ulkona','','Revolut',-232,'MobilePay & siirrot','neutral',NULL),
+  ('pu2','2026-10-30','Revolut','Taskuun EUR Ulkona','','Revolut · Ulkona',232,'MobilePay & siirrot','neutral',NULL),
+  ('pp1','2026-11-06','Revolut','Taskuun EUR Päivittäistavarat','','Revolut',-88,'MobilePay & siirrot','neutral',NULL),
+  ('pp2','2026-11-06','Revolut','Taskuun EUR Päivittäistavarat','','Revolut · Päivittäistavarat',88,'MobilePay & siirrot','neutral',NULL),
   ('r3','2026-11-18','Revolut','S-market','','Revolut · Päivittäistavarat',-40,'Päivittäistavarat','needs',NULL),
   ('vu','2026-11-05','Vuokra','Vastike','','',-300,'Vuokra — vastikkeet','neutral',NULL),
   ('fl','2026-11-20','Revolut','?','','Revolut',-5,'— Kategorisoimatta','flag',NULL);
@@ -81,11 +86,27 @@ close(n.investedFromIncome, 575);                    // vain käyttötileiltä
 close(n.creditDelta, 650 - 81.8 - 19.58);            // velka pieneni
 close(n.cashSum, 75);                                // vain käteistalletuksen neutraali osa
 assert.ok(!R.text.includes("Vastike"), "vuokratili ei saa näkyä");
-assert.match(R.text, /Kulutusta säästötileiltä 122,00 €/);
-assert.match(R.text, /Ostoja holdissa olevalla kortilla 81,80 €/);   // korko ei ole osto
+assert.match(R.text, /Kulutusta säästötileiltä 122,00 €: 21.11. OP Säästötili VR/);
+assert.match(R.text, /Ostoja holdissa olevalla kortilla 81,80 €: 21.11. OP Visa Credit Pueblo/);   // korko ei ole osto
 assert.match(R.text, /Tarkistamatta 1 riviä/);
 assert.match(R.text, /Tuloista jää jakson lopussa/);
 assert.ok(!R.text.includes("OP-asuntolaina"), "30.11. on seuraavassa jaksossa");
+
+// Pohja: palkkatilien ulkopuolelta maksettu kulutus = vuoto
+close(n.leak, 122 + 81.8 + 19.58);
+assert.match(R.text, /POHJA KESTÄÄ/);
+assert.match(R.text, /OP Säästötili 122,00 €, OP Visa Credit 101,38 €/);
+
+// Taskut: saldo koko historiasta, tulevat viikkotäytöt (pe) jakson loppuun
+const pk = (r, name) => r.pockets.list.find((p) => p.name === name);
+close(pk(R, "Ulkona").balance, 232 - 34.12);
+close(pk(R, "Päivittäistavarat").balance, 88 - 40);
+close(pk(R, "Päivittäistavarat").budget, 4 * 88);          // pe 30.10., 6.11., 13.11., 20.11.
+assert.equal(pk(R, "Päivittäistavarat").fillsLeft, 0);      // 27.11. aloittaa seuraavan jakson
+const R2 = await periodReport(env, "2026-11-10");
+assert.equal(pk(R2, "Päivittäistavarat").fillsLeft, 2);     // 13.11. ja 20.11.
+close(R2.pockets.reserved, 176);
+close(R.pockets.mainBal, 500 - 232 - 88 + 16.9 - 5);
 
 // Tuoreusportti: holdissa oleva ja vuokratili eivät estä
 const f = await freshness(env, "2026-11-24");

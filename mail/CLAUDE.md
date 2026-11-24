@@ -42,6 +42,13 @@ deployta: settings-avain `import_ibans`, esim. `{"FI..": "Vuokra"}`.
   edellinen pankkipäivä), splitit puretaan (`expandTx`), saman tyypin plusrivit netotetaan,
   sijoitukset = kategoria `Sijoittaminen` tyypistä riippumatta (tuloista = vain `checking`-tileiltä),
   luottovelan muutos saldoista, vuokratili pois. Käteistalletuksista vain neutraali osa.
+- **Pohja** (raportin ensimmäinen osio, TALOUS.md tavoite 4): palkka − kulutus kaikilta tileiltä
+  − sijoitukset tuloista. Negatiivinen = "POHJA VUOTAA". Erikseen paljonko kulutuksesta maksettiin
+  muualta kuin `checking`-tileiltä (säästötilit, luottokortit).
+- **Taskut** peilaavat `computePockets()`:a: saldo koko historiasta (`viesti = "Revolut · <tasku>"`),
+  kulutus jaksolta otteen päivään asti, budjetti = täytöt jaksossa (viikkotasku: täyttöviikonpäivät,
+  oletus pe), tulevat täytöt jakson loppuun varataan päätililtä, ennuste = saldo + tulevat − tahti × pv.
+  Vain split-tilimallissa.
 - Poikkeamat: kulutus säästötileiltä, ostot holdissa olevalla kortilla (korko/tilinhoito ei),
   harkinnanvarainen laskutililtä (split-malli), `flag`-rivit.
 - Ennuste: muuttuvien menojen (ei `FIXED_CATS`, ei `Asuminen*`) päivätahti × jäljellä olevat

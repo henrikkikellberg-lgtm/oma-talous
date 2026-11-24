@@ -164,16 +164,23 @@ export async function periodReport(env, today = todayHelsinki()) {
     return `${b.label}: ${eur(used)} / ${eur(b.limit_eur)} → jäljellä ${sgn(left)}${W.daysLeft > 0 ? ` (${eur(perDay)}/pv)` : ""}`;
   });
 
-  // Taskut (Revolut · <tasku>)
-  const pocketLines = Object.entries(S.pockets || {}).map(([name, p]) => {
-    const used = -sum(tx.filter((t) => (t.type === "needs" || t.type === "wants") && String(t.viesti || "").startsWith(`Revolut · ${name}`)));
-    const fill = p.cadence === "week" ? (+p.fill || 0) * W.periodLen / 7 : (+p.fill || 0);
-    return `${name}: ${eur(used)} / ~${eur(fill)}${p.cadence === "week" ? " (viikkotäyttö)" : ""}`;
-  });
+  // Taskut — peilaa frontendin computePockets(): saldo koko historiasta, kulutus jaksolta
+  // tiliotteen päivään asti, budjetti = täytöt jaksossa, tulevat viikkotäytöt jakson loppuun.
+  const P = await pockets(env, S, W, acc);
+
+  // Pohja: palkan pitää kattaa KAIKKI kulutus maksutilistä riippumatta (TALOUS.md).
+  // Säästötililtä tai luotolla maksettu kulutus on vuotoa, vaikka palkkatili näyttää plussaa.
+  const elsewhere = {};
+  for (const t of tx.filter((t) => (t.type === "needs" || t.type === "wants") && t.kind !== "checking")) {
+    elsewhere[t.account] = (elsewhere[t.account] || 0) - t.amount;
+  }
+  const leak = Object.values(elsewhere).reduce((s, v) => s + v, 0);
+  const afterInvest = kept - investedFromIncome;
 
   // Poikkeamat
   const flags = [];
-  const lineOf = (t) => `${ddmm(t.date)} ${t.account} ${(t.selitys && t.kind === "credit" ? t.selitys : t.payee) || t.selitys} ${eur(-t.amount)}`;
+  // Luottokorttiotteella payee = kortinhaltija, kauppias on selitys-kentässä (CLAUDE.md).
+  const lineOf = (t) => `${ddmm(t.date)} ${acc[t.account]?.label || t.account} ${(acc[t.account]?.kind === "credit" && t.selitys ? t.selitys : t.payee) || t.selitys} ${eur(-t.amount)}`;
   const spendRows = raw.filter((t) => t.amount < 0).flatMap(expandTx).filter((t) => t.type === "needs" || t.type === "wants");
   const onSavings = spendRows.filter((t) => acc[t.account]?.kind === "savings");
   if (onSavings.length) flags.push(`Kulutusta säästötileiltä ${eur(-sum(onSavings))}: ${onSavings.map(lineOf).join("; ")}`);
@@ -204,6 +211,13 @@ export async function periodReport(env, today = todayHelsinki()) {
   const L = [];
   L.push(`PALKKAJAKSO ${ddmm(W.start)}–${ddmm(W.lastDay)} · päivä ${W.daysElapsed}/${W.periodLen}, jäljellä ${W.daysLeft} pv`);
   L.push("");
+  L.push(`POHJA ${kept >= 0 && leak < 0.005 ? "KESTÄÄ" : kept >= 0 ? "KESTÄÄ, MUTTA VUOTAA" : "VUOTAA"}`);
+  L.push(`Palkka ${eur(income)} − kulutus kaikilta tileiltä ${eur(spend)} = ${sgn(kept)}`);
+  if (leak > 0.005) {
+    L.push(`Muualta kuin palkkatileiltä maksettu kulutus ${eur(leak)}: ${Object.entries(elsewhere).filter(([, v]) => Math.abs(v) > 0.005).map(([k, v]) => `${acc[k]?.label || k} ${eur(v)}`).join(", ")}`);
+  }
+  L.push(`− sijoitukset tuloista ${eur(investedFromIncome)} (tavoite ${eur(S.invest_target)}) = ${sgn(afterInvest)}${afterInvest < 0 ? " → katettu säästöistä, luotolla tai käteisellä" : ""}`);
+  L.push("");
   L.push("YHTEENVETO");
   L.push(`Tulot             ${eur(income)}`);
   L.push(`Kulutus           ${eur(spend)}  (välttämätön ${eur(needs)} · harkinnanv. ${eur(wants)})`);
@@ -225,7 +239,18 @@ export async function periodReport(env, today = todayHelsinki()) {
   L.push("KATEGORIAT (top 8)");
   for (const [c, v] of topCats) L.push(`${c}: ${eur(v)}`);
   if (budgetLines.length) { L.push(""); L.push("BUDJETIT"); L.push(...budgetLines); }
-  if (pocketLines.length) { L.push(""); L.push("TASKUT (käytetty / täyttö jaksolle)"); L.push(...pocketLines); }
+  if (P) {
+    L.push("");
+    L.push(`TASKUT (${P.label}, ote ${ddmm(P.through)} asti, ${P.daysLeft} pv jäljellä)`);
+    for (const p of P.list) {
+      const parts = [`käytetty ${eur(p.spent)}${p.budget ? ` / ${eur(p.budget)}` : ""}`, `saldo ${eur(p.balance)}`];
+      if (p.fillsLeft) parts.push(`tulossa ${p.fillsLeft} × ${eur(p.fill)}`);
+      if (p.role === "spend") parts.push(`ennuste ${sgn(p.forecast)}${p.forecast < 0 ? " ⚠" : ""}`);
+      L.push(`${p.name}${p.role === "reserve" ? " (varanto)" : p.cadence === "week" ? " (viikko)" : ""}: ${parts.join(" · ")}`);
+    }
+    L.push(`Päätili: saldo ${eur(P.mainBal)}${P.reserved ? `, varattu täyttöihin ${eur(P.reserved)}` : ""} → vapaana ${sgn(P.mainFree)}`);
+    L.push(`Kulutustili jakson lopussa ~${sgn(P.forecast)}`);
+  }
   L.push("");
   L.push("POIKKEAMAT");
   L.push(...(flags.length ? flags.map((f, i) => `${i + 1}. ${f}`) : ["– ei poikkeamia"]));
@@ -234,5 +259,50 @@ export async function periodReport(env, today = todayHelsinki()) {
   L.push(`Muuttuvat menot ${eur(pace)}/pv × ${W.daysLeft} pv = ${eur(pace * W.daysLeft)}`);
   if (upcoming.length) L.push(`Tulossa: ${upcoming.map((u) => `${u.label} ${eur(u.amount)} ${ddmm(u.due)}`).join(", ")}`);
   L.push(`Tuloista jää jakson lopussa ~${sgn(forecastKept)}`);
-  return { text: L.join("\n"), window: W, numbers: { income, needs, wants, kept, invested, investedFromIncome, creditDelta, cashSum, forecastKept } };
+  return { text: L.join("\n"), window: W, pockets: P, numbers: { income, needs, wants, kept, leak, afterInvest, invested, investedFromIncome, creditDelta, cashSum, forecastKept } };
+}
+
+// ── Taskut ───────────────────────────────────────────────────────────────────
+const countWeekday = (fromISO, toISO, wd) => {
+  let n = 0;
+  for (let d = fromISO; d < toISO; d = addDays(d, 1)) if (D(d).getUTCDay() === wd) n++;
+  return n;
+};
+async function pockets(env, S, W, acc) {
+  const key = S.spend_account;
+  if (S.account_model !== "split" || !acc[key]) return null;
+  const today = W.end;
+  const th = acc[key].last_import_through;
+  const through = th && th < today ? th : today;
+  const elapsed = Math.max(daysBetween(W.start, through) + 1, 1);
+  const daysLeft = Math.max(daysBetween(through, W.endPay) - 1, 0);
+  const { results: rows } = await env.DB.prepare(
+    "SELECT date, viesti, amount, type, splits FROM transactions WHERE account = ? AND date > ?"
+  ).bind(key, acc[key].opening_date).all();
+  const nameOf = (t) => { const v = t.viesti || "", i = v.indexOf(" · "); return i > 0 ? v.slice(i + 3) : null; };
+  const cfg = S.pockets || {};
+  const names = new Set(Object.keys(cfg));
+  rows.forEach((t) => { const n = nameOf(t); if (n) names.add(n); });
+  const list = [...names].map((name) => {
+    const c = cfg[name] || {};
+    const pr = rows.filter((t) => nameOf(t) === name);
+    const balance = sum(pr);
+    const spent = -sum(pr.flatMap(expandTx).filter((t) => t.date >= W.start && t.date <= through && ["needs", "wants", "financing"].includes(t.type)));
+    const role = c.cadence === "reserve" ? "reserve" : "spend";
+    const cadence = c.cadence || "period", wd = c.weekday ?? 5, fill = +c.fill || 0;
+    const week = cadence === "week";
+    const fillsLeft = week ? countWeekday(addDays(through, 1), W.endPay, wd) : 0;
+    const budget = fill * (week ? countWeekday(W.start, W.endPay, wd) : cadence === "period" ? 1 : 0);
+    const upcoming = fill * fillsLeft;
+    const pace = role === "spend" ? Math.max(spent, 0) / elapsed : 0;
+    const forecast = balance + upcoming - pace * daysLeft;
+    return { name, role, cadence, fill, balance, spent, budget, fillsLeft, upcoming, pace, forecast };
+  }).sort((a, b) => (a.role === b.role ? a.forecast - b.forecast : a.role === "spend" ? -1 : 1));
+  const total = (+acc[key].opening_balance || 0) + sum(rows);
+  const inPockets = sum(list, (p) => p.balance);
+  const reserved = sum(list, (p) => p.upcoming);
+  const mainBal = total - inPockets;
+  const mainFree = mainBal - reserved;
+  const forecast = sum(list.filter((p) => p.role === "spend"), (p) => p.forecast) + mainFree;
+  return { label: acc[key].label, through, daysLeft, list, total, mainBal, reserved, mainFree, forecast };
 }

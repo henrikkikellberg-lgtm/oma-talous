@@ -5,7 +5,7 @@ kiinteät kulut, velat ja kirjauslinjaukset. Lue ennen kuin vastaat kysymyksiin
 budjetista, saldoista tai sijoitusvarasta. Sovelluksen kehitys: `CLAUDE.md`.
 
 Päivitä tämä tiedosto, kun luvut tai päätökset muuttuvat (päivämäärä riville).
-Tila päivitetty: 11.11.2026.
+Tila päivitetty: 24.11.2026.
 
 ---
 
@@ -45,6 +45,13 @@ ne luetaan aina op-fund-trackerista, jotta lukuja on yksi.
 3. **Kulutusta seurataan viikoittain ja sitä pitää osata pienentää.** Tunnistettu kuvio:
    kortit tappiin ja maksu säästöistä/luotolla. 5–9/2026 kulutus (~3 520 €/kk) ylitti
    nettopalkan (~3 380 €/kk) jo ennen säästöjä; vaje katettiin Säästölippaasta.
+4. **Pohja ei saa vuotaa (24.11.2026).** Palkkatulon pitää kattaa KAIKKI kulutus
+   maksutilistä riippumatta **ja** sijoitukset tuloista. Säästötililtä, Lipaasta tai
+   luotolla maksettu kulutus (esim. VR-sarjalippu ja ePassi Säästötililtä, OP Visa
+   Creditin ostot) ei ole "ilmaista", vaikka palkkatili näyttää plussaa — se on vuotoa.
+   Mittari: palkka − kulutus kaikilta tileiltä − sijoitukset tuloista ≥ 0.
+   Jakso 27.10.–26.11.2026: +623 € ennen sijoituksia, −342 € niiden jälkeen; kulutuksesta
+   577 € maksettiin muualta (Säästötili 292, OP Visa Credit 284).
 
 ---
 
