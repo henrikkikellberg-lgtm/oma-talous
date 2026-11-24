@@ -1,0 +1,22 @@
+name = "oma-talous-mail"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+ALLOWED_SENDERS = "henrikki.kellberg@me.com,henrikki.kellberg@gmail.com"
+MAIL_FROM = "tiliote@fuseapt.com"
+
+# Tuonti kulkee olemassa olevan API:n kautta (sama dedup + luokittelu)
+[[services]]
+binding = "API"
+service = "oma-talous-api"
+
+# Vain settings.import_ibans-luku
+[[d1_databases]]
+binding = "DB"
+database_name = "oma-talous-db"
+database_id = "5f4a86cb-8d6d-42db-a541-07f25e6873cd"
+
+[observability]
+enabled = true

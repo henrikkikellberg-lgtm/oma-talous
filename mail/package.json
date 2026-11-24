@@ -1,0 +1,19 @@
+{
+  "name": "oma-talous-mail",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail oma-talous-mail",
+    "test": "node test/parse-pdf.mjs"
+  },
+  "dependencies": {
+    "mimetext": "^3.0.28",
+    "postal-mime": "^4.2.1",
+    "unpdf": "^1.9.1"
+  },
+  "devDependencies": {
+    "wrangler": "^4.167.0"
+  }
+}
