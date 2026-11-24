@@ -61,6 +61,11 @@ INSERT INTO transactions VALUES
   ('pp2','2026-11-06','Revolut','Taskuun EUR Päivittäistavarat','','Revolut · Päivittäistavarat',88,'MobilePay & siirrot','neutral',NULL),
   ('r3','2026-11-18','Revolut','S-market','','Revolut · Päivittäistavarat',-40,'Päivittäistavarat','needs',NULL),
   ('vu','2026-11-05','Vuokra','Vastike','','',-300,'Vuokra — vastikkeet','neutral',NULL),
+  ('kl0','2026-09-07','Perus','MOB.PAY*KAUPPALEHTI HELSINKI','PKORTTIMAKSU','',-35.9,'Kulttuuri ja viihde','wants',NULL),
+  ('kl1','2026-10-07','Perus','MOB.PAY*KAUPPALEHTI HELSINKI','PKORTTIMAKSU','',-35.9,'Kulttuuri ja viihde','wants',NULL),
+  ('kl2','2026-11-07','Perus','MOB.PAY*KAUPPALEHTI HELSINKI','PKORTTIMAKSU','',-35.9,'Kulttuuri ja viihde','wants',NULL),
+  ('el','2026-11-02','Perus','Elisa Oyj','','',-180.33,'Suoratoisto & liittymät','needs',NULL),
+  ('sh','2026-11-13','Perus','ESKO HONKANEN','','Showhat liput',-104,'Kulttuuri ja viihde','wants',NULL),
   ('fl','2026-11-20','Revolut','?','','Revolut',-5,'— Kategorisoimatta','flag',NULL);
 `);
 const env = fakeEnv(db);
@@ -79,23 +84,19 @@ const R = await periodReport(env, "2026-11-24");
 const n = R.numbers;
 const close = (a, b) => assert.ok(Math.abs(a - b) < 0.005, `${a} ≠ ${b}`);
 close(n.income, 3000);
-close(n.needs, 122 + 19.58 + 40);                    // VR, korko, ruoka
-close(n.wants, -150 + 81.8 + 34.12 - 16.9);          // Teijan palautus ja Apple Pay -palautus netotettu
-close(n.invested, 575 - 616.75 + 650);               // kategoria ratkaisee, tyyppi ei
-close(n.investedFromIncome, 575);                    // vain käyttötileiltä
-close(n.creditDelta, 650 - 81.8 - 19.58);            // velka pieneni
-close(n.cashSum, 75);                                // vain käteistalletuksen neutraali osa
+close(n.bills, 180.33 + 35.9);                          // Elisa (kiinteä kat.) + Kauppalehti (toistuva)
+close(n.living, 34.12 + 40 - 16.9);                     // Revolut, palautus netotettu
+close(n.off, 122 + 81.8 + 19.58 + 104 - 150);           // Säästö, Credit, Showhat, Teijan palautus
+close(n.investedFromIncome, 575);
+close(n.pohja, 3000 - n.bills - n.living - n.off - 575);
+close(n.prev.off, 500 + 35.9);                          // edellisellä jaksolla Kauppalehti ei vielä toistuva (1 aiempi jakso)
+close(n.prev.bills, 0);
 assert.ok(!R.text.includes("Vastike"), "vuokratili ei saa näkyä");
-assert.match(R.text, /Kulutusta säästötileiltä 122,00 €: 21.11. OP Säästötili VR/);
-assert.match(R.text, /Ostoja holdissa olevalla kortilla 81,80 €: 21.11. OP Visa Credit Pueblo/);   // korko ei ole osto
-assert.match(R.text, /Tarkistamatta 1 riviä/);
-assert.match(R.text, /Tuloista jää jakson lopussa/);
-assert.ok(!R.text.includes("OP-asuntolaina"), "30.11. on seuraavassa jaksossa");
-
-// Pohja: palkkatilien ulkopuolelta maksettu kulutus = vuoto
-close(n.leak, 122 + 81.8 + 19.58);
 assert.match(R.text, /POHJA KESTÄÄ/);
-assert.match(R.text, /OP Säästötili 122,00 €, OP Visa Credit 101,38 €/);
+assert.match(R.text, /BUDJETIN OHI/);
+assert.match(R.text, /OP Säästötili +122/);
+assert.match(R.text, /PALAUTE/);
+assert.match(R.text, /TARKISTA  1 kategorisoimatonta/);
 
 // Taskut: saldo koko historiasta, tulevat viikkotäytöt (pe) jakson loppuun
 const pk = (r, name) => r.pockets.list.find((p) => p.name === name);

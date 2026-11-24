@@ -79,9 +79,9 @@ Revolutiin 1 250 €/jakso, josta 200 € sijoituksiin → elämiseen **1 050 �
 | Tasku | Täyttö | Huom. |
 |---|---|---|
 | Päivittäistavarat | 88 €/vk (pe) | |
-| Ulkona | 58 €/vk | 232 € jaksossa — eniten venyvä |
+| Ulkona | 250 €/jakso | raja 24.11.2026 alkaen (oli 232); sama raja appin Ulkona-budjetissa. Ravintolat/baarit EI kortilla tai Perukselta |
 | Muut ostokset/viihde | 60 €/jakso | U.S Video 15 €/vk |
-| Arki | 250 €/jakso | VR-junat (Riihimäki–Hki, Kuopio). Loppui 11/2026 kesken (+ Float 78 € väärästä taskusta) |
+| Arki | 355 €/jakso | VR-junat (Riihimäki–Hki, Kuopio) + **VR-sarjalippu ~105 €/jakso** (~122 €/5 vk, ostetaan Arki-kortilla) — 24.11.2026 alkaen (oli 250) |
 | Riennot | kortiton | ylijäämät / raskaammat kuukaudet |
 
 Havainto 11/2026: 1 050 € on ollut liian tiukka. Ehdotettu siirto Ulkona → Arki.

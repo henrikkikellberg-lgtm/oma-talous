@@ -93,173 +93,183 @@ export function freshnessLines(f) {
   return f.rows.map((r) => `${r.fresh ? "✓" : "⚠"} ${r.label}: ${r.last_import_through ? ddmm(r.last_import_through) + ` (${r.age} pv)` : "ei tuotu"}`);
 }
 
-// ── Raportti ─────────────────────────────────────────────────────────────────
+// ── Raportti (v1.28.0) ───────────────────────────────────────────────────────
+// Rakenne tilimallin mukaan: Palkka − Laskut (laskutili) − Sijoitukset tuloista
+// − Elämiseen (kulutustili/taskut) − Budjetin ohi (kaikki muu kulutus) = Pohja.
+// Pohjan pitää olla ≥ 0 (TALOUS.md tavoite 4). Budjetin ohi = vuoto.
+
+// Rivin näyttönimi: luottokortilla kauppias on selitys-kentässä, tilisiirrossa viesti kertoo enemmän.
+const displayName = (t, acc) => {
+  if (t.splitLabel) return t.splitLabel;
+  if (acc[t.account]?.kind === "credit" && t.selitys) return t.selitys;
+  const m = /Viesti:\s*([^\d]{3,40}?)(\s+FI\d|\s+ref=|$)/.exec(t.viesti || "");
+  if (t.selitys === "TILISIIRTO" && m) return m[1].trim();
+  return String(t.payee || t.cat || "").replace(/^(Paytrail Oyj|PTL\*|MOB\.PAY\*|VFI\*)\s*/i, "")
+    .replace(/\s+pankkimaksu$/i, "").replace(/\s+(HELSINKI|RIIHIMAKI|TURKU|KUOPIO|Helsinki)$/, "").trim();
+};
+const isSpend = (t) => t.type === "needs" || t.type === "wants";
+// Maksunsaaja-avain: numeroita sisältävät sanat pois (Spotify P4973CA70F → spotify)
+const payeeKey = (p) => String(p || "").toLowerCase().split(/\s+/).filter((w) => w && !/\d/.test(w)).join(" ");
+
+async function loadTx(env, start, end, acc) {
+  const { results } = await env.DB.prepare(
+    "SELECT id,date,account,payee,selitys,viesti,amount,cat,type,splits FROM transactions WHERE date >= ? AND date <= ? AND coalesce(account,'') <> 'Vuokra'"
+  ).bind(start, end).all();
+  return {
+    raw: results,
+    tx: results.flatMap(expandTx).map((t) => ({ ...t, cat: stripIcon(t.cat), kind: acc[t.account]?.kind })),
+  };
+}
+
+// Laskutilin "laskut": kiinteät kategoriat + maksunsaajat, jotka esiintyivät
+// laskutilillä kummassakin kahdessa edellisessä jaksossa.
+async function recurringBillKeys(env, S, W) {
+  const keys = [];
+  let end = addDays(W.start, -1);
+  for (let k = 0; k < 2; k++) {
+    const pw = periodWindow(end, +S.salary_day || 27);
+    const { results } = await env.DB.prepare(
+      "SELECT payee FROM transactions WHERE account = ? AND date >= ? AND date <= ? AND type IN ('needs','wants') AND amount < 0"
+    ).bind(S.bills_account, pw.start, pw.lastDay).all();
+    keys.push(new Set(results.map((r) => payeeKey(r.payee))));
+    end = addDays(pw.start, -1);
+  }
+  return new Set([...keys[0]].filter((k) => keys[1].has(k)));
+}
+
+function buckets(tx, S, acc, billKeys) {
+  const income = sum(tx.filter((t) => t.type === "income"));
+  const spendRows = tx.filter(isSpend);
+  const isBill = (t) => t.account === S.bills_account &&
+    (FIXED_CATS.includes(t.cat) || t.cat.startsWith("Asuminen") || billKeys.has(payeeKey(t.payee)));
+  const split = S.account_model === "split";
+  const bills = spendRows.filter((t) => split ? isBill(t) : false);
+  const living = spendRows.filter((t) => split ? t.account === S.spend_account : acc[t.account]?.kind === "checking");
+  const off = spendRows.filter((t) => !bills.includes(t) && !living.includes(t));
+  const investedFromIncome = -sum(tx.filter((t) => t.cat === "Sijoittaminen" && t.kind === "checking"));
+  const b = {
+    income, investedFromIncome,
+    bills: -sum(bills), living: -sum(living), off: -sum(off),
+    billRows: bills, livingRows: living, offRows: off,
+  };
+  b.spend = b.bills + b.living + b.off;
+  b.pohja = income - b.spend - investedFromIncome;
+  return b;
+}
+
 export async function periodReport(env, today = todayHelsinki()) {
   const S = await loadSettings(env);
   const W = periodWindow(today, +S.salary_day || 27);
   const { results: accounts } = await env.DB.prepare("SELECT * FROM accounts ORDER BY sort").all();
   const acc = Object.fromEntries(accounts.map((a) => [a.key, a]));
-  const { results: raw } = await env.DB.prepare(
-    "SELECT id,date,account,payee,selitys,viesti,amount,cat,type,splits FROM transactions WHERE date >= ? AND date <= ? AND coalesce(account,'') <> 'Vuokra'"
-  ).bind(W.start, W.end).all();
   const { results: budgets } = await env.DB.prepare("SELECT * FROM budgets ORDER BY sort").all();
+  const label = (k) => acc[k]?.label || k;
 
-  const tx = raw.flatMap(expandTx).map((t) => ({ ...t, cat: stripIcon(t.cat), kind: acc[t.account]?.kind }));
-  const of = (type) => tx.filter((t) => t.type === type);
+  const cur = await loadTx(env, W.start, W.end, acc);
+  const B = buckets(cur.tx, S, acc, await recurringBillKeys(env, S, W));
+  // Edellinen jakso vertailuun (täysi jakso)
+  const PW = periodWindow(addDays(W.start, -1), +S.salary_day || 27);
+  const prev = await loadTx(env, PW.start, PW.lastDay, acc);
+  const PB = buckets(prev.tx, S, acc, await recurringBillKeys(env, S, PW));
 
-  // Tulot ja kulutus (netto: palautukset samalla tyypillä vähentävät)
-  const income = sum(of("income"));
-  const needs = -sum(of("needs"));
-  const wants = -sum(of("wants"));
-  const spend = needs + wants;
-  const kept = income - spend;
-
-  // Sijoitukset: kategoria ratkaisee, tyypistä riippumatta (wealthChange)
-  const inv = tx.filter((t) => t.cat === "Sijoittaminen");
-  const invested = -sum(inv);
-  const investedFromIncome = -sum(inv.filter((t) => t.kind === "checking"));
-
-  // Saldomuutokset tilityypeittäin (avaus + tapahtumat, kuten computeBalances)
-  const balAt = async (key, isoDate) => {
-    const a = acc[key];
-    const r = await env.DB.prepare(
-      "SELECT coalesce(sum(amount),0) s FROM transactions WHERE account = ? AND date > ? AND date <= ?"
-    ).bind(key, a.opening_date, isoDate).first();
-    return a.opening_balance + (r?.s || 0);
-  };
-  const delta = {};
-  for (const a of accounts.filter((a) => !["closed", "rental"].includes(a.kind))) {
-    const d = (await balAt(a.key, W.end)) - (await balAt(a.key, addDays(W.start, -1)));
-    delta[a.kind] = (delta[a.kind] || 0) + d;
-    a._delta = d;
-    a._now = await balAt(a.key, W.end);
-  }
-  const creditDelta = delta.credit || 0; // + = velka pieneni
-
-  // Palkan ulkopuoliset sisäänvirrat: käteistalletukset (splitattu osa mukaan)
-  // Vain neutraali osa: splitattu takaisinmaksu (esim. Teijan 150 €) on jo netotettu kulutukseen.
-  const cash = raw.filter((t) => t.amount > 0 && /TALLETUSAUTOM|Käteistalletus/i.test(`${t.selitys} ${t.viesti}`));
-  const cashSum = sum(cash.flatMap(expandTx).filter((t) => t.type === "neutral"));
-  const fromSavingsInv = invested - investedFromIncome; // säästötilin kautta kulkeneet
-
-  // Kulutus tileittäin
-  const byAcc = {};
-  for (const t of tx.filter((t) => t.type === "needs" || t.type === "wants")) {
-    const k = t.account || "?";
-    byAcc[k] = byAcc[k] || { needs: 0, wants: 0 };
-    byAcc[k][t.type] -= t.amount;
-  }
-
-  // Kategoriat top 8
-  const byCat = {};
-  for (const t of tx.filter((t) => t.type === "needs" || t.type === "wants")) byCat[t.cat] = (byCat[t.cat] || 0) - t.amount;
-  const topCats = Object.entries(byCat).sort((a, b) => b[1] - a[1]).slice(0, 8);
-
-  // Budjetit
-  const budgetLines = budgets.map((b) => {
-    const cats = parseJson(b.cats, []);
-    const used = -sum(tx.filter((t) => cats.includes(t.cat) && (t.type === "needs" || t.type === "wants")));
-    const left = b.limit_eur - used;
-    const perDay = W.daysLeft > 0 ? left / W.daysLeft : left;
-    return `${b.label}: ${eur(used)} / ${eur(b.limit_eur)} → jäljellä ${sgn(left)}${W.daysLeft > 0 ? ` (${eur(perDay)}/pv)` : ""}`;
-  });
-
-  // Taskut — peilaa frontendin computePockets(): saldo koko historiasta, kulutus jaksolta
-  // tiliotteen päivään asti, budjetti = täytöt jaksossa, tulevat viikkotäytöt jakson loppuun.
   const P = await pockets(env, S, W, acc);
+  const pocketBudget = P ? sum(P.list.filter((p) => p.role === "spend"), (p) => p.budget) : 0;
 
-  // Pohja: palkan pitää kattaa KAIKKI kulutus maksutilistä riippumatta (TALOUS.md).
-  // Säästötililtä tai luotolla maksettu kulutus on vuotoa, vaikka palkkatili näyttää plussaa.
-  const elsewhere = {};
-  for (const t of tx.filter((t) => (t.type === "needs" || t.type === "wants") && t.kind !== "checking")) {
-    elsewhere[t.account] = (elsewhere[t.account] || 0) - t.amount;
-  }
-  const leak = Object.values(elsewhere).reduce((s, v) => s + v, 0);
-  const afterInvest = kept - investedFromIncome;
-
-  // Poikkeamat
-  const flags = [];
-  // Luottokorttiotteella payee = kortinhaltija, kauppias on selitys-kentässä (CLAUDE.md).
-  const lineOf = (t) => `${ddmm(t.date)} ${acc[t.account]?.label || t.account} ${(acc[t.account]?.kind === "credit" && t.selitys ? t.selitys : t.payee) || t.selitys} ${eur(-t.amount)}`;
-  const spendRows = raw.filter((t) => t.amount < 0).flatMap(expandTx).filter((t) => t.type === "needs" || t.type === "wants");
-  const onSavings = spendRows.filter((t) => acc[t.account]?.kind === "savings");
-  if (onSavings.length) flags.push(`Kulutusta säästötileiltä ${eur(-sum(onSavings))}: ${onSavings.map(lineOf).join("; ")}`);
-  const onHeld = spendRows.filter((t) => acc[t.account]?.on_hold && !/korko|tilinhoito/i.test(`${t.cat} ${t.payee}`));
-  if (onHeld.length) flags.push(`Ostoja holdissa olevalla kortilla ${eur(-sum(onHeld))}: ${onHeld.map(lineOf).join("; ")}`);
-  if (S.account_model === "split") {
-    const onBills = spendRows.filter((t) => t.account === S.bills_account && t.type === "wants");
-    if (onBills.length) flags.push(`Harkinnanvaraista laskutililtä (${S.bills_account}) ${eur(-sum(onBills))}, ${onBills.length} riviä`);
-  }
-  const flagged = raw.filter((t) => t.type === "flag");
-  if (flagged.length) flags.push(`Tarkistamatta ${flagged.length} riviä: ${flagged.slice(0, 5).map((t) => `${ddmm(t.date)} ${t.payee} ${eur(t.amount)}`).join("; ")}`);
-
-  // Ennuste: muuttuvien menojen tahti × jäljellä olevat päivät + käsin lisätyt tulevat erät
-  const variable = -sum(tx.filter((t) => (t.type === "needs" || t.type === "wants") && !FIXED_CATS.includes(t.cat) && !t.cat.startsWith("Asuminen") && t.amount < 0));
+  // Ennuste: muuttuvien menojen tahti (elämiseen + ohi) × jäljellä olevat päivät
+  const variable = -sum([...B.livingRows, ...B.offRows].filter((t) => t.amount < 0 && !FIXED_CATS.includes(t.cat)));
   const pace = variable / W.daysElapsed;
   const upcoming = (S.recurring?.manual || []).flatMap((m) => {
-    const day = +m.day; if (!day) return [];
     const out = [];
     for (let d = addDays(W.end, 1); d <= W.lastDay; d = addDays(d, 1)) {
-      if (+d.slice(8) === day && (!m.start || d >= m.start)) out.push({ label: m.label, amount: +m.amount || 0, due: d });
+      if (+d.slice(8) === +m.day && (!m.start || d >= m.start)) out.push({ label: m.label, amount: +m.amount || 0, due: d });
     }
     return out;
   });
-  const upcomingSum = sum(upcoming);
-  const forecastKept = kept - pace * W.daysLeft - upcomingSum;
+  const forecast = B.pohja - pace * W.daysLeft - sum(upcoming);
 
   // ── Teksti ──
+  const r0 = (n) => { const v = Math.round(n); return (v < 0 ? "−" : "") + Math.abs(v).toLocaleString("fi-FI"); };
+  const pad = (s, n) => String(s).padEnd(n);
+  const num = (n, w = 7) => r0(n).padStart(w);
   const L = [];
-  L.push(`PALKKAJAKSO ${ddmm(W.start)}–${ddmm(W.lastDay)} · päivä ${W.daysElapsed}/${W.periodLen}, jäljellä ${W.daysLeft} pv`);
+  L.push(`JAKSO ${ddmm(W.start)}–${ddmm(W.lastDay)} · ${W.daysLeft ? `${W.daysLeft} pv jäljellä` : "päättyy tänään"}`);
+  L.push(B.pohja >= 0 ? `POHJA KESTÄÄ +${r0(B.pohja)} €` : `POHJA VUOTAA −${r0(-B.pohja)} €`);
+  if (W.daysLeft) L.push(`ennuste jakson lopussa ~${forecast >= 0 ? "+" : "−"}${r0(Math.abs(forecast))} €`);
   L.push("");
-  L.push(`POHJA ${kept >= 0 && leak < 0.005 ? "KESTÄÄ" : kept >= 0 ? "KESTÄÄ, MUTTA VUOTAA" : "VUOTAA"}`);
-  L.push(`Palkka ${eur(income)} − kulutus kaikilta tileiltä ${eur(spend)} = ${sgn(kept)}`);
-  if (leak > 0.005) {
-    L.push(`Muualta kuin palkkatileiltä maksettu kulutus ${eur(leak)}: ${Object.entries(elsewhere).filter(([, v]) => Math.abs(v) > 0.005).map(([k, v]) => `${acc[k]?.label || k} ${eur(v)}`).join(", ")}`);
-  }
-  L.push(`− sijoitukset tuloista ${eur(investedFromIncome)} (tavoite ${eur(S.invest_target)}) = ${sgn(afterInvest)}${afterInvest < 0 ? " → katettu säästöistä, luotolla tai käteisellä" : ""}`);
-  L.push("");
-  L.push("YHTEENVETO");
-  L.push(`Tulot             ${eur(income)}`);
-  L.push(`Kulutus           ${eur(spend)}  (välttämätön ${eur(needs)} · harkinnanv. ${eur(wants)})`);
-  L.push(`Tuloista jäi      ${sgn(kept)}${income > 0 ? `  (${Math.round(kept / income * 100)} %)` : ""}`);
-  L.push(`Sijoitettu        ${eur(invested)}  (tuloista ${eur(investedFromIncome)} / tavoite ${eur(S.invest_target)}${Math.abs(fromSavingsInv) > 0.005 ? `; säästöjen kautta ${sgn(fromSavingsInv)}` : ""})`);
-  L.push(`Luottovelka       ${creditDelta >= 0 ? "pieneni" : "kasvoi"} ${eur(Math.abs(creditDelta))}`);
-  const net = kept - invested - creditDelta;
-  L.push(`Netto             ${sgn(net)}  (tuloista jäi − sijoitukset − velan nettolyhennys)`);
-  if (cashSum) L.push(`Käteistalletukset ${eur(cashSum)}  (palkan ulkopuolista rahaa, ei mukana netossa)`);
-  L.push("");
-  L.push("TILIT (muutos jaksolla → saldo)");
-  for (const a of accounts.filter((a) => a._delta !== undefined)) L.push(`${a.label}: ${sgn(a._delta)} → ${eur(a._now)}${a.on_hold ? " (hold)" : ""}`);
-  L.push("");
-  L.push("KULUTUS TILEITTÄIN (välttämätön / harkinnanv.)");
-  for (const [k, v] of Object.entries(byAcc).sort((a, b) => (b[1].needs + b[1].wants) - (a[1].needs + a[1].wants))) {
-    L.push(`${acc[k]?.label || k}: ${eur(v.needs)} / ${eur(v.wants)}`);
-  }
-  L.push("");
-  L.push("KATEGORIAT (top 8)");
-  for (const [c, v] of topCats) L.push(`${c}: ${eur(v)}`);
-  if (budgetLines.length) { L.push(""); L.push("BUDJETIT"); L.push(...budgetLines); }
+  L.push(`${pad("", 24)}${"nyt".padStart(7)}${"edell.".padStart(8)}`);
+  L.push(`${pad("Palkka", 24)}${num(B.income)}${num(PB.income, 8)}`);
+  L.push(`${pad("− Laskut", 24)}${num(B.bills)}${num(PB.bills, 8)}`);
+  L.push(`${pad("− Sijoitukset tuloista", 24)}${num(B.investedFromIncome)}${num(PB.investedFromIncome, 8)}   tavoite ${r0(S.invest_target)}`);
+  L.push(`${pad("− Elämiseen (taskut)", 24)}${num(B.living)}${num(PB.living, 8)}${pocketBudget ? `   budjetti ${r0(pocketBudget)}` : ""}`);
+  L.push(`${pad("− Budjetin ohi", 24)}${num(B.off)}${num(PB.off, 8)}   ← vuoto, tavoite 0`);
+  L.push(`${pad("= Pohja", 24)}${num(B.pohja)}${num(PB.pohja, 8)}`);
+
   if (P) {
     L.push("");
-    L.push(`TASKUT (${P.label}, ote ${ddmm(P.through)} asti, ${P.daysLeft} pv jäljellä)`);
-    for (const p of P.list) {
-      const parts = [`käytetty ${eur(p.spent)}${p.budget ? ` / ${eur(p.budget)}` : ""}`, `saldo ${eur(p.balance)}`];
-      if (p.fillsLeft) parts.push(`tulossa ${p.fillsLeft} × ${eur(p.fill)}`);
-      if (p.role === "spend") parts.push(`ennuste ${sgn(p.forecast)}${p.forecast < 0 ? " ⚠" : ""}`);
-      L.push(`${p.name}${p.role === "reserve" ? " (varanto)" : p.cadence === "week" ? " (viikko)" : ""}: ${parts.join(" · ")}`);
+    L.push(`TASKUT · käytetty / budjetti · saldo (ote ${ddmm(P.through)})`);
+    for (const p of P.list.filter((p) => p.role === "spend")) {
+      const over = p.budget && p.spent > p.budget ? `  ⚠ yli ${r0(p.spent - p.budget)}` : "";
+      const fills = p.fillsLeft ? `, tulossa ${p.fillsLeft}×${r0(p.fill)}` : "";
+      L.push(`${pad(p.name, 20)}${num(p.spent, 5)} / ${pad(r0(p.budget), 4)} saldo ${r0(p.balance)}${fills}${over}`);
     }
-    L.push(`Päätili: saldo ${eur(P.mainBal)}${P.reserved ? `, varattu täyttöihin ${eur(P.reserved)}` : ""} → vapaana ${sgn(P.mainFree)}`);
-    L.push(`Kulutustili jakson lopussa ~${sgn(P.forecast)}`);
+    const mainSpent = B.living - sum(P.list, (p) => p.spent);
+    if (Math.abs(mainSpent) >= 1) L.push(`${pad("Päätililtä", 20)}${num(mainSpent, 5)}`);
   }
+
+  // Budjetin ohi eriteltynä tileittäin, isoimmat rivit
+  if (B.off > 0.5 || B.offRows.length) {
+    L.push("");
+    L.push(`BUDJETIN OHI ${r0(B.off)} €`);
+    const byAcc = {};
+    for (const t of B.offRows) (byAcc[t.account] = byAcc[t.account] || []).push(t);
+    for (const [k, rows] of Object.entries(byAcc).sort((a, b) => sum(a[1]) - sum(b[1]))) {
+      const items = {};
+      for (const t of rows) { const n = displayName(t, acc).slice(0, 24); items[n] = (items[n] || 0) - t.amount; }
+      const top = Object.entries(items).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 5)
+        .map(([n, v]) => `${n} ${v < 0 ? "−" : ""}${r0(Math.abs(v))}`);
+      L.push(`${pad(label(k), 16)}${num(-sum(rows), 5)}  ${top.join(" · ")}`);
+    }
+  }
+
+  // Palaute: deterministiset havainnot
+  const fb = [];
+  if (P) for (const p of P.list.filter((p) => p.role === "spend" && p.budget && p.spent > p.budget * 1.05)) {
+    fb.push(`${p.name} ylitti budjetin ${r0(p.spent - p.budget)} € (${Math.round((p.spent / p.budget - 1) * 100)} %).`);
+  }
+  for (const b of budgets) {
+    const cats = parseJson(b.cats, []);
+    const rows = cur.tx.filter((t) => isSpend(t) && cats.includes(t.cat));
+    const total = -sum(rows);
+    const pk = P?.list.find((p) => p.name.toLowerCase() === String(b.id).toLowerCase());
+    const limit = pk?.budget || b.limit_eur;
+    if (total > limit + 1) {
+      const outside = -sum(rows.filter((t) => !(pk && String(t.viesti || "").endsWith(` · ${pk.name}`))));
+      fb.push(`${b.label} kaikkialta ${r0(total)} € vs raja ${r0(limit)} €${outside > 1 ? `; taskun ulkopuolelta ${r0(outside)} € (kortit, Perus)` : ""}.`);
+    }
+  }
+  const offBig = B.offRows.filter((t) => t.amount <= -50).sort((a, b) => a.amount - b.amount).slice(0, 3);
+  if (offBig.length) fb.push(`Varautumatta: ${offBig.map((t) => `${displayName(t, acc).slice(0, 22)} ${r0(-t.amount)}`).join(", ")} — jos toistuvat, ne kuuluvat taskuun tai ennakkovaraukseen.`);
+  if (PB.income > 0 && B.living + B.off > PB.living + PB.off + 50) {
+    fb.push(`Elämiseen + ohi ${r0(B.living + B.off)} € on ${r0(B.living + B.off - PB.living - PB.off)} € enemmän kuin edellisellä jaksolla.`);
+  }
+  if (B.investedFromIncome < S.invest_target - 1) fb.push(`Sijoitustavoitteesta jäi ${r0(S.invest_target - B.investedFromIncome)} €.`);
+  if (fb.length) { L.push(""); L.push("PALAUTE"); L.push(...fb.map((f) => `• ${f}`)); }
+
+  // Kategoriat yhdelle riville
+  const byCat = {};
+  for (const t of cur.tx.filter(isSpend)) byCat[t.cat] = (byCat[t.cat] || 0) - t.amount;
+  const top = Object.entries(byCat).sort((a, b) => b[1] - a[1]).slice(0, 6);
   L.push("");
-  L.push("POIKKEAMAT");
-  L.push(...(flags.length ? flags.map((f, i) => `${i + 1}. ${f}`) : ["– ei poikkeamia"]));
-  L.push("");
-  L.push("ENNUSTE JAKSON LOPPUUN (karkea)");
-  L.push(`Muuttuvat menot ${eur(pace)}/pv × ${W.daysLeft} pv = ${eur(pace * W.daysLeft)}`);
-  if (upcoming.length) L.push(`Tulossa: ${upcoming.map((u) => `${u.label} ${eur(u.amount)} ${ddmm(u.due)}`).join(", ")}`);
-  L.push(`Tuloista jää jakson lopussa ~${sgn(forecastKept)}`);
-  return { text: L.join("\n"), window: W, pockets: P, numbers: { income, needs, wants, kept, leak, afterInvest, invested, investedFromIncome, creditDelta, cashSum, forecastKept } };
+  L.push(`KATEGORIAT  ${top.map(([c, v]) => `${c.replace(/ — .*/, "")} ${r0(v)}`).join(" · ")}`);
+
+  // Tarkistettavat
+  const flagged = cur.raw.filter((t) => t.type === "flag");
+  if (flagged.length) L.push(`TARKISTA  ${flagged.length} kategorisoimatonta: ${flagged.slice(0, 3).map((t) => `${ddmm(t.date)} ${t.payee} ${eur(t.amount)}`).join("; ")}`);
+
+  return {
+    text: L.join("\n"), window: W, pockets: P,
+    numbers: { ...Object.fromEntries(Object.entries(B).filter(([k]) => !k.endsWith("Rows"))), prev: { bills: PB.bills, living: PB.living, off: PB.off, pohja: PB.pohja }, forecast },
+  };
 }
 
 // ── Taskut ───────────────────────────────────────────────────────────────────
