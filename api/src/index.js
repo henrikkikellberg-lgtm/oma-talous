@@ -924,6 +924,8 @@ function rentalProperty(tx) {
   const P = (tx.payee || '').toUpperCase(), v = (tx.viesti || '').toLowerCase();
   if (P.includes('TURONTÄHTI') || v.includes('niirala')) return 'a3';
   if (/^FI(89 5600 0580 9007 70|11 5600 0580 8761 78|03 5600 0580 6256 74)/.test(P)) return 'a3';
+  // AXA lainaturva Niirala: vakuutusviite 55526593174… (oman kodin AXA 55526655145… ei ole vuokratilillä)
+  if (P.startsWith('AXA') && v.includes('ref=55526593174')) return 'a3';
   if (P.startsWith('FI58 5600 0580 7751 31')) return 'a2';
   if (P.includes('RIISTAKATU')) {
     if (/15012122|ref=000009101/.test(v)) return 'a2';
