@@ -6,7 +6,8 @@
   "scripts": {
     "deploy": "wrangler deploy",
     "tail": "wrangler tail oma-talous-mail",
-    "test": "node test/parse-pdf.mjs"
+    "test": "node test/parse-pdf.mjs",
+    "test:report": "node --no-warnings test/report.test.mjs"
   },
   "dependencies": {
     "mimetext": "^3.0.28",

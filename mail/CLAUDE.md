@@ -32,3 +32,18 @@ deployta: settings-avain `import_ibans`, esim. `{"FI..": "Vuokra"}`.
 - Ei tekoälyä: PDF on tekstipohjainen (StreamServe). Jos OP muuttaa pohjaa, saldotarkistus
   pysäyttää tuonnin ja kuittaus kertoo sen.
 - Lokit: `npm run tail`. Parserin testi: `npm test -- "/polku/tiliote.pdf"`.
+
+## Palkkajaksoraportti (v1.27.0) — `src/report.js`
+- Jokaisen onnistuneen tuonnin (✓) jälkeen tarkistetaan tuoreus: aktiiviset tilit (ei `closed`,
+  ei `rental`, ei `on_hold`) ja `last_import_through` ≤ 5 pv (`FRESH_DAYS`). Kaikki tuoreita →
+  kuittaukseen liitetään raportti, muuten lista puuttuvista otteista.
+- Aihe **"raportti"** (ilman liitteitä) → raportti aina, tuoreusvaroituksin.
+- Laskenta peilaa frontendiä: jakso = `effectivePayday` (salary_day, viikonloppu/kiinteä pyhä →
+  edellinen pankkipäivä), splitit puretaan (`expandTx`), saman tyypin plusrivit netotetaan,
+  sijoitukset = kategoria `Sijoittaminen` tyypistä riippumatta (tuloista = vain `checking`-tileiltä),
+  luottovelan muutos saldoista, vuokratili pois. Käteistalletuksista vain neutraali osa.
+- Poikkeamat: kulutus säästötileiltä, ostot holdissa olevalla kortilla (korko/tilinhoito ei),
+  harkinnanvarainen laskutililtä (split-malli), `flag`-rivit.
+- Ennuste: muuttuvien menojen (ei `FIXED_CATS`, ei `Asuminen*`) päivätahti × jäljellä olevat
+  päivät + `settings.recurring.manual`-erät jäljellä olevilla päivillä. Karkea.
+- Vain luku D1:stä. Testi: `npm run test:report` (synteettinen kanta, node:sqlite, Node 22+).

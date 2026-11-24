@@ -6,6 +6,7 @@ import PostalMime from "postal-mime";
 import { EmailMessage } from "cloudflare:email";
 import { createMimeMessage } from "mimetext";
 import { parseOpPdf, toOpCsv } from "./op-pdf.js";
+import { freshness, freshnessLines, periodReport, FRESH_DAYS } from "./report.js";
 
 // OP-tilien IBAN -> oma-talous accounts.key. Lisää/korvaa settings-taulun
 // avaimella `import_ibans` (JSON-objekti), ei vaadi deployta.
@@ -106,7 +107,27 @@ export default {
         lines.push(`✗ ${att.filename}: virhe – ${e.message}`);
       }
     }
-    if (!lines.length) lines.push("Viestissä ei ollut liitteitä.");
+    // Palkkajaksoraportti (v1.27.0): liitetään kuittaukseen, kun kaikkien aktiivisten
+    // tilien otteet ovat enintään FRESH_DAYS pv vanhoja. Aihe "raportti" ilman liitteitä
+    // pyytää raportin aina (tuoreusvaroituksin).
+    const asked = /raportti|report/i.test(email.subject || "");
+    const imported = lines.some((l) => l.startsWith("✓"));
+    if (!lines.length && !asked) lines.push("Viestissä ei ollut liitteitä. (Aihe \"raportti\" = palkkajaksoraportti.)");
+    if (imported || asked) {
+      try {
+        const f = await freshness(env);
+        if (f.ready || asked) {
+          const r = await periodReport(env);
+          if (lines.length) lines.push("");
+          if (!f.ready) lines.push(`⚠ Kaikki otteet eivät ole tuoreita (≤${FRESH_DAYS} pv) – luvuista puuttuu ostoja:`, ...freshnessLines(f).filter((l) => l.startsWith("⚠")), "");
+          lines.push(r.text);
+        } else {
+          lines.push("", `⏳ Palkkajaksoraportti tulee, kun kaikki otteet ovat ≤${FRESH_DAYS} pv vanhoja. Puuttuu:`, ...freshnessLines(f).filter((l) => l.startsWith("⚠")));
+        }
+      } catch (e) {
+        lines.push("", `✗ Raportti epäonnistui: ${e.message}`);
+      }
+    }
     console.log(lines.join(" | "));
     await reply(env, message, email.subject, lines);
   },

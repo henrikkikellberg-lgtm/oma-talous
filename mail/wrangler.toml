@@ -12,7 +12,7 @@ MAIL_FROM = "tiliote@fuseapt.com"
 binding = "API"
 service = "oma-talous-api"
 
-# Vain settings.import_ibans-luku
+# settings.import_ibans + palkkajaksoraportti (vain luku)
 [[d1_databases]]
 binding = "DB"
 database_name = "oma-talous-db"
